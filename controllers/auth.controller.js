@@ -2,11 +2,8 @@ const { google } = require('googleapis');
 const jwt = require('jsonwebtoken');
 const { upsertUser } = require('../models/user.model');
 
-// Use BASE_URL from environment for callback
-const CALLBACK_URL = process.env.GOOGLE_CALLBACK_URL || 
-  (process.env.NODE_ENV === 'production' 
-    ? 'https://class.xytek.ai/api/auth/google/callback'
-    : 'http://localhost:3000/api/auth/google/callback');
+// Use localhost:3000 for callback
+const CALLBACK_URL = 'http://localhost:3000/api/auth/google/callback';
 
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
