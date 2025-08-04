@@ -2,8 +2,8 @@ const { google } = require('googleapis');
 const jwt = require('jsonwebtoken');
 const { upsertUser } = require('../models/user.model');
 
-// Use localhost:3000 for callback
-const CALLBACK_URL = 'http://localhost:5000/api/auth/google/callback';
+// Use backend server port for callback
+const CALLBACK_URL = 'http://localhost:3000/api/auth/google/callback';
 
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
