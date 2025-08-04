@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ClassAssistant Backend Technical Documentation</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2em; background: #f9f9f9; color: #222; }
+    h1, h2, h3 { color: #2a4d7c; }
+    h1 { border-bottom: 2px solid #2a4d7c; padding-bottom: 0.2em; }
+    nav { margin-bottom: 2em; }
+    nav ul { list-style: none; padding: 0; }
+    nav ul li { margin: 0.5em 0; }
+    code { background: #eee; padding: 2px 4px; border-radius: 3px; }
+    section { margin-bottom: 2em; }
+    .module { margin-bottom: 1em; }
+    .function-list { margin-left: 1em; }
+    .note { color: #555; font-size: 0.95em; }
+  </style>
+</head>
+<body>
+  <h1>ClassAssistant Backend Technical Documentation</h1>
+  <nav>
+    <h2>Table of Contents</h2>
+    <ul>
+      <li><a href="#architecture">Architecture Overview</a></li>
+      <li><a href="#services">Services & Modules</a></li>
+      <li><a href="#controllers">Controllers</a></li>
+      <li><a href="#google-integration">Google Integration</a></li>
+      <li><a href="#error-handling">Error Handling</a></li>
+      <li><a href="#extensibility">Extensibility</a></li>
+    </ul>
+  </nav>
+
+  <section id="architecture">
+    <h2>Architecture Overview</h2>
+    <p>
+      The backend is organized into <b>services</b> (business logic, integrations) and <b>controllers</b> (API endpoints). It integrates with Google Classroom and Google Drive using OAuth2 for user authentication and resource access. AI-powered intent detection and action execution are handled in the <code>ai</code> service modules.
+    </p>
+  </section>
+
+  <section id="services">
+    <h2>Services & Modules</h2>
+    <div class="module">
+      <h3>assignmentService.js</h3>
+      <p>Handles assignment CRUD operations and Google Classroom integration.</p>
+      <ul class="function-list">
+        <li><code>createAssignment(tokens, courseId, assignmentData)</code>: Creates an assignment in a course. Resolves Google Drive file names to IDs for materials.</li>
+        <li><code>listAssignments(tokens, courseId)</code>: Lists assignments in a course.</li>
+        <li><code>getAssignment(tokens, courseId, assignmentId)</code>: Gets assignment details.</li>
+        <li><code>updateAssignment(tokens, courseId, assignmentId, updateData)</code>: Updates an assignment.</li>
+        <li><code>deleteAssignment(tokens, courseId, assignmentId)</code>: Deletes an assignment.</li>
+        <li><code>findDriveFileIdByName(tokens, fileName)</code>: Helper to resolve a Google Drive file name to its file ID.</li>
+      </ul>
+      <div class="note">Materials of type <code>GOOGLE_DRIVE</code> are resolved to the correct Classroom API object before assignment creation.</div>
+    </div>
+    <div class="module">
+      <h3>classroomService.js</h3>
+      <p>Handles Google Classroom course operations.</p>
+      <ul class="function-list">
+        <li><code>createCourse</code>: Creates a new course.</li>
+        <li><code>listCourses</code>: Lists all courses for a user.</li>
+        <li><code>getCourse</code>: Gets details of a specific course.</li>
+      </ul>
+    </div>
+    <div class="module">
+      <h3>ai/intentDetection.js</h3>
+      <p>Detects user intent using Gemini AI or fallback keyword logic. Extracts parameters for downstream actions.</p>
+      <ul class="function-list">
+        <li><code>detectIntent(message, conversationHistory, conversationId)</code>: Main entry for intent detection.</li>
+      </ul>
+      <div class="note">Fallback logic supports assignment creation with Google Drive file names and course name extraction.</div>
+    </div>
+    <div class="module">
+      <h3>ai/actionExecution.js</h3>
+      <p>Executes actions based on detected intent, including API calls to backend endpoints and Google Classroom.</p>
+      <ul class="function-list">
+        <li><code>executeAction(intentData, originalMessage, userToken, req)</code>: Main action dispatcher.</li>
+        <li><code>makeApiCall(url, method, data, userToken)</code>: Helper for backend API calls.</li>
+      </ul>
+    </div>
+    <div class="module">
+      <h3>ai/conversationManager.js</h3>
+      <p>Manages conversation state and history in memory.</p>
+      <ul class="function-list">
+        <li><code>generateConversationId()</code>: Generates a unique conversation ID.</li>
+        <li><code>getConversation(conversationId)</code>: Retrieves a conversation object.</li>
+        <li><code>addMessage(conversationId, message, isUser)</code>: Adds a message to a conversation.</li>
+        <li><code>getLastMessage(conversationId)</code>: Gets the last message.</li>
+        <li><code>getLastMessages(conversationId, count)</code>: Gets the last N messages.</li>
+        <li><code>clearConversation(conversationId)</code>: Clears a conversation.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="controllers">
+    <h2>Controllers</h2>
+    <div class="module">
+      <h3>ai-agent.controller.js</h3>
+      <p>Handles AI-powered chat endpoints, intent detection, and action execution.</p>
+      <ul class="function-list">
+        <li><code>processMessage</code>: Processes a user message, detects intent, and executes the action.</li>
+        <li><code>handleMessage</code>: Handles a message in the context of a conversation.</li>
+      </ul>
+    </div>
+    <div class="module">
+      <h3>assignment.controller.js</h3>
+      <p>API endpoints for assignment CRUD operations.</p>
+      <ul class="function-list">
+        <li><code>createAssignmentController</code>: Creates a new assignment in a course.</li>
+        <li><code>listAssignmentsController</code>: Lists assignments in a course.</li>
+        <li><code>getAssignmentController</code>: Gets assignment details.</li>
+        <li><code>updateAssignmentController</code>: Updates an assignment.</li>
+        <li><code>deleteAssignmentController</code>: Deletes an assignment.</li>
+      </ul>
+    </div>
+    <div class="module">
+      <h3>classroom.controller.js</h3>
+      <p>API endpoints for course and announcement management, and user invitations.</p>
+      <ul class="function-list">
+        <li><code>listCourses</code>, <code>getCourse</code>, <code>createCourse</code>, <code>updateCourse</code>, <code>deleteCourse</code>, <code>archiveCourse</code></li>
+        <li><code>createAnnouncement</code>: Creates an announcement in a course.</li>
+        <li><code>inviteStudents</code>, <code>inviteTeachers</code>: Invite users to a course.</li>
+      </ul>
+    </div>
+    <div class="module">
+      <h3>drive.controller.js</h3>
+      <p>API endpoint for searching Google Drive files by name.</p>
+      <ul class="function-list">
+        <li><code>searchFiles</code>: Searches for files in the user's Google Drive.</li>
+      </ul>
+    </div>
+    <div class="module">
+      <h3>auth.controller.js</h3>
+      <p>Handles Google OAuth2 authentication and user JWT management.</p>
+      <ul class="function-list">
+        <li><code>getAuthUrl</code>: Returns the Google OAuth URL for login.</li>
+        <li><code>handleWebAuth</code>, <code>handleMobileAuth</code>: Handle OAuth callbacks and user creation.</li>
+      </ul>
+    </div>
+    <div class="module">
+      <h3>company.controller.js</h3>
+      <p>API endpoints for company info management.</p>
+      <ul class="function-list">
+        <li><code>updateCompanyInfo</code>, <code>getCompany</code></li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="google-integration">
+    <h2>Google Integration</h2>
+    <ul>
+      <li><b>Google Classroom:</b> Used for course, assignment, and announcement management. Requires OAuth2 tokens for API access.</li>
+      <li><b>Google Drive:</b> Used for file search and attachment to assignments. File names are resolved to file IDs before being attached as materials.</li>
+      <li><b>OAuth2:</b> Used for authenticating users and obtaining access/refresh tokens for Google APIs.</li>
+    </ul>
+  </section>
+
+  <section id="error-handling">
+    <h2>Error Handling</h2>
+    <ul>
+      <li>API errors are caught and logged. User-friendly error messages are returned where possible.</li>
+      <li>Assignment creation validates due dates and file existence in Drive before sending to Classroom.</li>
+      <li>Uncaught exceptions and unhandled promise rejections are logged but do not crash the server.</li>
+    </ul>
+  </section>
+
+  <section id="extensibility">
+    <h2>Extensibility</h2>
+    <ul>
+      <li>New intents and actions can be added in <code>ai/intentDetection.js</code> and <code>ai/actionExecution.js</code>.</li>
+      <li>Additional Google API integrations can be added in the respective service modules.</li>
+      <li>Controllers are modular and can be extended with new endpoints as needed.</li>
+    </ul>
+  </section>
+</body>
+</html> 
