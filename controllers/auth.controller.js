@@ -105,7 +105,7 @@ const handleWebAuth = async (req, res) => {
       redirectPath: getRedirectPath(user.userData.role)
     });
 
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const frontendUrl = 'http://localhost:3000';
     
     // Determine redirect path based on role
     const redirectPath = getRedirectPath(user.userData.role);
@@ -120,7 +120,7 @@ const handleWebAuth = async (req, res) => {
     res.redirect(redirectUrl.toString());
   } catch (error) {
     console.error('Web auth error:', error);
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const frontendUrl = 'http://localhost:3000';
     const redirectUrl = new URL(frontendUrl);
     redirectUrl.searchParams.set('error', 'Authentication failed');
     res.redirect(redirectUrl.toString());
