@@ -2,13 +2,42 @@ const { google } = require('googleapis');
 const jwt = require('jsonwebtoken');
 const { upsertUser } = require('../models/user.model');
 
-// Use backend server port for callback
-const CALLBACK_URL = 'http://localhost:3000/api/auth/google/callback';
+// Dynamic URLs based on environment
+const getBackendUrl = () => {
+  if (process.env.NODE_ENV === 'production') {
+    return process.env.BACKEND_URL || 'https://class.xytek.ai';
+  }
+  return process.env.BACKEND_URL || 'http://localhost:3000';
+};
+
+const getFrontendUrl = () => {
+  if (process.env.NODE_ENV === 'production') {
+    return process.env.FRONTEND_URL || 'https://js-two-beta.vercel.app';
+  }
+  // For development, if frontend is on Vercel but backend is local
+  if (process.env.FRONTEND_URL) {
+    return process.env.FRONTEND_URL;
+  }
+  return 'http://localhost:3000';
+};
+
+const getCallbackUrl = () => {
+  const backendUrl = getBackendUrl();
+  const callbackUrl = `${backendUrl}/api/auth/google/callback`;
+  console.log('🔧 OAuth Configuration Debug:', {
+    NODE_ENV: process.env.NODE_ENV,
+    BACKEND_URL: process.env.BACKEND_URL,
+    FRONTEND_URL: process.env.FRONTEND_URL,
+    backendUrl: backendUrl,
+    callbackUrl: callbackUrl
+  });
+  return callbackUrl;
+};
 
 const oauth2Client = new google.auth.OAuth2(
   process.env.GOOGLE_CLIENT_ID,
   process.env.GOOGLE_CLIENT_SECRET,
-  CALLBACK_URL
+  getCallbackUrl()
 );
 
 // Valid roles constant
@@ -102,7 +131,7 @@ const handleWebAuth = async (req, res) => {
       redirectPath: getRedirectPath(user.userData.role)
     });
 
-    const frontendUrl = 'http://localhost:3000';
+    const frontendUrl = getFrontendUrl();
     
     // Determine redirect path based on role
     const redirectPath = getRedirectPath(user.userData.role);
@@ -114,10 +143,16 @@ const handleWebAuth = async (req, res) => {
     redirectUrl.searchParams.set('email', user.userData.email);
     redirectUrl.searchParams.set('picture', user.userData.picture);
 
+    console.log('🔄 Redirect Debug:', {
+      frontendUrl: frontendUrl,
+      redirectPath: redirectPath,
+      fullRedirectUrl: redirectUrl.toString()
+    });
+
     res.redirect(redirectUrl.toString());
   } catch (error) {
     console.error('Web auth error:', error);
-    const frontendUrl = 'http://localhost:3000';
+    const frontendUrl = getFrontendUrl();
     const redirectUrl = new URL(frontendUrl);
     redirectUrl.searchParams.set('error', 'Authentication failed');
     res.redirect(redirectUrl.toString());

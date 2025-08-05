@@ -11,9 +11,27 @@ const assignmentRoutes = require('./routes/assignment.routes'); // New assignmen
 
 const app = express();
 
+// Dynamic CORS configuration based on environment
+const getCorsOrigins = () => {
+  if (process.env.NODE_ENV === 'production') {
+    const origins = [
+      process.env.FRONTEND_URL || 'https://js-two-beta.vercel.app',
+      process.env.BACKEND_URL || 'https://class.xytek.ai'
+    ];
+    // Remove duplicates
+    return [...new Set(origins)];
+  }
+  return [
+    process.env.FRONTEND_URL || 'http://localhost:3000',
+    process.env.BACKEND_URL || 'http://localhost:3000',
+    'http://localhost:3001',
+    'http://localhost:3002'
+  ];
+};
+
 // CORS configuration
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5000',
+  origin: getCorsOrigins(),
   credentials: true
 }));
 
@@ -31,7 +49,7 @@ app.use('/api', assignmentRoutes); // Add assignment routes
 app.get('/', (req, res) => res.send('AI Classroom Assistant is Live 🚀'));
 
 // For local development
-if (process.env.NODE_ENV === 'production') {
+if (process.env.NODE_ENV !== 'production') {
   const PORT = process.env.PORT || 3000;
   app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 }
