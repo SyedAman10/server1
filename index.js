@@ -15,7 +15,7 @@ const app = express();
 const getCorsOrigins = () => {
   if (process.env.NODE_ENV === 'production') {
     const origins = [
-      process.env.FRONTEND_URL || 'https://js-two-beta.vercel.app',
+      process.env.FRONTEND_URL || 'https://xytek-classroom-assistant.vercel.app',
       process.env.BACKEND_URL || 'https://class.xytek.ai'
     ];
     // Remove duplicates

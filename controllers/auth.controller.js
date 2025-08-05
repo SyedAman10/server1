@@ -12,7 +12,7 @@ const getBackendUrl = () => {
 
 const getFrontendUrl = () => {
   if (process.env.NODE_ENV === 'production') {
-    return process.env.FRONTEND_URL || 'https://js-two-beta.vercel.app';
+    return process.env.FRONTEND_URL || ' https://xytek-classroom-assistant.vercel.app';
   }
   // For development, if frontend is on Vercel but backend is local
   if (process.env.FRONTEND_URL) {
