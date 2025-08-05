@@ -49,7 +49,7 @@ app.use('/api', assignmentRoutes); // Add assignment routes
 app.get('/', (req, res) => res.send('AI Classroom Assistant is Live 🚀'));
 
 // For local development
-if (process.env.NODE_ENV === 'production') {
+if (process.env.NODE_ENV !== 'production') {
   const PORT = process.env.PORT || 3000;
   app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 }
