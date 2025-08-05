@@ -1,5 +1,5 @@
 const express = require('express');
-const { getAuthUrl, handleWebAuth, handleMobileAuth } = require('../controllers/auth.controller');
+const { getAuthUrl, handleWebAuth, handleMobileAuth, handleMobileCallback } = require('../controllers/auth.controller');
 
 const router = express.Router();
 
@@ -7,7 +7,8 @@ const router = express.Router();
 router.get('/google', getAuthUrl);
 router.get('/google/callback', handleWebAuth);
 
-// Mobile flow endpoint
+// Mobile flow endpoints
 router.post('/google/mobile', handleMobileAuth);
+router.get('/google/mobile-callback', handleMobileCallback);
 
 module.exports = router;
