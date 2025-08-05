@@ -34,11 +34,20 @@ const getCallbackUrl = () => {
   return callbackUrl;
 };
 
-const oauth2Client = new google.auth.OAuth2(
-  process.env.GOOGLE_CLIENT_ID,
-  process.env.GOOGLE_CLIENT_SECRET,
-  getCallbackUrl()
-);
+// Create separate OAuth clients for web and mobile
+const createOAuthClient = (callbackUrl) => {
+  return new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    callbackUrl
+  );
+};
+
+// Web OAuth client (uses backend callback URL)
+const webOAuthClient = createOAuthClient(getCallbackUrl());
+
+// Mobile OAuth client (uses custom redirect URI)
+const mobileOAuthClient = createOAuthClient('urn:ietf:wg:oauth:2.0:oob');
 
 // Valid roles constant
 const VALID_ROLES = ['student', 'teacher', 'super_admin'];
@@ -117,10 +126,10 @@ const handleWebAuth = async (req, res) => {
       });
     }
 
-    const { tokens } = await oauth2Client.getToken(code);
-    oauth2Client.setCredentials(tokens);
+    const { tokens } = await webOAuthClient.getToken(code);
+    webOAuthClient.setCredentials(tokens);
 
-    const oauth2 = google.oauth2({ auth: oauth2Client, version: 'v2' });
+    const oauth2 = google.oauth2({ auth: webOAuthClient, version: 'v2' });
     const { data: userInfo } = await oauth2.userinfo.get();
     
     const user = await handleUserAuth(userInfo, tokens, state);
@@ -170,10 +179,10 @@ const handleMobileAuth = async (req, res) => {
       });
     }
     
-    const { tokens } = await oauth2Client.getToken(code);
-    oauth2Client.setCredentials(tokens);
+    const { tokens } = await mobileOAuthClient.getToken(code);
+    mobileOAuthClient.setCredentials(tokens);
 
-    const oauth2 = google.oauth2({ auth: oauth2Client, version: 'v2' });
+    const oauth2 = google.oauth2({ auth: mobileOAuthClient, version: 'v2' });
     const { data: userInfo } = await oauth2.userinfo.get();
     
     const user = await handleUserAuth(userInfo, tokens, role);
@@ -200,7 +209,7 @@ const handleMobileAuth = async (req, res) => {
 
 // Get Google OAuth URL
 const getAuthUrl = (req, res) => {
-  const { role } = req.query;
+  const { role, platform } = req.query;
   if (!role || !VALID_ROLES.includes(role)) {
     return res.status(400).json({
       success: false,
@@ -208,7 +217,10 @@ const getAuthUrl = (req, res) => {
     });
   }
 
-  const url = oauth2Client.generateAuthUrl({
+  // Use different OAuth client based on platform
+  const oauthClient = platform === 'mobile' ? mobileOAuthClient : webOAuthClient;
+
+  const url = oauthClient.generateAuthUrl({
     access_type: 'offline',
     scope: [
       'https://www.googleapis.com/auth/classroom.courses',
@@ -230,6 +242,13 @@ const getAuthUrl = (req, res) => {
     prompt: 'consent',
     state: role
   });
+  
+  console.log('🔗 Generated OAuth URL:', {
+    platform: platform || 'web',
+    role: role,
+    url: url
+  });
+  
   res.json({ url });
 };
 
