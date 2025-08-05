@@ -65,6 +65,7 @@ npm install expo-web-browser expo-auth-session expo-crypto expo-secure-store exp
 - Add these **Authorized redirect URIs**:
   ```
   https://class.xytek.ai/api/auth/google/callback
+  https://class.xytek.ai/api/auth/google/mobile-callback
   aiclassroom://auth/callback
   ```
 
@@ -78,17 +79,23 @@ BACKEND_URL=https://class.xytek.ai
 
 ## 📱 **Step 4: Implement Authentication**
 
+### Install WebView dependency:
+```bash
+npm install react-native-webview
+```
+
 ### Create `screens/AuthScreen.js`:
 ```javascript
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
-import * as WebBrowser from 'expo-web-browser';
-import * as SecureStore from 'expo-secure-store';
+import { WebView } from 'react-native-webview';
 
 const BACKEND_URL = 'https://class.xytek.ai';
 
 export default function AuthScreen() {
   const [loading, setLoading] = useState(false);
+  const [showWebView, setShowWebView] = useState(false);
+  const [oauthUrl, setOauthUrl] = useState('');
 
   const handleMobileAuth = async (role) => {
     setLoading(true);
@@ -102,26 +109,32 @@ export default function AuthScreen() {
         throw new Error(data.error || 'Failed to get OAuth URL');
       }
 
-      // Step 2: Open OAuth URL in browser
-      const result = await WebBrowser.openAuthSessionAsync(
-        data.url,
-        'aiclassroom://auth/callback'
-      );
-
-      if (result.type === 'success') {
-        // Step 3: Extract authorization code
-        const url = new URL(result.url);
-        const code = url.searchParams.get('code');
-        
-        if (code) {
-          // Step 4: Exchange code for token
-          await exchangeCodeForToken(code, role);
-        }
-      }
+      // Step 2: Show WebView with OAuth URL
+      setOauthUrl(data.url);
+      setShowWebView(true);
     } catch (error) {
       Alert.alert('Error', error.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Handle WebView message (authorization code)
+  const handleWebViewMessage = async (event) => {
+    try {
+      const data = JSON.parse(event.nativeEvent.data);
+      
+      if (data.type === 'success' && data.code) {
+        setShowWebView(false);
+        
+        // Step 3: Exchange code for token
+        await exchangeCodeForToken(data.code, data.state);
+      } else if (data.type === 'error') {
+        setShowWebView(false);
+        Alert.alert('Authentication Error', data.error);
+      }
+    } catch (error) {
+      console.error('Error parsing WebView message:', error);
     }
   };
 
@@ -149,6 +162,27 @@ export default function AuthScreen() {
       Alert.alert('Error', error.message);
     }
   };
+
+  // If WebView is shown, render it
+  if (showWebView) {
+    return (
+      <View style={{ flex: 1 }}>
+        <WebView
+          source={{ uri: oauthUrl }}
+          onMessage={handleWebViewMessage}
+          style={{ flex: 1 }}
+          javaScriptEnabled={true}
+          domStorageEnabled={true}
+        />
+        <TouchableOpacity
+          style={styles.closeButton}
+          onPress={() => setShowWebView(false)}
+        >
+          <Text style={styles.closeButtonText}>Cancel</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -193,6 +227,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    backgroundColor: '#ff4444',
+    padding: 10,
+    borderRadius: 5,
+  },
+  closeButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
   },
   title: {
     fontSize: 24,

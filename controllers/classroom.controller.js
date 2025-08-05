@@ -307,6 +307,122 @@ const listStudents = async (req, res) => {
   }
 };
 
+// Get announcements for a course
+const getAnnouncements = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await getUserByEmail(decoded.email);
+    
+    const classroom = getClassroomClient({
+      access_token: user.access_token,
+      refresh_token: user.refresh_token
+    });
+    
+    const result = await classroom.courses.announcements.list({ 
+      courseId: courseId,
+      pageSize: 50
+    });
+    
+    res.json(result.data.announcements || []);
+  } catch (err) {
+    console.error('Error fetching announcements:', err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Get enrolled students with emails for a course
+const getEnrolledStudents = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await getUserByEmail(decoded.email);
+    
+    const classroom = getClassroomClient({
+      access_token: user.access_token,
+      refresh_token: user.refresh_token
+    });
+    
+    const result = await classroom.courses.students.list({ 
+      courseId: courseId,
+      pageSize: 50
+    });
+    
+    // Extract student emails and basic info
+    const students = (result.data.students || []).map(student => ({
+      id: student.userId,
+      email: student.profile?.emailAddress,
+      name: student.profile?.name?.fullName,
+      photoUrl: student.profile?.photoUrl
+    }));
+    
+    res.json(students);
+  } catch (err) {
+    console.error('Error fetching enrolled students:', err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Get grades for a course
+const getGrades = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await getUserByEmail(decoded.email);
+    
+    const classroom = getClassroomClient({
+      access_token: user.access_token,
+      refresh_token: user.refresh_token
+    });
+    
+    // First get all course work (assignments)
+    const courseWorkResult = await classroom.courses.courseWork.list({
+      courseId: courseId,
+      pageSize: 50
+    });
+    
+    const courseWork = courseWorkResult.data.courseWork || [];
+    const grades = [];
+    
+    // For each assignment, get student submissions and grades
+    for (const work of courseWork) {
+      try {
+        const submissionsResult = await classroom.courses.courseWork.studentSubmissions.list({
+          courseId: courseId,
+          courseWorkId: work.id,
+          pageSize: 50
+        });
+        
+        const submissions = submissionsResult.data.studentSubmissions || [];
+        
+        submissions.forEach(submission => {
+          grades.push({
+            assignmentId: work.id,
+            assignmentTitle: work.title,
+            studentId: submission.userId,
+            studentEmail: submission.assignedGrade ? submission.assignedGrade : null,
+            grade: submission.assignedGrade,
+            maxPoints: work.maxPoints,
+            state: submission.state,
+            late: submission.late,
+            submittedAt: submission.submittedTime
+          });
+        });
+      } catch (submissionErr) {
+        console.error(`Error fetching submissions for assignment ${work.id}:`, submissionErr);
+      }
+    }
+    
+    res.json(grades);
+  } catch (err) {
+    console.error('Error fetching grades:', err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
 module.exports = {
   listCourses,
   getCourse,
@@ -317,5 +433,8 @@ module.exports = {
   createAnnouncement,
   inviteStudents,
   inviteTeachers,
-  listStudents
+  listStudents,
+  getAnnouncements,
+  getEnrolledStudents,
+  getGrades
 };

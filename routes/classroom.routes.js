@@ -9,7 +9,10 @@ const {
   createAnnouncement,
   inviteStudents,
   inviteTeachers,
-  listStudents
+  listStudents,
+  getAnnouncements,
+  getEnrolledStudents,
+  getGrades
 } = require('../controllers/classroom.controller');
 const { authenticate } = require('../middleware/auth.middleware');
 
@@ -28,6 +31,7 @@ router.patch('/:courseId/archive', archiveCourse);
 
 // Announcement routes
 router.post('/:courseId/announcements', createAnnouncement);
+router.get('/:courseId/announcements', getAnnouncements);
 
 // Student invitation routes
 router.post('/:courseId/invite', inviteStudents);
@@ -37,5 +41,9 @@ router.post('/:courseId/invite-teachers', inviteTeachers);
 
 // Student list route
 router.get('/:courseId/students', listStudents);
+
+// New GET routes
+router.get('/:courseId/enrolled-students', getEnrolledStudents);
+router.get('/:courseId/grades', getGrades);
 
 module.exports = router;
