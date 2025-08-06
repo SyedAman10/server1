@@ -212,115 +212,19 @@ const handleMobileCallback = async (req, res) => {
   try {
     const { code, state } = req.query;
     console.log('Mobile callback received:', { code, state });
-    
+    const EXPO_RETURN_URL = 'exp://192.168.100.75:8081/--/auth/callback';
+
     if (!code) {
-      return res.status(400).send(`
-        <html>
-          <body>
-            <h1>Authentication Error</h1>
-            <p>No authorization code received.</p>
-            <script>
-              // Send error to mobile app
-              if (window.ReactNativeWebView) {
-                window.ReactNativeWebView.postMessage(JSON.stringify({
-                  type: 'error',
-                  error: 'No authorization code received'
-                }));
-              }
-            </script>
-          </body>
-        </html>
-      `);
+      // Redirect with error
+      return res.redirect(`${EXPO_RETURN_URL}?error=NoCode`);
     }
 
-    // Return HTML page that sends the code back to mobile app
-    res.send(`
-      <html>
-        <head>
-          <title>Authentication Complete</title>
-          <style>
-            body { 
-              font-family: Arial, sans-serif; 
-              text-align: center; 
-              padding: 50px;
-              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-              color: white;
-              margin: 0;
-              height: 100vh;
-              display: flex;
-              flex-direction: column;
-              justify-content: center;
-            }
-            .container {
-              background: rgba(255,255,255,0.1);
-              padding: 30px;
-              border-radius: 15px;
-              backdrop-filter: blur(10px);
-              box-shadow: 0 8px 32px rgba(0,0,0,0.1);
-            }
-            h1 { margin-bottom: 20px; }
-            .success { color: #4CAF50; }
-            .code { 
-              background: rgba(255,255,255,0.2); 
-              padding: 10px; 
-              border-radius: 5px; 
-              margin: 20px 0;
-              font-family: monospace;
-              word-break: break-all;
-            }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <h1>✅ Authentication Complete</h1>
-            <p>You can close this window and return to the app.</p>
-            <p class="success">Authorization code received successfully!</p>
-            <div class="code">Code: ${code.substring(0, 20)}...</div>
-            <p><small>This window will close automatically in 3 seconds...</small></p>
-          </div>
-          
-          <script>
-            // Send the authorization code to the mobile app
-            const authData = {
-              type: 'success',
-              code: '${code}',
-              state: '${state}'
-            };
-            
-            // Try to send to React Native WebView
-            if (window.ReactNativeWebView) {
-              window.ReactNativeWebView.postMessage(JSON.stringify(authData));
-            }
-            
-            // Also try to send via window message
-            window.postMessage(JSON.stringify(authData), '*');
-            
-            // Close window after 3 seconds
-            setTimeout(() => {
-              window.close();
-            }, 3000);
-          </script>
-        </body>
-      </html>
-    `);
+    // Redirect to Expo return URL with code
+    return res.redirect(`${EXPO_RETURN_URL}?code=${encodeURIComponent(code)}`);
   } catch (error) {
     console.error('Mobile callback error:', error);
-    res.status(500).send(`
-      <html>
-        <body>
-          <h1>Authentication Error</h1>
-          <p>${error.message}</p>
-          <script>
-            if (window.ReactNativeWebView) {
-              window.ReactNativeWebView.postMessage(JSON.stringify({
-                type: 'error',
-                error: '${error.message}'
-              }));
-            }
-          </script>
-        </body>
-      </html>
-    `);
+    const EXPO_RETURN_URL = 'exp://192.168.100.75:8081/--/auth/callback';
+    return res.redirect(`${EXPO_RETURN_URL}?error=AuthFailed`);
   }
 };
 
