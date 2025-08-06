@@ -209,21 +209,25 @@ const handleMobileAuth = async (req, res) => {
 
 // Handle Mobile Callback (for OAuth redirect)
 const handleMobileCallback = async (req, res) => {
+  console.log('--- handleMobileCallback called ---');
   try {
     const { code, state } = req.query;
     console.log('Mobile callback received:', { code, state });
     const EXPO_RETURN_URL = 'exp://192.168.100.75:8081/--/auth/callback';
 
     if (!code) {
+      console.warn('No authorization code received in mobile callback');
       // Redirect with error
       return res.redirect(`${EXPO_RETURN_URL}?error=NoCode`);
     }
-
+ 
+    console.log('Redirecting to Expo return URL with code:', code);
     // Redirect to Expo return URL with code
     return res.redirect(`${EXPO_RETURN_URL}?code=${encodeURIComponent(code)}`);
   } catch (error) {
     console.error('Mobile callback error:', error);
     const EXPO_RETURN_URL = 'exp://192.168.100.75:8081/--/auth/callback';
+    console.log('Redirecting to Expo return URL with error=AuthFailed');
     return res.redirect(`${EXPO_RETURN_URL}?error=AuthFailed`);
   }
 };
