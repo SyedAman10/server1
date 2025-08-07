@@ -423,6 +423,190 @@ const getGrades = async (req, res) => {
   }
 };
 
+// Create an assignment (courseWork)
+const createAssignment = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await getUserByEmail(decoded.email);
+
+    const classroom = getClassroomClient({
+      access_token: user.access_token,
+      refresh_token: user.refresh_token
+    });
+
+    // Validate required fields
+    if (!req.body.title) {
+      return res.status(400).json({ error: 'Assignment title is required' });
+    }
+
+    const assignmentData = {
+      title: req.body.title,
+      description: req.body.description || '',
+      materials: req.body.materials || [],
+      state: req.body.state || 'PUBLISHED',
+      maxPoints: req.body.maxPoints || 100,
+      dueDate: req.body.dueDate, // { year, month, day }
+      dueTime: req.body.dueTime, // { hours, minutes, seconds, nanos }
+      workType: req.body.workType || 'ASSIGNMENT'
+    };
+
+    const result = await classroom.courses.courseWork.create({
+      courseId,
+      requestBody: assignmentData
+    });
+
+    res.status(201).json(result.data);
+  } catch (err) {
+    console.error('Error creating assignment:', err);
+    if (err.response && err.response.data && err.response.data.error) {
+      return res.status(err.response.status || 500).json({
+        error: err.response.data.error.message || err.message,
+        details: err.response.data.error.details
+      });
+    }
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Update an assignment
+const updateAssignment = async (req, res) => {
+  try {
+    const { courseId, assignmentId } = req.params;
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await getUserByEmail(decoded.email);
+
+    const classroom = getClassroomClient({
+      access_token: user.access_token,
+      refresh_token: user.refresh_token
+    });
+
+    // Create update mask from the request body keys
+    const updateMask = Object.keys(req.body).join(',');
+
+    const result = await classroom.courses.courseWork.patch({
+      courseId,
+      id: assignmentId,
+      updateMask,
+      requestBody: req.body
+    });
+
+    res.json(result.data);
+  } catch (err) {
+    console.error('Error updating assignment:', err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Delete an assignment
+const deleteAssignment = async (req, res) => {
+  try {
+    const { courseId, assignmentId } = req.params;
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await getUserByEmail(decoded.email);
+
+    const classroom = getClassroomClient({
+      access_token: user.access_token,
+      refresh_token: user.refresh_token
+    });
+
+    await classroom.courses.courseWork.delete({
+      courseId,
+      id: assignmentId
+    });
+
+    res.status(204).send();
+  } catch (err) {
+    console.error('Error deleting assignment:', err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// List assignments for a course
+const listAssignments = async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await getUserByEmail(decoded.email);
+
+    const classroom = getClassroomClient({
+      access_token: user.access_token,
+      refresh_token: user.refresh_token
+    });
+
+    const result = await classroom.courses.courseWork.list({
+      courseId,
+      pageSize: 50
+    });
+
+    res.json(result.data.courseWork || []);
+  } catch (err) {
+    console.error('Error listing assignments:', err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Get a single assignment
+const getAssignment = async (req, res) => {
+  try {
+    const { courseId, assignmentId } = req.params;
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await getUserByEmail(decoded.email);
+
+    const classroom = getClassroomClient({
+      access_token: user.access_token,
+      refresh_token: user.refresh_token
+    });
+
+    const result = await classroom.courses.courseWork.get({
+      courseId,
+      id: assignmentId
+    });
+
+    res.json(result.data);
+  } catch (err) {
+    console.error('Error getting assignment:', err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Grade an assignment for a student
+const gradeAssignment = async (req, res) => {
+  try {
+    const { courseId, assignmentId, studentId } = req.params;
+    const { grade } = req.body;
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await getUserByEmail(decoded.email);
+
+    const classroom = getClassroomClient({
+      access_token: user.access_token,
+      refresh_token: user.refresh_token
+    });
+
+    // Patch the student submission with the grade
+    const result = await classroom.courses.courseWork.studentSubmissions.patch({
+      courseId,
+      courseWorkId: assignmentId,
+      id: studentId,
+      updateMask: 'assignedGrade',
+      requestBody: {
+        assignedGrade: grade
+      }
+    });
+
+    res.json(result.data);
+  } catch (err) {
+    console.error('Error grading assignment:', err);
+    res.status(500).json({ error: err.message });
+  }
+}
+
 module.exports = {
   listCourses,
   getCourse,
@@ -436,5 +620,11 @@ module.exports = {
   listStudents,
   getAnnouncements,
   getEnrolledStudents,
-  getGrades
+  getGrades,
+  createAssignment,
+  updateAssignment,
+  deleteAssignment,
+  listAssignments,
+  getAssignment,
+  gradeAssignment
 };

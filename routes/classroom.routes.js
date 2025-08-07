@@ -1,49 +1,38 @@
 const express = require('express');
-const { 
-  listCourses, 
-  getCourse, 
-  createCourse, 
-  updateCourse, 
-  deleteCourse, 
-  archiveCourse,
-  createAnnouncement,
-  inviteStudents,
-  inviteTeachers,
-  listStudents,
-  getAnnouncements,
-  getEnrolledStudents,
-  getGrades
-} = require('../controllers/classroom.controller');
-const { authenticate } = require('../middleware/auth.middleware');
-
 const router = express.Router();
+const classroomController = require('../controllers/classroom.controller');
+const { authenticate } = require('../middleware/auth.middleware');
 
 // Protect all classroom routes
 router.use(authenticate);
 
-// Course routes
-router.get('/', listCourses);
-router.get('/:courseId', getCourse);
-router.post('/', createCourse);
-router.patch('/:courseId', updateCourse);
-router.delete('/:courseId', deleteCourse);
-router.patch('/:courseId/archive', archiveCourse);
+// Courses
+router.get('/courses', classroomController.listCourses);
+router.get('/courses/:courseId', classroomController.getCourse);
+router.post('/courses', classroomController.createCourse);
+router.patch('/courses/:courseId', classroomController.updateCourse);
+router.delete('/courses/:courseId', classroomController.deleteCourse);
+router.post('/courses/:courseId/archive', classroomController.archiveCourse);
 
-// Announcement routes
-router.post('/:courseId/announcements', createAnnouncement);
-router.get('/:courseId/announcements', getAnnouncements);
+// Announcements
+router.post('/courses/:courseId/announcements', classroomController.createAnnouncement);
+router.get('/courses/:courseId/announcements', classroomController.getAnnouncements);
 
-// Student invitation routes
-router.post('/:courseId/invite', inviteStudents);
+// Students & Teachers
+router.post('/courses/:courseId/invite-student', classroomController.inviteStudents);
+router.post('/courses/:courseId/invite-teachers', classroomController.inviteTeachers);
+router.get('/courses/:courseId/students', classroomController.listStudents);
+router.get('/courses/:courseId/enrolled-students', classroomController.getEnrolledStudents);
 
-// Teacher invitation routes
-router.post('/:courseId/invite-teachers', inviteTeachers);
+// Assignments
+router.post('/courses/:courseId/assignments', classroomController.createAssignment);
+router.get('/courses/:courseId/assignments', classroomController.listAssignments);
+router.get('/courses/:courseId/assignments/:assignmentId', classroomController.getAssignment);
+router.patch('/courses/:courseId/assignments/:assignmentId', classroomController.updateAssignment);
+router.delete('/courses/:courseId/assignments/:assignmentId', classroomController.deleteAssignment);
 
-// Student list route
-router.get('/:courseId/students', listStudents);
-
-// New GET routes
-router.get('/:courseId/enrolled-students', getEnrolledStudents);
-router.get('/:courseId/grades', getGrades);
+// Grades
+router.get('/courses/:courseId/grades', classroomController.getGrades);
+router.post('/courses/:courseId/assignments/:assignmentId/grade/:studentId', classroomController.gradeAssignment);
 
 module.exports = router;
