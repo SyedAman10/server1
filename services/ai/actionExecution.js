@@ -161,7 +161,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
 
     switch (intent) {
       case 'LIST_COURSES':
-        return await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken);
+        return await makeApiCall(`${baseUrl}/api/classroom/courses`, 'GET', null, userToken);
         
       case 'CREATE_COURSE': {
         if (!parameters.name) {
@@ -181,7 +181,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
 
         try {
           const response = await makeApiCall(
-            `${baseUrl}/api/classroom`,
+            `${baseUrl}/api/classroom/courses`,
             'POST',
             courseData,
             userToken
@@ -219,13 +219,13 @@ async function executeAction(intentData, originalMessage, userToken, req) {
 
         try {
           // Get all courses to find the matching one
-          const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken);
+          const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom/courses`, 'GET', null, userToken);
           
           if (!coursesResponse || !coursesResponse.courses || !Array.isArray(coursesResponse.courses)) {
             return {
               message: "I couldn't find your courses. Please try again.",
               conversationId: req.body.conversationId
-            };
+          };
           }
           
           const searchTerm = (parameters.courseName || parameters.courseIdentifier || '').toLowerCase();
@@ -287,17 +287,17 @@ async function executeAction(intentData, originalMessage, userToken, req) {
         if (parameters.courseId) {
           return await makeApiCall(`${baseUrl}/api/classroom/${parameters.courseId}`, 'GET', null, userToken);
         } else if (parameters.courseName || parameters.courseIdentifier) {
-          // If we only have a name, we need to:
-          // 1. Get all courses
-          // 2. Find the matching one(s)
-          const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken);
-          
-          if (!coursesResponse || !coursesResponse.courses || !Array.isArray(coursesResponse.courses)) {
-            return {
-              message: "I couldn't find your courses. Please try again.",
-              conversationId: req.body.conversationId
-            };
-          }
+                  // If we only have a name, we need to:
+        // 1. Get all courses
+        // 2. Find the matching one(s)
+        const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom/courses`, 'GET', null, userToken);
+        
+        if (!coursesResponse || !coursesResponse.courses || !Array.isArray(coursesResponse.courses)) {
+          return {
+            message: "I couldn't find your courses. Please try again.",
+            conversationId: req.body.conversationId
+          };
+        }
           
           const searchTerm = (parameters.courseName || parameters.courseIdentifier || '').toLowerCase();
           const matchingCourses = coursesResponse.courses.filter(course => 
@@ -364,8 +364,8 @@ async function executeAction(intentData, originalMessage, userToken, req) {
         }
 
         try {
-          // Get all courses to find the matching one
-          const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken);
+                  // Get all courses to find the matching one
+        const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom/courses`, 'GET', null, userToken);
           
           if (!coursesResponse || !coursesResponse.courses || !Array.isArray(coursesResponse.courses)) {
             return {
@@ -399,7 +399,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
 
             try {
               const response = await makeApiCall(
-                `${baseUrl}/api/courses/${courseId}/assignments`,
+                `${baseUrl}/api/classroom/${courseId}/assignments`,
                 'POST',
                 assignmentData,
                 userToken
@@ -468,7 +468,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
         }
         // Get all courses to find the matching one
         const coursesResponse = await makeApiCall(
-          `${baseUrl}/api/classroom`,
+          `${baseUrl}/api/classroom/courses`,
           'GET',
           null,
           userToken
@@ -540,7 +540,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
         }
         // Get all courses to find the matching one
         const teacherCoursesResponse = await makeApiCall(
-          `${baseUrl}/api/classroom`,
+          `${baseUrl}/api/classroom/courses`,
           'GET',
           null,
           userToken
@@ -608,7 +608,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
         if (parameters.needsMaterials === false) {
           try {
             const response = await makeApiCall(
-              `${baseUrl}/api/courses/${assignmentData.courseId}/assignments`,
+              `${baseUrl}/api/classroom/${assignmentData.courseId}/assignments`,
               'POST',
               {
                 ...assignmentData,
@@ -685,7 +685,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           // Create the assignment with the material
           try {
             const response = await makeApiCall(
-              `${baseUrl}/api/courses/${assignmentData.courseId}/assignments`,
+              `${baseUrl}/api/classroom/${assignmentData.courseId}/assignments`,
               'POST',
               {
                 ...assignmentData,
@@ -767,7 +767,7 @@ Just let me know what you'd like to do! For example:
           };
         }
         // Get all courses
-        const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken);
+        const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom/courses`, 'GET', null, userToken);
         if (!coursesResponse || !coursesResponse.courses || !Array.isArray(coursesResponse.courses)) {
           return {
             message: "I couldn't find your courses. Please try again.",
@@ -796,7 +796,7 @@ Just let me know what you'd like to do! For example:
         }
         const courseId = matchingCourses[0].id;
         // 2. Find the assignment by title
-        const assignmentsResponse = await makeApiCall(`${baseUrl}/api/courses/${courseId}/assignments`, 'GET', null, userToken);
+        const assignmentsResponse = await makeApiCall(`${baseUrl}/api/classroom/${courseId}/assignments`, 'GET', null, userToken);
         console.log('DEBUG assignmentsResponse:', assignmentsResponse);
         const assignments = Array.isArray(assignmentsResponse)
           ? assignmentsResponse
@@ -826,7 +826,7 @@ Just let me know what you'd like to do! For example:
         }
         const assignmentId = matchingAssignments[0].id;
         // 3. Get submissions
-        const submissions = await makeApiCall(`${baseUrl}/api/courses/${courseId}/assignments/${assignmentId}/submissions`, 'GET', null, userToken);
+        const submissions = await makeApiCall(`${baseUrl}/api/classroom/${courseId}/assignments/${assignmentId}/submissions`, 'GET', null, userToken);
         console.log('DEBUG submissions:', submissions);
         const submissionList = Array.isArray(submissions)
           ? submissions
@@ -862,7 +862,7 @@ Just let me know what you'd like to do! For example:
         }
 
         // 2. Find the course
-        const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken);
+        const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom/courses`, 'GET', null, userToken);
         if (!coursesResponse || !coursesResponse.courses || !Array.isArray(coursesResponse.courses)) {
           return { message: `Course list not found.`, conversationId: req.body.conversationId };
         }
@@ -870,7 +870,7 @@ Just let me know what you'd like to do! For example:
         if (!course) return { message: `Course "${courseName}" not found.`, conversationId: req.body.conversationId };
 
         // 3. Find the assignment
-        const assignmentsResponse = await makeApiCall(`${baseUrl}/api/courses/${course.id}/assignments`, 'GET', null, userToken);
+        const assignmentsResponse = await makeApiCall(`${baseUrl}/api/classroom/${course.id}/assignments`, 'GET', null, userToken);
         const assignments = Array.isArray(assignmentsResponse)
           ? assignmentsResponse
           : Array.isArray(assignmentsResponse.courses)
@@ -880,7 +880,7 @@ Just let me know what you'd like to do! For example:
         if (!assignment) return { message: `Assignment "${assignmentTitle}" not found.`, conversationId: req.body.conversationId };
 
         // 4. Find the student submission
-        const submissionsResponse = await makeApiCall(`${baseUrl}/api/courses/${course.id}/assignments/${assignment.id}/submissions`, 'GET', null, userToken);
+        const submissionsResponse = await makeApiCall(`${baseUrl}/api/classroom/${course.id}/assignments/${assignment.id}/submissions`, 'GET', null, userToken);
         const submissions = Array.isArray(submissionsResponse)
           ? submissionsResponse
           : Array.isArray(submissionsResponse.courses)
@@ -926,7 +926,7 @@ Just let me know what you'd like to do! For example:
 
         try {
           await makeApiCall(
-            `${baseUrl}/api/courses/${course.id}/courseWork/${assignment.id}/studentSubmissions/${submission.id}`,
+            `${baseUrl}/api/classroom/${course.id}/courseWork/${assignment.id}/studentSubmissions/${submission.id}`,
             'PATCH',
             gradeData,
             userToken
@@ -938,7 +938,7 @@ Just let me know what you'd like to do! For example:
         // 6. Optionally, return the submission (change state to RETURNED)
         try {
           await makeApiCall(
-            `${baseUrl}/api/courses/${course.id}/courseWork/${assignment.id}/studentSubmissions/${submission.id}:return`,
+            `${baseUrl}/api/classroom/${course.id}/courseWork/${assignment.id}/studentSubmissions/${submission.id}:return`,
             'POST',
             {},
             userToken
@@ -959,7 +959,7 @@ Just let me know what you'd like to do! For example:
           };
         }
         // Get all courses
-        const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken);
+        const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom/courses`, 'GET', null, userToken);
         if (!coursesResponse || !coursesResponse.courses || !Array.isArray(coursesResponse.courses)) {
           return {
             message: "I couldn't find your courses. Please try again.",

@@ -43,7 +43,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/classroom', classroomRoutes);
 app.use('/api/company', companyRoutes);
 app.use('/api/ai', aiAgentRoutes); // Mount AI agent routes
-app.use('/api', assignmentRoutes); // Add assignment routes
+app.use('/api/classroom', assignmentRoutes); // Add assignment routes under classroom
 
 // Health check endpoint
 app.get('/', (req, res) => res.send('AI Classroom Assistant is Live 🚀'));

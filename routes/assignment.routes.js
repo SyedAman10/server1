@@ -15,11 +15,11 @@ const router = express.Router();
 router.use(authenticate);
 
 // Assignment routes
-router.post('/courses/:courseId/assignments', createAssignmentController);
-router.get('/courses/:courseId/assignments', listAssignmentsController);
-router.get('/courses/:courseId/assignments/:assignmentId', getAssignmentController);
-router.patch('/courses/:courseId/assignments/:assignmentId', updateAssignmentController);
-router.delete('/courses/:courseId/assignments/:assignmentId', deleteAssignmentController);
-router.get('/courses/:courseId/assignments/:assignmentId/submissions', getStudentSubmissionsController);
+router.post('/:courseId/assignments', createAssignmentController);
+router.get('/:courseId/assignments', listAssignmentsController);
+router.get('/:courseId/assignments/:assignmentId', getAssignmentController);
+router.patch('/:courseId/assignments/:assignmentId', updateAssignmentController);
+router.delete('/:courseId/assignments/:assignmentId', deleteAssignmentController);
+router.get('/:courseId/assignments/:assignmentId/submissions', getStudentSubmissionsController);
 
 module.exports = router; 
