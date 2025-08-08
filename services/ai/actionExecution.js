@@ -7,6 +7,8 @@ const jwt = require('jsonwebtoken');
  */
 async function makeApiCall(url, method, data, userToken) {
   try {
+    console.log('DEBUG: makeApiCall called with:', { url, method, data: data ? 'data present' : 'no data' });
+    
     // Remove any existing Bearer prefix and add our own
     const cleanToken = userToken.replace(/^Bearer\s+/i, '');
     
@@ -24,7 +26,10 @@ async function makeApiCall(url, method, data, userToken) {
       config.data = data;
     }
 
+    console.log('DEBUG: Making API call with config:', { method, url, hasData: !!config.data });
     const response = await axios(config);
+    console.log('DEBUG: API call successful, response status:', response.status);
+    console.log('DEBUG: API response data:', response.data);
 
     // Format the response based on the API call
     if (method === 'DELETE') {
@@ -180,12 +185,16 @@ async function executeAction(intentData, originalMessage, userToken, req) {
         };
 
         try {
+          console.log('DEBUG: AI Agent calling course creation API with data:', courseData);
+          
           const response = await makeApiCall(
             `${baseUrl}/api/classroom/courses`,
             'POST',
             courseData,
             userToken
           );
+
+          console.log('DEBUG: AI Agent received response:', response);
 
           return {
             message: `Successfully created the course "${parameters.name}".`,

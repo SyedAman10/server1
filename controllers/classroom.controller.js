@@ -40,12 +40,17 @@ const getCourse = async (req, res) => {
 
 const createCourse = async (req, res) => {
   try {
+    console.log('DEBUG: Course creation request received:', req.body);
+    
     const token = req.headers.authorization.split(' ')[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await getUserByEmail(decoded.email);
     
+    console.log('DEBUG: User found:', { email: user.email, hasTokens: !!(user.access_token && user.refresh_token) });
+    
     // Ensure we have valid tokens
     if (!user.access_token || !user.refresh_token) {
+      console.log('DEBUG: Missing OAuth2 tokens');
       return res.status(401).json({ error: 'Missing required OAuth2 tokens' });
     }
 
@@ -56,6 +61,7 @@ const createCourse = async (req, res) => {
 
     // Validate required fields
     if (!req.body.name) {
+      console.log('DEBUG: Course name missing');
       return res.status(400).json({ error: 'Course name is required' });
     }
 
@@ -69,10 +75,17 @@ const createCourse = async (req, res) => {
       courseState: 'PROVISIONED' // Start in PROVISIONED state, then transition to ACTIVE
     };
 
+    console.log('DEBUG: Creating course with data:', courseData);
+
     const result = await classroom.courses.create({
       requestBody: courseData
-    });    // If successful, update to ACTIVE state
+    });
+    
+    console.log('DEBUG: Course creation result:', result.data);
+    
+    // If successful, update to ACTIVE state
     if (result.data.id) {
+      console.log('DEBUG: Updating course state to ACTIVE');
       await classroom.courses.patch({
         id: result.data.id,
         updateMask: 'courseState',
@@ -82,6 +95,7 @@ const createCourse = async (req, res) => {
       });
     }
 
+    console.log('DEBUG: Sending success response');
     res.status(201).json(result.data);
   } catch (err) {
     console.error('Error creating course:', err);
