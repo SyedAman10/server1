@@ -47,3 +47,4 @@ router.get('/:courseId/enrolled-students', getEnrolledStudents);
 router.get('/:courseId/grades', getGrades);
 
 module.exports = router;
+ 
