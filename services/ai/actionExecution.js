@@ -12,134 +12,43 @@ async function makeApiCall(url, method, data, userToken) {
     data: data ? 'data present' : 'no data',
     userToken: userToken ? 'token present' : 'no token'
   });
-
+  
   try {
-    // Remove any existing Bearer prefix and add our own
-    const cleanToken = userToken.replace(/^Bearer\s+/i, '');
-    
     const config = {
       method,
       url,
       headers: {
-        'Authorization': `Bearer ${cleanToken}`,
+        'Authorization': `Bearer ${userToken}`,
         'Content-Type': 'application/json'
       }
     };
 
-    // Only add data for non-GET requests
-    if (method !== 'GET' && data !== null) {
+    if (data) {
       config.data = data;
     }
 
     console.log('DEBUG: Making API call with config:', {
       method,
       url,
-      hasData: !!config.data
+      hasData: !!config.data,
+      headers: config.headers
     });
-
+    
+    // Log the actual request being sent
+    console.log('DEBUG: Full axios config:', JSON.stringify(config, null, 2));
+    
     const response = await axios(config);
-
     console.log('DEBUG: API call successful, response status:', response.status);
     console.log('DEBUG: API response data:', response.data);
-
-    // Format the response based on the API call
-    if (method === 'DELETE') {
-      return "Course successfully deleted.";
-    }
     
-    // Handle array responses (like list of courses)
-    if (Array.isArray(response.data)) {
-      if (response.data.length === 0) {
-        return {
-          message: "You don't have any courses yet.",
-          courses: []
-        };
-      }
-      
-      return {
-        message: "Here are your courses:",
-        courses: response.data
-      };
-    }
-
-    // Handle single object responses
-    const result = response.data;
-    
-    if (method === 'POST') {
-      if (url.includes('/announcements')) {
-        return {
-          message: "Announcement created successfully",
-          announcement: result
-        };
-      } else if (url.includes('/assignments')) {
-        return {
-          message: "Assignment created successfully",
-          assignment: result
-        };
-      }
-      return {
-        message: `Successfully created course: ${result.name}`,
-        courseId: result.id,
-        course: result
-      };
-    } else if (method === 'PATCH' && url.includes('/archive')) {
-      return {
-        message: `Successfully archived course: ${result.name}`,
-        course: result
-      };
-    } else if (method === 'PATCH') {
-      return {
-        message: `Successfully updated course: ${result.name}`,
-        course: result
-      };
-    } else {
-      // GET single course response
-      return {
-        message: "Here are the course details:",
-        course: {
-          id: result.id,
-          name: result.name,
-          section: result.section || "No section",
-          description: result.description || "No description",
-          room: result.room || "No room assigned",
-          state: result.courseState || "ACTIVE",
-          creationTime: result.creationTime,
-          updateTime: result.updateTime,
-          enrollmentCode: result.enrollmentCode
-        }
-      };
-    }
+    return response.data;
   } catch (error) {
-    console.error('API call error:', {
-      url,
-      method,
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      error: error.response?.data,
-      headers: error.config?.headers
-    });
-    
-    // Handle specific error cases
+    console.error('DEBUG: API call failed:', error.message);
     if (error.response) {
-      // The request was made and the server responded with a status code
-      // that falls out of the range of 2xx
-      const errorData = error.response.data;
-      let errorMessage = 'API request failed';
-      
-      if (typeof errorData === 'object' && errorData.error) {
-        errorMessage = errorData.error.message || errorData.error;
-      } else if (typeof errorData === 'string') {
-        errorMessage = errorData;
-      }
-      
-      throw new Error(errorMessage);
-    } else if (error.request) {
-      // The request was made but no response was received
-      throw new Error('No response received from the server');
-    } else {
-      // Something happened in setting up the request that triggered an Error
-      throw new Error(error.message || 'Network error when contacting the API');
+      console.error('DEBUG: Error response status:', error.response.status);
+      console.error('DEBUG: Error response data:', error.response.data);
     }
+    throw error;
   }
 }
 

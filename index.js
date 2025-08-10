@@ -64,6 +64,19 @@ app.get('/api/classroom/test', (req, res) => {
   res.json({ message: 'Test GET endpoint working', method: req.method });
 });
 
+// Simple test endpoint for AI to call
+app.post('/api/classroom/create-test', (req, res) => {
+  console.log('DEBUG: AI create-test endpoint hit');
+  console.log('DEBUG: Method:', req.method);
+  console.log('DEBUG: Body:', req.body);
+  res.status(201).json({ 
+    message: 'Test course created', 
+    method: req.method, 
+    body: req.body,
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Health check endpoint
 app.get('/', (req, res) => res.send('AI Classroom Assistant is Live 🚀'));
 
