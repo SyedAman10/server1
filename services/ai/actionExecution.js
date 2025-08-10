@@ -6,6 +6,13 @@ const jwt = require('jsonwebtoken');
  * Helper function to make API calls to our backend endpoints
  */
 async function makeApiCall(url, method, data, userToken) {
+  console.log('DEBUG: makeApiCall called with:', {
+    url,
+    method,
+    data: data ? 'data present' : 'no data',
+    userToken: userToken ? 'token present' : 'no token'
+  });
+
   try {
     // Remove any existing Bearer prefix and add our own
     const cleanToken = userToken.replace(/^Bearer\s+/i, '');
@@ -24,7 +31,16 @@ async function makeApiCall(url, method, data, userToken) {
       config.data = data;
     }
 
+    console.log('DEBUG: Making API call with config:', {
+      method,
+      url,
+      hasData: !!config.data
+    });
+
     const response = await axios(config);
+
+    console.log('DEBUG: API call successful, response status:', response.status);
+    console.log('DEBUG: API response data:', response.data);
 
     // Format the response based on the API call
     if (method === 'DELETE') {
@@ -179,6 +195,12 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           room: parameters.room || ''
         };
 
+        console.log('DEBUG: CREATE_COURSE - baseUrl:', baseUrl);
+        console.log('DEBUG: CREATE_COURSE - Full URL being called:', `${baseUrl}/api/classroom`);
+        console.log('DEBUG: CREATE_COURSE - courseData:', courseData);
+        console.log('DEBUG: CREATE_COURSE - req.protocol:', req.protocol);
+        console.log('DEBUG: CREATE_COURSE - req.get("host"):', req.get('host'));
+
         try {
           const response = await makeApiCall(
             `${baseUrl}/api/classroom`,
@@ -186,6 +208,8 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             courseData,
             userToken
           );
+
+          console.log('DEBUG: CREATE_COURSE - makeApiCall response:', response);
 
           return {
             message: `Successfully created the course "${parameters.name}".`,
