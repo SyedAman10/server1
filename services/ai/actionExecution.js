@@ -4,6 +4,133 @@ const jwt = require('jsonwebtoken');
 const { getUserByEmail } = require('../../models/user.model');
 
 /**
+ * Reusable function to find and match courses by name
+ * Uses the same advanced matching logic for all intents
+ */
+async function findMatchingCourse(courseName, userToken, req, baseUrl) {
+  try {
+    // Get all courses to find the matching one
+    let coursesResponse = await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken, req);
+    
+    if (!coursesResponse || !coursesResponse.courses || !Array.isArray(coursesResponse.courses)) {
+      // Handle cases where coursesResponse might be directly an array
+      if (Array.isArray(coursesResponse)) {
+        console.log('DEBUG: coursesResponse is directly an array, using it');
+        coursesResponse = { courses: coursesResponse };
+      } else if (coursesResponse && typeof coursesResponse === 'object') {
+        // Look for array properties in the response
+        const arrayProps = Object.keys(coursesResponse).filter(key => Array.isArray(coursesResponse[key]));
+        if (arrayProps.length > 0) {
+          const firstArrayProp = arrayProps[0];
+          console.log(`DEBUG: Using array property: ${firstArrayProp}`);
+          coursesResponse = { courses: coursesResponse[firstArrayProp] };
+        } else {
+          console.log('DEBUG: Still no valid courses found after fallback');
+          return { success: false, message: "I couldn't find your courses. Please try again." };
+        }
+      } else {
+        console.log('DEBUG: No courses found or invalid response format');
+        console.log('DEBUG: coursesResponse type:', typeof coursesResponse);
+        console.log('DEBUG: coursesResponse keys:', coursesResponse ? Object.keys(coursesResponse) : 'null');
+        console.log('DEBUG: courses property:', coursesResponse?.courses);
+        console.log('DEBUG: isArray:', Array.isArray(coursesResponse?.courses));
+        return { success: false, message: "I couldn't find your courses. Please try again." };
+      }
+    }
+    
+    console.log('DEBUG: Total courses found:', coursesResponse.courses.length);
+    console.log('DEBUG: Course names:', coursesResponse.courses.map(c => c.name));
+    
+    const searchTerm = (courseName || '').toLowerCase();
+    console.log('DEBUG: Search term:', searchTerm);
+    
+    // Split search term into words for better matching
+    const searchWords = searchTerm.split(/\s+/).filter(word => word.length > 0);
+    
+    // More flexible course matching
+    const matchingCourses = coursesResponse.courses.filter(course => {
+      if (!course.name) return false;
+      
+      const courseName = course.name.toLowerCase();
+      
+      // Check if all search words are found in the course name
+      const allWordsMatch = searchWords.every(word => courseName.includes(word));
+      
+      // Also check if course name contains the full search term
+      const fullTermMatch = courseName.includes(searchTerm);
+      
+      // Check if search term contains the course name (for partial matches)
+      const reverseMatch = searchTerm.includes(courseName);
+      
+      // Check for exact match (highest priority)
+      const exactMatch = courseName === searchTerm;
+      
+      const isMatch = exactMatch || allWordsMatch || fullTermMatch || reverseMatch;
+      
+      console.log(`DEBUG: Course "${course.name}" (${courseName}) vs search "${searchTerm}":`);
+      console.log(`  - Exact match: ${exactMatch}`);
+      console.log(`  - All words match: ${allWordsMatch} (words: ${searchWords.join(', ')})`);
+      console.log(`  - Full term match: ${fullTermMatch}`);
+      console.log(`  - Reverse match: ${reverseMatch}`);
+      console.log(`  - Final result: ${isMatch}`);
+      
+      return isMatch;
+    });
+    
+    // Check if we have an exact match - if so, use it immediately
+    const exactMatch = matchingCourses.find(course => 
+      course.name.toLowerCase() === searchTerm
+    );
+    
+    if (exactMatch) {
+      console.log('DEBUG: Exact match found, using:', exactMatch.name);
+      return { success: true, course: exactMatch, isExactMatch: true };
+    } else {
+      // Only sort and select if no exact match found
+      console.log('DEBUG: No exact match, sorting by similarity...');
+      
+      // Sort courses by match quality (exact matches first, then by similarity)
+      matchingCourses.sort((a, b) => {
+        const aName = a.name.toLowerCase();
+        const bName = b.name.toLowerCase();
+        
+        // Then prioritize by how many words match exactly
+        const aWordMatches = searchWords.filter(word => aName.includes(word)).length;
+        const bWordMatches = searchWords.filter(word => bName.includes(word)).length;
+        
+        if (aWordMatches !== bWordMatches) {
+          return bWordMatches - aWordMatches; // Higher word matches first
+        }
+        
+        // If same word matches, prioritize shorter names (more specific)
+        return aName.length - bName.length;
+      });
+      
+      console.log('DEBUG: Matching courses found:', matchingCourses.length);
+      console.log('DEBUG: Matching course names:', matchingCourses.map(c => c.name));
+      console.log('DEBUG: Sorted by priority (best match first):', 
+        matchingCourses.map(c => ({
+          name: c.name,
+          priority: c.name.toLowerCase() === searchTerm ? 'EXACT' : 'PARTIAL'
+        }))
+      );
+      
+      // Select the best match
+      if (matchingCourses.length > 0) {
+        const selectedCourse = matchingCourses[0];
+        console.log('DEBUG: Selected course (best match):', selectedCourse.name);
+        return { success: true, course: selectedCourse, isExactMatch: false, allMatches: matchingCourses };
+      }
+    }
+    
+    return { success: false, message: `I couldn't find any courses matching "${courseName}".` };
+  } catch (error) {
+    console.error('Error in findMatchingCourse:', error);
+    return { success: false, message: "Sorry, I encountered an error while searching for courses. Please try again.", error: error.message };
+  }
+}
+
+/**
  * Helper function to make API calls to our backend endpoints
  */
 async function makeApiCall(url, method, data, userToken, req) {
@@ -49,6 +176,30 @@ async function makeApiCall(url, method, data, userToken, req) {
             
             console.log('DEBUG: Internal listCourses call successful');
             return result.data.courses;
+            
+          } else if (method === 'GET' && endpoint.startsWith('/') && !endpoint.includes('/')) {
+            // For getCourse, extract courseId and get course details
+            const courseId = endpoint.substring(1); // Remove leading slash
+            console.log('DEBUG: Getting course details for courseId:', courseId);
+            
+            const user = await getUserByEmail(req.user.email);
+            if (!user.access_token || !user.refresh_token) {
+              throw new Error('Missing required OAuth2 tokens');
+            }
+            
+            const { getClassroomClient } = require('../../integrations/google.classroom');
+            const classroom = getClassroomClient({
+              access_token: user.access_token,
+              refresh_token: user.refresh_token
+            });
+            
+            const result = await classroom.courses.get({
+              id: courseId
+            });
+            
+            console.log('DEBUG: Course details retrieved successfully');
+            console.log('DEBUG: Internal getCourse call successful');
+            return result.data;
             
           } else if (method === 'POST' && endpoint === '/') {
             // For createCourse, we need to get the user from the database
@@ -100,7 +251,94 @@ async function makeApiCall(url, method, data, userToken, req) {
             console.log('DEBUG: Internal createCourse call successful');
             return result.data;
             
-          } else {
+          } else if (method === 'POST' && endpoint.includes('/announcements')) {
+            // For createAnnouncement, extract courseId and create announcement
+            const courseId = endpoint.split('/')[1]; // Extract courseId from /{courseId}/announcements
+            console.log('DEBUG: Creating announcement for courseId:', courseId);
+            
+            const user = await getUserByEmail(req.user.email);
+            if (!user.access_token || !user.refresh_token) {
+              throw new Error('Missing required OAuth2 tokens');
+            }
+            
+            const { getClassroomClient } = require('../../integrations/google.classroom');
+            const classroom = getClassroomClient({
+              access_token: user.access_token,
+              refresh_token: user.refresh_token
+            });
+            
+            // Validate required fields
+            if (!data.text) {
+              throw new Error('Announcement text is required');
+            }
+            
+            const announcementData = {
+              text: data.text,
+              materials: data.materials || [],
+              state: data.state || 'PUBLISHED'
+            };
+            
+            console.log('DEBUG: Creating announcement with data:', announcementData);
+            const result = await classroom.courses.announcements.create({
+              courseId: courseId,
+              requestBody: announcementData
+            });
+            
+            console.log('DEBUG: Announcement created successfully:', result.data);
+            console.log('DEBUG: Internal createAnnouncement call successful');
+            return result.data;
+            
+          } else if (method === 'GET' && endpoint.includes('/announcements')) {
+            // For getAnnouncements, extract courseId and get announcements
+            const courseId = endpoint.split('/')[1]; // Extract courseId from /{courseId}/announcements
+            console.log('DEBUG: Getting announcements for courseId:', courseId);
+            
+            const user = await getUserByEmail(req.user.email);
+            if (!user.access_token || !user.refresh_token) {
+              throw new Error('Missing required OAuth2 tokens');
+            }
+            
+            const { getClassroomClient } = require('../../integrations/google.classroom');
+            const classroom = getClassroomClient({
+              access_token: user.access_token,
+              refresh_token: user.refresh_token
+            });
+            
+            const result = await classroom.courses.announcements.list({
+              courseId: courseId,
+              pageSize: 20
+            });
+            
+            console.log('DEBUG: Announcements retrieved successfully');
+            console.log('DEBUG: Internal getAnnouncements call successful');
+            return result.data.announcements || [];
+            
+          } else if (method === 'GET' && endpoint.includes('/students')) {
+            // For getEnrolledStudents, extract courseId and get students
+            const courseId = endpoint.split('/')[1]; // Extract courseId from /{courseId}/students
+            console.log('DEBUG: Getting students for courseId:', courseId);
+            
+            const user = await getUserByEmail(req.user.email);
+            if (!user.access_token || !user.refresh_token) {
+              throw new Error('Missing required OAuth2 tokens');
+            }
+            
+            const { getClassroomClient } = require('../../integrations/google.classroom');
+            const classroom = getClassroomClient({
+              access_token: user.access_token,
+              refresh_token: user.refresh_token
+            });
+            
+            const result = await classroom.courses.students.list({
+              courseId: courseId,
+              pageSize: 30
+            });
+            
+            console.log('DEBUG: Students retrieved successfully');
+            console.log('DEBUG: Internal getEnrolledStudents call successful');
+            return result.data.students || [];
+            
+    } else {
             console.log('DEBUG: Unsupported internal endpoint, falling back to external call');
             // Fall through to external call
           }
@@ -230,7 +468,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           console.log('DEBUG: CREATE_COURSE - makeApiCall response:', response);
 
           return {
-            message: `Successfully created the course "${parameters.name}".`,
+            message: `🎉 **Course "${parameters.name}" created successfully!**\n\n📚 **Course Details:**\n• Name: ${parameters.name}${parameters.section ? `\n• Section: ${parameters.section}` : ''}${parameters.description ? `\n• Description: ${parameters.description}` : ''}\n\n✅ Your course is now active in Google Classroom. Students can join using the enrollment code, and you can start posting announcements, assignments, and materials.\n\n💡 **Next steps:**\n• Post a welcome announcement\n• Create your first assignment\n• Invite students to join`,
             course: response.course,
             conversationId: req.body.conversationId
           };
@@ -260,65 +498,144 @@ async function executeAction(intentData, originalMessage, userToken, req) {
         }
 
         try {
-          // Get all courses to find the matching one
-          const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken, req);
+          // Use the reusable course matching function
+          const courseMatch = await findMatchingCourse(
+            parameters.courseName || parameters.courseIdentifier, 
+            userToken, 
+            req, 
+            baseUrl
+          );
           
-          if (!coursesResponse || !coursesResponse.courses || !Array.isArray(coursesResponse.courses)) {
+          if (!courseMatch.success) {
             return {
-              message: "I couldn't find your courses. Please try again.",
+              message: courseMatch.message,
               conversationId: req.body.conversationId
             };
           }
           
-          const searchTerm = (parameters.courseName || parameters.courseIdentifier || '').toLowerCase();
-          const matchingCourses = coursesResponse.courses.filter(course => 
-            course.name && course.name.toLowerCase().includes(searchTerm)
-          );
+          const selectedCourse = courseMatch.course;
           
-          if (matchingCourses.length === 0) {
-            return {
-              message: `I couldn't find any courses matching "${parameters.courseName || parameters.courseIdentifier}".`,
-              conversationId: req.body.conversationId
-            };
-          } else if (matchingCourses.length === 1) {
-            // Exact match - create the announcement
-            const courseId = matchingCourses[0].id;
-            const announcementData = {
-              text: parameters.announcementText,
-              materials: parameters.materials || [],
-              state: 'PUBLISHED'
-            };
-
-            const response = await makeApiCall(
-              `${baseUrl}/api/classroom/${courseId}/announcements`,
-              'POST',
-              announcementData,
-              userToken,
-              req
-            );
-
-            return {
-              message: `Successfully created the announcement in ${matchingCourses[0].name}.`,
-              announcement: response.announcement,
-              conversationId: req.body.conversationId
-            };
-          } else {
+          if (courseMatch.allMatches && courseMatch.allMatches.length > 1 && !courseMatch.isExactMatch) {
             // Multiple matches - ask for clarification
             return {
               message: `I found multiple courses matching "${parameters.courseName || parameters.courseIdentifier}". Which one would you like to create an announcement for?`,
-              options: matchingCourses.map(course => ({
+              options: courseMatch.allMatches.map(course => ({
                 id: course.id,
                 name: course.name,
                 section: course.section || "No section"
               })),
-              announcementText: parameters.announcementText,
               conversationId: req.body.conversationId
             };
           }
+          
+          // Exact match - create the announcement
+          const courseId = selectedCourse.id;
+          const announcementData = {
+            text: parameters.announcementText,
+            materials: []
+          };
+          
+          // Use internal call to Google Classroom API
+          const response = await makeApiCall(
+            `${baseUrl}/api/classroom/${courseId}/announcements`,
+            'POST',
+            announcementData,
+            userToken,
+            req
+          );
+          
+          if (!response || response.error) {
+            return {
+              message: `Sorry, I couldn't create the announcement. ${response?.error || 'Please try again.'}`,
+              conversationId: req.body.conversationId
+            };
+          }
+          
+          return {
+            message: `✅ Announcement posted successfully in **${selectedCourse.name}**!\n\n📢 **${parameters.announcementText}**\n\nYour students will now see this announcement in their Google Classroom. You can view all announcements anytime by asking me to show the announcements for this course.`,
+            announcement: response.announcement,
+            conversationId: req.body.conversationId
+          };
         } catch (error) {
           console.error('Error in CREATE_ANNOUNCEMENT:', error);
           return {
-            message: "Sorry, I encountered an error while trying to create the announcement. Please try again.",
+            message: "Sorry, I encountered an error while creating the announcement. Please try again.",
+            error: error.message,
+            conversationId: req.body.conversationId
+          };
+        }
+      }
+        
+      case 'GET_ANNOUNCEMENTS': {
+        if (!parameters.courseName && !parameters.courseIdentifier) {
+          return {
+            message: "I need to know which course you want to view announcements for. Please provide a course name.",
+            conversationId: req.body.conversationId
+          };
+        }
+
+        try {
+          // Use the reusable course matching function
+          const courseMatch = await findMatchingCourse(
+            parameters.courseName || parameters.courseIdentifier, 
+            userToken, 
+            req, 
+            baseUrl
+          );
+          
+          if (!courseMatch.success) {
+            return {
+              message: courseMatch.message,
+              conversationId: req.body.conversationId
+            };
+          }
+          
+          const selectedCourse = courseMatch.course;
+          
+          if (courseMatch.allMatches && courseMatch.allMatches.length > 1 && !courseMatch.isExactMatch) {
+            // Multiple matches - ask for clarification
+            return {
+              message: `I found multiple courses matching "${parameters.courseName || parameters.courseIdentifier}". Which one would you like to view announcements for?`,
+              options: courseMatch.allMatches.map(course => ({
+                id: course.id,
+                name: course.name,
+                section: course.section || "No section"
+              })),
+              conversationId: req.body.conversationId
+            };
+          }
+          
+          // Exact match - get the announcements
+          const courseId = selectedCourse.id;
+          const announcements = await makeApiCall(
+            `${baseUrl}/api/classroom/${courseId}/announcements`,
+            'GET',
+            null,
+            userToken,
+            req
+          );
+          
+          if (!announcements || announcements.length === 0) {
+            return {
+              message: `📢 **${selectedCourse.name}**\n\nNo announcements found yet. This course is ready for your first announcement!`,
+              conversationId: req.body.conversationId
+            };
+          }
+          
+          const announcementList = announcements.map((announcement, index) => {
+            const date = new Date(announcement.updateTime || announcement.creationTime).toLocaleDateString();
+            return `${index + 1}. **${announcement.text}**\n   📅 ${date}`;
+          }).join('\n\n');
+          
+          return {
+            message: `📢 **${selectedCourse.name} - Announcements**\n\n${announcementList}\n\nTotal: ${announcements.length} announcement${announcements.length !== 1 ? 's' : ''}`,
+            announcements: announcements,
+            conversationId: req.body.conversationId
+          };
+        } catch (error) {
+          console.error('Error in GET_ANNOUNCEMENTS:', error);
+          return {
+            message: "Sorry, I encountered an error while trying to get the announcements. Please try again.",
             error: error.message,
             conversationId: req.body.conversationId
           };
@@ -330,36 +647,28 @@ async function executeAction(intentData, originalMessage, userToken, req) {
         if (parameters.courseId) {
           return await makeApiCall(`${baseUrl}/api/classroom/${parameters.courseId}`, 'GET', null, userToken, req);
         } else if (parameters.courseName || parameters.courseIdentifier) {
-          // If we only have a name, we need to:
-          // 1. Get all courses
-          // 2. Find the matching one(s)
-          const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken, req);
+          // Use the reusable course matching function
+          const courseMatch = await findMatchingCourse(
+            parameters.courseName || parameters.courseIdentifier, 
+            userToken, 
+            req, 
+            baseUrl
+          );
           
-          if (!coursesResponse || !coursesResponse.courses || !Array.isArray(coursesResponse.courses)) {
+          if (!courseMatch.success) {
             return {
-              message: "I couldn't find your courses. Please try again.",
+              message: courseMatch.message,
               conversationId: req.body.conversationId
             };
           }
           
-          const searchTerm = (parameters.courseName || parameters.courseIdentifier || '').toLowerCase();
-          const matchingCourses = coursesResponse.courses.filter(course => 
-            course.name && course.name.toLowerCase().includes(searchTerm)
-          );
+          const selectedCourse = courseMatch.course;
           
-          if (matchingCourses.length === 0) {
-            return {
-              message: `I couldn't find any courses matching "${parameters.courseName || parameters.courseIdentifier}".`,
-              conversationId: req.body.conversationId
-            };
-          } else if (matchingCourses.length === 1) {
-            // Exact match - get the details
-            return await makeApiCall(`${baseUrl}/api/classroom/${matchingCourses[0].id}`, 'GET', null, userToken, req);
-          } else {
+          if (courseMatch.allMatches && courseMatch.allMatches.length > 1 && !courseMatch.isExactMatch) {
             // Multiple matches - ask for clarification
             return {
               message: `I found multiple courses matching "${parameters.courseName || parameters.courseIdentifier}". Which one did you mean?`,
-              options: matchingCourses.map(course => ({
+              options: courseMatch.allMatches.map(course => ({
                 id: course.id,
                 name: course.name,
                 section: course.section || "No section"
@@ -367,6 +676,9 @@ async function executeAction(intentData, originalMessage, userToken, req) {
               conversationId: req.body.conversationId
             };
           }
+          
+          // Exact match - get the details
+          return await makeApiCall(`${baseUrl}/api/classroom/${selectedCourse.id}`, 'GET', null, userToken, req);
         } else {
           return {
             message: "I need more information about which course you're interested in. Could you provide a course name or ID?",
@@ -407,90 +719,84 @@ async function executeAction(intentData, originalMessage, userToken, req) {
         }
 
         try {
-          // Get all courses to find the matching one
-          const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken, req);
+          // Use the reusable course matching function
+          const courseMatch = await findMatchingCourse(
+            parameters.courseName || parameters.courseIdentifier, 
+            userToken, 
+            req, 
+            baseUrl
+          );
           
-          if (!coursesResponse || !coursesResponse.courses || !Array.isArray(coursesResponse.courses)) {
+          if (!courseMatch.success) {
             return {
-              message: "I couldn't find your courses. Please try again.",
+              message: courseMatch.message,
               conversationId: req.body.conversationId || generateConversationId()
             };
           }
           
-          const searchTerm = (parameters.courseName || parameters.courseIdentifier || '').toLowerCase();
-          const matchingCourses = coursesResponse.courses.filter(course => 
-            course.name && course.name.toLowerCase().includes(searchTerm)
-          );
+          const selectedCourse = courseMatch.course;
           
-          if (matchingCourses.length === 0) {
-            return {
-              message: `I couldn't find any courses matching "${parameters.courseName || parameters.courseIdentifier}".`,
-              conversationId: req.body.conversationId || generateConversationId()
-            };
-          } else if (matchingCourses.length === 1) {
-            // Exact match - create the assignment immediately, with or without materials
-            const courseId = matchingCourses[0].id;
-            const assignmentData = {
-              title: parameters.title,
-              description: parameters.description || '',
-              materials: parameters.materials || [],
-              state: 'PUBLISHED',
-              maxPoints: parameters.maxPoints || 100,
-              dueDate: parameters.dueDate,
-              dueTime: parameters.dueTime
-            };
-
-            try {
-              const response = await makeApiCall(
-                `${baseUrl}/api/courses/${courseId}/assignments`,
-                'POST',
-                assignmentData,
-                userToken,
-                req
-              );
-
-              return {
-                message: `Successfully created the assignment "${parameters.title}" in ${matchingCourses[0].name}.`,
-                assignment: response,
-                conversationId: req.body.conversationId || generateConversationId()
-              };
-            } catch (error) {
-              // Handle specific error cases
-              if (error.message.includes('Due date must be in the future')) {
-                return {
-                  message: "I couldn't create the assignment because the due date must be in the future. Please provide a future date.",
-                  error: error.message,
-                  conversationId: req.body.conversationId || generateConversationId()
-                };
-              } else if (error.message.includes('Invalid time format')) {
-                return {
-                  message: "I couldn't create the assignment because the time format is invalid. Please use 24-hour format (HH:MM).",
-                  error: error.message,
-                  conversationId: req.body.conversationId || generateConversationId()
-                };
-              }
-              throw error; // Re-throw other errors
-            }
-          } else {
+          if (courseMatch.allMatches && courseMatch.allMatches.length > 1 && !courseMatch.isExactMatch) {
             // Multiple matches - ask for clarification
             return {
-              type: 'COURSE_DISAMBIGUATION_NEEDED',
               message: `I found multiple courses matching "${parameters.courseName || parameters.courseIdentifier}". Which one would you like to create an assignment for?`,
-              options: matchingCourses.map(course => ({
+              options: courseMatch.allMatches.map(course => ({
                 id: course.id,
                 name: course.name,
                 section: course.section || "No section"
               })),
-              assignmentData: {
-                title: parameters.title,
-                description: parameters.description || '',
-                materials: parameters.materials || [],
-                maxPoints: parameters.maxPoints || 100,
-                dueDate: parameters.dueDate,
-                dueTime: parameters.dueTime
-              },
+              title: parameters.title,
+              description: parameters.description,
+              dueDate: parameters.dueDate,
+              dueTime: parameters.dueTime,
+              maxPoints: parameters.maxPoints,
+              materials: parameters.materials,
               conversationId: req.body.conversationId || generateConversationId()
             };
+          }
+          
+          // Exact match - create the assignment immediately, with or without materials
+          const courseId = selectedCourse.id;
+          const assignmentData = {
+            title: parameters.title,
+            description: parameters.description || '',
+            materials: parameters.materials || [],
+            state: 'PUBLISHED',
+            maxPoints: parameters.maxPoints || 100,
+            dueDate: parameters.dueDate,
+            dueTime: parameters.dueTime
+          };
+
+          try {
+            const response = await makeApiCall(
+              `${baseUrl}/api/courses/${courseId}/assignments`,
+              'POST',
+              assignmentData,
+              userToken,
+              req
+            );
+
+            return {
+              message: `Successfully created the assignment "${parameters.title}" in ${selectedCourse.name}.`,
+              assignment: response,
+              conversationId: req.body.conversationId || generateConversationId()
+            };
+          } catch (error) {
+            // Handle specific error cases
+            if (error.message.includes('Due date must be in the future')) {
+              return {
+                message: "I couldn't create the assignment because the due date must be in the future. Please provide a future date.",
+                error: error.message,
+                conversationId: req.body.conversationId || generateConversationId()
+              };
+            } else if (error.message.includes('Invalid time format')) {
+              return {
+                message: "I couldn't create the assignment because the time format is invalid. Please use 24-hour format (HH:MM).",
+                error: error.message,
+                conversationId: req.body.conversationId || generateConversationId()
+              };
+            }
+            throw error; // Re-throw other errors
           }
         } catch (error) {
           console.error('Error in CREATE_ASSIGNMENT:', error);
@@ -510,36 +816,56 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             conversationId: req.body.conversationId
           };
         }
-        // Get all courses to find the matching one
-        const coursesResponse = await makeApiCall(
-          `${baseUrl}/api/classroom`,
-          'GET',
-          null,
-          userToken,
-          req
-        );
-
-        if (!coursesResponse || !coursesResponse.courses || !Array.isArray(coursesResponse.courses)) {
+        
+        if (!parameters.courseName) {
           return {
-            message: 'Failed to retrieve courses. Please try again.',
+            message: 'I need to know which course you want to invite students to. Please provide a course name.',
             conversationId: req.body.conversationId
           };
         }
-
-        // Find courses matching the name
-        const matchingCourses = coursesResponse.courses.filter(course =>
-          course.name.toLowerCase().includes(parameters.courseName.toLowerCase())
-        );
-
+        
         const studentEmails = parameters.studentEmails || parameters.emails;
-        if (matchingCourses.length === 0) {
+        if (!studentEmails || studentEmails.length === 0) {
           return {
-            message: `I couldn't find any courses matching "${parameters.courseName}".`,
+            message: 'I need to know which students to invite. Please provide their email addresses.',
             conversationId: req.body.conversationId
           };
-        } else if (matchingCourses.length === 1) {
+        }
+        
+        try {
+          // Use the reusable course matching function
+          const courseMatch = await findMatchingCourse(
+            parameters.courseName, 
+            userToken, 
+            req, 
+            baseUrl
+          );
+          
+          if (!courseMatch.success) {
+            return {
+              message: courseMatch.message,
+              conversationId: req.body.conversationId
+            };
+          }
+          
+          const selectedCourse = courseMatch.course;
+          
+          if (courseMatch.allMatches && courseMatch.allMatches.length > 1 && !courseMatch.isExactMatch) {
+            // Multiple matches - ask for clarification
+            return {
+              message: `I found multiple courses matching "${parameters.courseName}". Which one would you like to invite the students to?`,
+              options: courseMatch.allMatches.map(course => ({
+                id: course.id,
+                name: course.name,
+                section: course.section || "No section"
+              })),
+              studentEmails: studentEmails,
+              conversationId: req.body.conversationId
+            };
+          }
+          
           // Exact match - invite the students
-          const courseId = matchingCourses[0].id;
+          const courseId = selectedCourse.id;
           const invitationPromises = studentEmails.map(email =>
             makeApiCall(
               `${baseUrl}/api/classroom/${courseId}/invite`,
@@ -553,7 +879,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           try {
             await Promise.all(invitationPromises);
             return {
-              message: `Successfully invited ${studentEmails.length} students to ${matchingCourses[0].name}.`,
+              message: `Successfully invited ${studentEmails.length} students to ${selectedCourse.name}.`,
               conversationId: req.body.conversationId
             };
           } catch (error) {
@@ -562,16 +888,11 @@ async function executeAction(intentData, originalMessage, userToken, req) {
               conversationId: req.body.conversationId
             };
           }
-        } else {
-          // Multiple matches - ask for clarification
+        } catch (error) {
+          console.error('Error in INVITE_STUDENTS:', error);
           return {
-            message: `I found multiple courses matching "${parameters.courseName}". Which one would you like to invite the students to?`,
-            options: matchingCourses.map(course => ({
-              id: course.id,
-              name: course.name,
-              section: course.section || "No section"
-            })),
-            studentEmails: studentEmails,
+            message: "Sorry, I encountered an error while inviting students. Please try again.",
+            error: error.message,
             conversationId: req.body.conversationId
           };
         }
@@ -817,92 +1138,106 @@ Just let me know what you'd like to do! For example:
             conversationId: req.body.conversationId
           };
         }
-        // Get all courses
-        const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken, req);
-        if (!coursesResponse || !coursesResponse.courses || !Array.isArray(coursesResponse.courses)) {
+        
+        try {
+          // Use the reusable course matching function
+          const courseMatch = await findMatchingCourse(
+            parameters.courseName, 
+            userToken, 
+            req, 
+            baseUrl
+          );
+          
+          if (!courseMatch.success) {
+            return {
+              message: courseMatch.message,
+              conversationId: req.body.conversationId
+            };
+          }
+          
+          const selectedCourse = courseMatch.course;
+          
+          if (courseMatch.allMatches && courseMatch.allMatches.length > 1 && !courseMatch.isExactMatch) {
+            // Multiple matches - ask for clarification
+            return {
+              message: `I found multiple courses matching "${parameters.courseName}". Which one do you mean?`,
+              options: courseMatch.allMatches.map(course => ({
+                id: course.id,
+                name: course.name,
+                section: course.section || "No section"
+              })),
+              assignmentTitle: parameters.assignmentTitle,
+              conversationId: req.body.conversationId
+            };
+          }
+          
+          // Exact match - proceed with assignment search
+          const courseId = selectedCourse.id;
+          // 2. Find the assignment by title
+          const assignmentsResponse = await makeApiCall(`${baseUrl}/api/courses/${courseId}/assignments`, 'GET', null, userToken, req);
+          console.log('DEBUG assignmentsResponse:', assignmentsResponse);
+          const assignments = Array.isArray(assignmentsResponse)
+            ? assignmentsResponse
+            : Array.isArray(assignmentsResponse.courses)
+              ? assignmentsResponse.courses
+              : [];
+          console.log('DEBUG assignments:', assignments);
+          if (!Array.isArray(assignments) || assignments.length === 0) {
+            return {
+              message: "I couldn't retrieve assignments for that course.",
+              conversationId: req.body.conversationId
+            };
+          }
+          const assignmentTitleTerm = parameters.assignmentTitle.toLowerCase();
+          const matchingAssignments = assignments.filter(a => a.title && a.title.toLowerCase().includes(assignmentTitleTerm));
+          if (matchingAssignments.length === 0) {
+            return {
+              message: `I couldn't find any assignments matching "${parameters.assignmentTitle}" in ${selectedCourse.name}.`,
+              conversationId: req.body.conversationId
+            };
+          } else if (matchingAssignments.length > 1) {
+            return {
+              message: `I found multiple assignments matching "${parameters.assignmentTitle}". Which one do you mean?`,
+              options: matchingAssignments.map(a => ({ id: a.id, title: a.title })),
+              conversationId: req.body.conversationId
+            };
+          }
+          const assignmentId = matchingAssignments[0].id;
+          // 3. Get submissions
+          const submissions = await makeApiCall(`${baseUrl}/api/courses/${courseId}/assignments/${assignmentId}/submissions`, 'GET', null, userToken, req);
+          console.log('DEBUG submissions:', submissions);
+          const submissionList = Array.isArray(submissions)
+            ? submissions
+            : Array.isArray(submissions.courses)
+              ? submissions.courses
+              : [];
+          if (!Array.isArray(submissionList) || submissionList.length === 0) {
+            return {
+              message: "I couldn't retrieve submissions for that assignment.",
+              conversationId: req.body.conversationId
+            };
+          }
+          // 4. Format summary
+          const turnedIn = submissionList.filter(s => s.state === 'TURNED_IN' || s.state === 'RETURNED');
+          const notTurnedIn = submissionList.filter(s => s.state !== 'TURNED_IN' && s.state !== 'RETURNED');
+          let message = `Submissions for "${matchingAssignments[0].title}" in ${selectedCourse.name}:\n`;
+          message += `\nSubmitted (${turnedIn.length}):\n`;
+          message += turnedIn.map(s => `• ${s.userId || s.id} (${s.state})`).join('\n') || 'None';
+          message += `\n\nNot Submitted (${notTurnedIn.length}):\n`;
+          message += notTurnedIn.map(s => `• ${s.userId || s.id} (${s.state})`).join('\n') || 'None';
           return {
-            message: "I couldn't find your courses. Please try again.",
+            message,
+            submissions: submissionList,
+            conversationId: req.body.conversationId
+          };
+        } catch (error) {
+          console.error('Error in CHECK_ASSIGNMENT_SUBMISSIONS:', error);
+          return {
+            message: "Sorry, I encountered an error while trying to get the submissions. Please try again.",
+            error: error.message,
             conversationId: req.body.conversationId
           };
         }
-        const searchTerm = parameters.courseName.toLowerCase();
-        const matchingCourses = coursesResponse.courses.filter(course =>
-          course.name && course.name.toLowerCase().includes(searchTerm)
-        );
-        if (matchingCourses.length === 0) {
-          return {
-            message: `I couldn't find any courses matching "${parameters.courseName}".`,
-            conversationId: req.body.conversationId
-          };
-        } else if (matchingCourses.length > 1) {
-          return {
-            message: `I found multiple courses matching "${parameters.courseName}". Which one do you mean?`,
-            options: matchingCourses.map(course => ({
-              id: course.id,
-              name: course.name,
-              section: course.section || "No section"
-            })),
-            conversationId: req.body.conversationId
-          };
-        }
-        const courseId = matchingCourses[0].id;
-        // 2. Find the assignment by title
-        const assignmentsResponse = await makeApiCall(`${baseUrl}/api/courses/${courseId}/assignments`, 'GET', null, userToken, req);
-        console.log('DEBUG assignmentsResponse:', assignmentsResponse);
-        const assignments = Array.isArray(assignmentsResponse)
-          ? assignmentsResponse
-          : Array.isArray(assignmentsResponse.courses)
-            ? assignmentsResponse.courses
-            : [];
-        console.log('DEBUG assignments:', assignments);
-        if (!Array.isArray(assignments) || assignments.length === 0) {
-          return {
-            message: "I couldn't retrieve assignments for that course.",
-            conversationId: req.body.conversationId
-          };
-        }
-        const assignmentTitleTerm = parameters.assignmentTitle.toLowerCase();
-        const matchingAssignments = assignments.filter(a => a.title && a.title.toLowerCase().includes(assignmentTitleTerm));
-        if (matchingAssignments.length === 0) {
-          return {
-            message: `I couldn't find any assignments matching "${parameters.assignmentTitle}" in ${matchingCourses[0].name}.`,
-            conversationId: req.body.conversationId
-          };
-        } else if (matchingAssignments.length > 1) {
-          return {
-            message: `I found multiple assignments matching "${parameters.assignmentTitle}". Which one do you mean?`,
-            options: matchingAssignments.map(a => ({ id: a.id, title: a.title })),
-            conversationId: req.body.conversationId
-          };
-        }
-        const assignmentId = matchingAssignments[0].id;
-        // 3. Get submissions
-        const submissions = await makeApiCall(`${baseUrl}/api/courses/${courseId}/assignments/${assignmentId}/submissions`, 'GET', null, userToken, req);
-        console.log('DEBUG submissions:', submissions);
-        const submissionList = Array.isArray(submissions)
-          ? submissions
-          : Array.isArray(submissions.courses)
-            ? submissions.courses
-            : [];
-        if (!Array.isArray(submissionList) || submissionList.length === 0) {
-          return {
-            message: "I couldn't retrieve submissions for that assignment.",
-            conversationId: req.body.conversationId
-          };
-        }
-        // 4. Format summary
-        const turnedIn = submissionList.filter(s => s.state === 'TURNED_IN' || s.state === 'RETURNED');
-        const notTurnedIn = submissionList.filter(s => s.state !== 'TURNED_IN' && s.state !== 'RETURNED');
-        let message = `Submissions for "${matchingAssignments[0].title}" in ${matchingCourses[0].name}:\n`;
-        message += `\nSubmitted (${turnedIn.length}):\n`;
-        message += turnedIn.map(s => `• ${s.userId || s.id} (${s.state})`).join('\n') || 'None';
-        message += `\n\nNot Submitted (${notTurnedIn.length}):\n`;
-        message += notTurnedIn.map(s => `• ${s.userId || s.id} (${s.state})`).join('\n') || 'None';
-        return {
-          message,
-          submissions: submissionList,
-          conversationId: req.body.conversationId
-        };
       }
       
       case 'GRADE_ASSIGNMENT': {
@@ -1011,58 +1346,70 @@ Just let me know what you'd like to do! For example:
             conversationId: req.body.conversationId
           };
         }
-        // Get all courses
-        const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken, req);
-        if (!coursesResponse || !coursesResponse.courses || !Array.isArray(coursesResponse.courses)) {
+        
+        try {
+          // Use the reusable course matching function
+          const courseMatch = await findMatchingCourse(
+            parameters.courseName, 
+            userToken, 
+            req, 
+            baseUrl
+          );
+          
+          if (!courseMatch.success) {
+            return {
+              message: courseMatch.message,
+              conversationId: req.body.conversationId
+            };
+          }
+          
+          const selectedCourse = courseMatch.course;
+          
+          if (courseMatch.allMatches && courseMatch.allMatches.length > 1 && !courseMatch.isExactMatch) {
+            // Multiple matches - ask for clarification
+            return {
+              message: `I found multiple courses matching "${parameters.courseName}". Which one do you mean?`,
+              options: courseMatch.allMatches.map(course => ({
+                id: course.id,
+                name: course.name,
+                section: course.section || "No section"
+              })),
+              conversationId: req.body.conversationId
+            };
+          }
+          
+          // Exact match - get the students
+          const courseId = selectedCourse.id;
+          const studentsList = await makeApiCall(`${baseUrl}/api/classroom/${courseId}/students`, 'GET', null, userToken, req);
+          const students = Array.isArray(studentsList)
+            ? studentsList
+            : Array.isArray(studentsList.students)
+              ? studentsList.students
+              : Array.isArray(studentsList.courses)
+                ? studentsList.courses
+                : [];
+          console.log('DEBUG studentsList:', studentsList);
+          console.log('DEBUG students:', students);
+          if (!Array.isArray(students) || students.length === 0) {
+            return {
+              message: `No students are currently enrolled in ${selectedCourse.name}.`,
+              conversationId: req.body.conversationId
+            };
+          }
+          const studentLines = students.map(s => `• ${s.profile && s.profile.name && s.profile.name.fullName ? s.profile.name.fullName : s.userId} (${s.profile && s.profile.emailAddress ? s.profile.emailAddress : 'No email'})`).join('\n');
           return {
-            message: "I couldn't find your courses. Please try again.",
+            message: `Enrolled students in ${selectedCourse.name}:\n${studentLines}`,
+            students,
+            conversationId: req.body.conversationId
+          };
+        } catch (error) {
+          console.error('Error in SHOW_ENROLLED_STUDENTS:', error);
+          return {
+            message: "Sorry, I encountered an error while getting enrolled students. Please try again.",
+            error: error.message,
             conversationId: req.body.conversationId
           };
         }
-        const searchTerm = parameters.courseName.toLowerCase();
-        const matchingCourses = coursesResponse.courses.filter(course =>
-          course.name && course.name.toLowerCase().includes(searchTerm)
-        );
-        if (matchingCourses.length === 0) {
-          return {
-            message: `I couldn't find any courses matching "${parameters.courseName}".`,
-            conversationId: req.body.conversationId
-          };
-        } else if (matchingCourses.length > 1) {
-          return {
-            message: `I found multiple courses matching "${parameters.courseName}". Which one do you mean?`,
-            options: matchingCourses.map(course => ({
-              id: course.id,
-              name: course.name,
-              section: course.section || "No section"
-            })),
-            conversationId: req.body.conversationId
-          };
-        }
-        const courseId = matchingCourses[0].id;
-        // Get students
-        const studentsList = await makeApiCall(`${baseUrl}/api/classroom/${courseId}/students`, 'GET', null, userToken, req);
-        const students = Array.isArray(studentsList)
-          ? studentsList
-          : Array.isArray(studentsList.students)
-            ? studentsList.students
-            : Array.isArray(studentsList.courses)
-              ? studentsList.courses
-              : [];
-        console.log('DEBUG studentsList:', studentsList);
-        console.log('DEBUG students:', students);
-        if (!Array.isArray(students) || students.length === 0) {
-          return {
-            message: `No students are currently enrolled in ${matchingCourses[0].name}.`,
-            conversationId: req.body.conversationId
-          };
-        }
-        const studentLines = students.map(s => `• ${s.profile && s.profile.name && s.profile.name.fullName ? s.profile.name.fullName : s.userId} (${s.profile && s.profile.emailAddress ? s.profile.emailAddress : 'No email'})`).join('\n');
-        return {
-          message: `Enrolled students in ${matchingCourses[0].name}:\n${studentLines}`,
-          students,
-          conversationId: req.body.conversationId
-        };
       }
       
       default:

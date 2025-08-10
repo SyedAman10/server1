@@ -66,8 +66,53 @@ function detectIntentFallback(message, conversationId) {
     };
   }
   
-  // Create announcement - improved pattern matching
-  if (lowerMessage.includes('announcement') || lowerMessage.includes('announce') || lowerMessage.includes('post')) {
+  // View announcements - MUST come BEFORE CREATE_ANNOUNCEMENT to prevent false positives
+  if ((lowerMessage.includes('show') || lowerMessage.includes('view') || lowerMessage.includes('list') || lowerMessage.includes('get')) && 
+      (lowerMessage.includes('announcement') || lowerMessage.includes('announcements'))) {
+    
+    // Extract course name
+    let courseName = '';
+    if (lowerMessage.includes('in')) {
+      const parts = message.split('in');
+      if (parts.length >= 2) {
+        courseName = parts[1].split(/\s+/).slice(0, -1).join(' ').trim();
+      }
+    } else if (lowerMessage.includes('for')) {
+      const parts = message.split('for');
+      if (parts.length >= 2) {
+        courseName = parts[1].split(/\s+/).slice(0, -1).join(' ').trim();
+      }
+    } else if (lowerMessage.includes('on')) {
+      const parts = message.split('on');
+      if (parts.length >= 2) {
+        courseName = parts[1].split(/\s+/).slice(0, -1).join(' ').trim();
+      }
+    }
+    
+    // If no course name found, check conversation history
+    if (!courseName && lastMessage) {
+      const lastContent = typeof lastMessage.content === 'object' ? lastMessage.content.text : lastMessage.content;
+      if (lastContent && lastContent.toLowerCase().includes('course')) {
+        const lastWords = lastContent.split(/\s+/);
+        const courseIndex = lastWords.findIndex(w => w.toLowerCase().includes('course'));
+        if (courseIndex !== -1 && courseIndex > 0) {
+          courseName = lastWords[courseIndex - 1].trim();
+        }
+      }
+    }
+    
+    return {
+      intent: 'GET_ANNOUNCEMENTS',
+      confidence: 0.8,
+      parameters: {
+        courseName: courseName.replace(/course$/i, '').trim()
+      }
+    };
+  }
+  
+  // Create announcement - MUST come AFTER GET_ANNOUNCEMENTS and be more specific
+  if ((lowerMessage.includes('create') || lowerMessage.includes('make') || lowerMessage.includes('post')) && 
+      (lowerMessage.includes('announcement') || lowerMessage.includes('announce'))) {
     // Extract course name and announcement text
     let courseName = '';
     let announcementText = '';
@@ -179,6 +224,11 @@ function detectIntentFallback(message, conversationId) {
     let courseName = '';
     if (lowerMessage.includes('to')) {
       const parts = message.split('to');
+      if (parts.length >= 2) {
+        courseName = parts[1].split(/\s+/).slice(0, -1).join(' ').trim(); // Remove the last word (usually "class" or "course")
+      }
+    } else if (lowerMessage.includes('on')) {
+      const parts = message.split('on');
       if (parts.length >= 2) {
         courseName = parts[1].split(/\s+/).slice(0, -1).join(' ').trim(); // Remove the last word (usually "class" or "course")
       }
@@ -357,6 +407,7 @@ async function detectIntent(message, conversationHistory, conversationId) {
       - ARCHIVE_COURSE: User wants to archive a course (extract courseId)
       - INVITE_STUDENTS: User wants to invite students to a course (extract courseId and student emails)
       - CREATE_ANNOUNCEMENT: User wants to create an announcement in a course (extract courseId and announcement text)
+      - GET_ANNOUNCEMENTS: User wants to view/list announcements for a course (extract courseId/courseName)
       - CREATE_ASSIGNMENT: User wants to create an assignment in a course (extract courseId, title, description, due date, and materials)
       - CHECK_ASSIGNMENT_SUBMISSIONS: User wants to check who has submitted an assignment (extract courseName and assignmentTitle)
       - GRADE_ASSIGNMENT: User wants to grade a student's assignment (extract courseName, assignmentTitle, studentEmail, assignedGrade, draftGrade)
@@ -388,6 +439,9 @@ async function detectIntent(message, conversationHistory, conversationId) {
       
       For showing enrolled students, extract these fields if provided:
       - courseName: The course name
+      
+      For viewing announcements, extract these fields if provided:
+      - courseId/courseName: The course ID or name to view announcements for
       
       For grading assignments, extract these fields if provided:
       - courseName: The course name
@@ -453,5 +507,6 @@ async function detectIntent(message, conversationHistory, conversationId) {
 }
 
 module.exports = {
-  detectIntent
+  detectIntent,
+  detectIntentFallback
 }; 
