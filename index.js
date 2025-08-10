@@ -38,12 +38,31 @@ app.use(cors({
 app.use(express.json());
 app.use(cookieParser());
 
+// Global request logging middleware
+app.use((req, res, next) => {
+  console.log(`DEBUG: Incoming request - ${req.method} ${req.originalUrl}`);
+  console.log('DEBUG: Request headers:', req.headers);
+  console.log('DEBUG: Request body:', req.body);
+  next();
+});
+
 // API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/classroom', classroomRoutes);
 app.use('/api/company', companyRoutes);
 app.use('/api/ai', aiAgentRoutes); // Mount AI agent routes
 app.use('/api', assignmentRoutes); // Add assignment routes
+
+// Debug endpoint to test routing
+app.post('/api/classroom/test', (req, res) => {
+  console.log('DEBUG: Test POST endpoint hit');
+  res.json({ message: 'Test POST endpoint working', method: req.method, body: req.body });
+});
+
+app.get('/api/classroom/test', (req, res) => {
+  console.log('DEBUG: Test GET endpoint hit');
+  res.json({ message: 'Test GET endpoint working', method: req.method });
+});
 
 // Health check endpoint
 app.get('/', (req, res) => res.send('AI Classroom Assistant is Live 🚀'));

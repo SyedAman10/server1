@@ -3,6 +3,10 @@ const { getClassroomClient } = require('../integrations/google.classroom');
 const { getUserByEmail } = require('../models/user.model');
 
 const listCourses = async (req, res) => {
+  console.log('DEBUG: listCourses function called');
+  console.log('DEBUG: Request method:', req.method);
+  console.log('DEBUG: Request URL:', req.originalUrl);
+  console.log('DEBUG: Request body:', req.body);
   try {
     const token = req.headers.authorization.split(' ')[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
@@ -14,6 +18,7 @@ const listCourses = async (req, res) => {
       pageSize: 30,
       teacherId: 'me'
     });
+    console.log('DEBUG: listCourses returning courses:', result.data.courses ? result.data.courses.length : 'no courses');
     res.json(result.data.courses);
   } catch (err) {
     console.error('Error listing courses:', err);
@@ -39,6 +44,10 @@ const getCourse = async (req, res) => {
 };
 
 const createCourse = async (req, res) => {
+  console.log('DEBUG: createCourse function called');
+  console.log('DEBUG: Request method:', req.method);
+  console.log('DEBUG: Request URL:', req.originalUrl);
+  console.log('DEBUG: Request body:', req.body);
   try {
     const token = req.headers.authorization.split(' ')[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
@@ -69,9 +78,11 @@ const createCourse = async (req, res) => {
       courseState: 'PROVISIONED' // Start in PROVISIONED state, then transition to ACTIVE
     };
 
+    console.log('DEBUG: Creating course with data:', courseData);
     const result = await classroom.courses.create({
       requestBody: courseData
-    });    // If successful, update to ACTIVE state
+    });    console.log('DEBUG: Course created successfully:', result.data);
+    // If successful, update to ACTIVE state
     if (result.data.id) {
       await classroom.courses.patch({
         id: result.data.id,
@@ -80,6 +91,7 @@ const createCourse = async (req, res) => {
           courseState: 'ACTIVE'
         }
       });
+      console.log('DEBUG: Course state updated to ACTIVE');
     }
 
     res.status(201).json(result.data);

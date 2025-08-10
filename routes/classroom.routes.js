@@ -22,9 +22,21 @@ const router = express.Router();
 router.use(authenticate);
 
 // Course routes
-router.get('/', listCourses);
-router.get('/:courseId', getCourse);
-router.post('/', createCourse);
+router.get('/', (req, res, next) => {
+  console.log('DEBUG: GET / route handler called');
+  next();
+}, listCourses);
+
+router.get('/:courseId', (req, res, next) => {
+  console.log('DEBUG: GET /:courseId route handler called');
+  next();
+}, getCourse);
+
+router.post('/', (req, res, next) => {
+  console.log('DEBUG: POST / route handler called');
+  next();
+}, createCourse);
+
 router.patch('/:courseId', updateCourse);
 router.delete('/:courseId', deleteCourse);
 router.patch('/:courseId/archive', archiveCourse);
