@@ -43,6 +43,10 @@ app.use((req, res, next) => {
   console.log(`DEBUG: Incoming request - ${req.method} ${req.originalUrl}`);
   console.log('DEBUG: Request headers:', req.headers);
   console.log('DEBUG: Request body:', req.body);
+  console.log('DEBUG: Request method from Express:', req.method);
+  console.log('DEBUG: Request method from headers:', req.headers['x-http-method-override'] || 'none');
+  console.log('DEBUG: Content-Type:', req.headers['content-type'] || 'none');
+  console.log('DEBUG: Content-Length:', req.headers['content-length'] || 'none');
   next();
 });
 
