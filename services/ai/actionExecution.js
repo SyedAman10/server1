@@ -14,11 +14,14 @@ async function makeApiCall(url, method, data, userToken) {
   });
   
   try {
+    // Clean the token - remove any existing Bearer prefix
+    const cleanToken = userToken.replace(/^Bearer\s+/i, '');
+    
     const config = {
       method,
       url,
       headers: {
-        'Authorization': `Bearer ${userToken}`,
+        'Authorization': `Bearer ${cleanToken}`,
         'Content-Type': 'application/json'
       }
     };
@@ -36,6 +39,9 @@ async function makeApiCall(url, method, data, userToken) {
     
     // Log the actual request being sent
     console.log('DEBUG: Full axios config:', JSON.stringify(config, null, 2));
+    
+    // Add a unique header to track this request
+    config.headers['X-Request-ID'] = `ai-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     
     const response = await axios(config);
     console.log('DEBUG: API call successful, response status:', response.status);

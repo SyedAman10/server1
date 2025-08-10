@@ -27,15 +27,15 @@ router.get('/', (req, res, next) => {
   next();
 }, listCourses);
 
-router.get('/:courseId', (req, res, next) => {
-  console.log('DEBUG: GET /:courseId route handler called');
-  next();
-}, getCourse);
-
 router.post('/', (req, res, next) => {
   console.log('DEBUG: POST / route handler called');
   next();
 }, createCourse);
+
+router.get('/:courseId', (req, res, next) => {
+  console.log('DEBUG: GET /:courseId route handler called');
+  next();
+}, getCourse);
 
 router.patch('/:courseId', updateCourse);
 router.delete('/:courseId', deleteCourse);

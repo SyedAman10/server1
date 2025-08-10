@@ -69,10 +69,32 @@ app.post('/api/classroom/create-test', (req, res) => {
   console.log('DEBUG: AI create-test endpoint hit');
   console.log('DEBUG: Method:', req.method);
   console.log('DEBUG: Body:', req.body);
+  console.log('DEBUG: Headers:', req.headers);
   res.status(201).json({ 
     message: 'Test course created', 
     method: req.method, 
     body: req.body,
+    headers: req.headers,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Echo endpoint to see exactly what's received
+app.all('/api/classroom/echo', (req, res) => {
+  console.log('DEBUG: Echo endpoint hit');
+  console.log('DEBUG: Method:', req.method);
+  console.log('DEBUG: URL:', req.originalUrl);
+  console.log('DEBUG: Headers:', req.headers);
+  console.log('DEBUG: Body:', req.body);
+  console.log('DEBUG: Query:', req.query);
+  
+  res.json({
+    message: 'Echo response',
+    method: req.method,
+    url: req.originalUrl,
+    headers: req.headers,
+    body: req.body,
+    query: req.query,
     timestamp: new Date().toISOString()
   });
 });
