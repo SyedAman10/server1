@@ -1,11 +1,12 @@
 const { calculateDateFromExpression, convertTimeExpression } = require('../../utils/dateUtils');
 const axios = require('axios');
 const jwt = require('jsonwebtoken');
+const { getUserByEmail } = require('../../models/user.model');
 
 /**
  * Helper function to make API calls to our backend endpoints
  */
-async function makeApiCall(url, method, data, userToken) {
+async function makeApiCall(url, method, data, userToken, req) {
   console.log('DEBUG: makeApiCall called with:', {
     url,
     method,
@@ -14,6 +15,107 @@ async function makeApiCall(url, method, data, userToken) {
   });
   
   try {
+    // Check if this is an internal call to our own API
+    if (url.includes('/api/classroom') && (url.includes('class.xytek.ai') || url.includes('localhost'))) {
+      console.log('DEBUG: Making internal API call instead of external HTTP request');
+      
+      // For internal calls, we need the full request object to access user context
+      if (!req || !req.user) {
+        console.log('DEBUG: No user context available, falling back to external call');
+        // Fall through to external call
+      } else {
+        // Extract the endpoint path
+        const endpoint = url.split('/api/classroom')[1] || '/';
+        console.log('DEBUG: Internal endpoint:', endpoint);
+        
+        try {
+          if (method === 'GET' && endpoint === '/') {
+            // For listCourses, we need to get the user from the database
+            const user = await getUserByEmail(req.user.email);
+            if (!user.access_token || !user.refresh_token) {
+              throw new Error('Missing required OAuth2 tokens');
+            }
+            
+            const { getClassroomClient } = require('../../integrations/google.classroom');
+            const classroom = getClassroomClient({
+              access_token: user.access_token,
+              refresh_token: user.refresh_token
+            });
+            
+            const result = await classroom.courses.list({
+              pageSize: 30,
+              teacherId: 'me'
+            });
+            
+            console.log('DEBUG: Internal listCourses call successful');
+            return result.data.courses;
+            
+          } else if (method === 'POST' && endpoint === '/') {
+            // For createCourse, we need to get the user from the database
+            const user = await getUserByEmail(req.user.email);
+            if (!user.access_token || !user.refresh_token) {
+              throw new Error('Missing required OAuth2 tokens');
+            }
+            
+            const { getClassroomClient } = require('../../integrations/google.classroom');
+            const classroom = getClassroomClient({
+              access_token: user.access_token,
+              refresh_token: user.refresh_token
+            });
+            
+            // Validate required fields
+            if (!data.name) {
+              throw new Error('Course name is required');
+            }
+            
+            const courseData = {
+              name: data.name,
+              section: data.section || '',
+              descriptionHeading: data.descriptionHeading || '',
+              description: data.description || '',
+              room: data.room || '',
+              ownerId: 'me',
+              courseState: 'PROVISIONED'
+            };
+            
+            console.log('DEBUG: Creating course with data:', courseData);
+            const result = await classroom.courses.create({
+              requestBody: courseData
+            });
+            
+            console.log('DEBUG: Course created successfully:', result.data);
+            
+            // If successful, update to ACTIVE state
+            if (result.data.id) {
+              await classroom.courses.patch({
+                id: result.data.id,
+                updateMask: 'courseState',
+                requestBody: {
+                  courseState: 'ACTIVE'
+                }
+              });
+              console.log('DEBUG: Course state updated to ACTIVE');
+            }
+            
+            console.log('DEBUG: Internal createCourse call successful');
+            return result.data;
+            
+          } else {
+            console.log('DEBUG: Unsupported internal endpoint, falling back to external call');
+            // Fall through to external call
+          }
+          
+        } catch (controllerError) {
+          console.error('DEBUG: Internal call error:', controllerError);
+          console.log('DEBUG: Falling back to external call due to internal error');
+          // Fall through to external call
+        }
+      }
+    }
+    
+    // Fallback to external HTTP call for other endpoints or when internal call fails
+    console.log('DEBUG: Making external HTTP API call');
+    
     // Clean the token - remove any existing Bearer prefix
     const cleanToken = userToken.replace(/^Bearer\s+/i, '');
     
@@ -92,7 +194,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
 
     switch (intent) {
       case 'LIST_COURSES':
-        return await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken);
+        return await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken, req);
         
       case 'CREATE_COURSE': {
         if (!parameters.name) {
@@ -121,7 +223,8 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             `${baseUrl}/api/classroom`,
             'POST',
             courseData,
-            userToken
+            userToken,
+            req
           );
 
           console.log('DEBUG: CREATE_COURSE - makeApiCall response:', response);
@@ -158,7 +261,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
 
         try {
           // Get all courses to find the matching one
-          const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken);
+          const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken, req);
           
           if (!coursesResponse || !coursesResponse.courses || !Array.isArray(coursesResponse.courses)) {
             return {
@@ -190,7 +293,8 @@ async function executeAction(intentData, originalMessage, userToken, req) {
               `${baseUrl}/api/classroom/${courseId}/announcements`,
               'POST',
               announcementData,
-              userToken
+              userToken,
+              req
             );
 
             return {
@@ -224,12 +328,12 @@ async function executeAction(intentData, originalMessage, userToken, req) {
       case 'GET_COURSE': {
         // Handle course retrieval by ID or by name
         if (parameters.courseId) {
-          return await makeApiCall(`${baseUrl}/api/classroom/${parameters.courseId}`, 'GET', null, userToken);
+          return await makeApiCall(`${baseUrl}/api/classroom/${parameters.courseId}`, 'GET', null, userToken, req);
         } else if (parameters.courseName || parameters.courseIdentifier) {
           // If we only have a name, we need to:
           // 1. Get all courses
           // 2. Find the matching one(s)
-          const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken);
+          const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken, req);
           
           if (!coursesResponse || !coursesResponse.courses || !Array.isArray(coursesResponse.courses)) {
             return {
@@ -250,7 +354,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             };
           } else if (matchingCourses.length === 1) {
             // Exact match - get the details
-            return await makeApiCall(`${baseUrl}/api/classroom/${matchingCourses[0].id}`, 'GET', null, userToken);
+            return await makeApiCall(`${baseUrl}/api/classroom/${matchingCourses[0].id}`, 'GET', null, userToken, req);
           } else {
             // Multiple matches - ask for clarification
             return {
@@ -304,7 +408,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
 
         try {
           // Get all courses to find the matching one
-          const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken);
+          const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken, req);
           
           if (!coursesResponse || !coursesResponse.courses || !Array.isArray(coursesResponse.courses)) {
             return {
@@ -341,7 +445,8 @@ async function executeAction(intentData, originalMessage, userToken, req) {
                 `${baseUrl}/api/courses/${courseId}/assignments`,
                 'POST',
                 assignmentData,
-                userToken
+                userToken,
+                req
               );
 
               return {
@@ -410,7 +515,8 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           `${baseUrl}/api/classroom`,
           'GET',
           null,
-          userToken
+          userToken,
+          req
         );
 
         if (!coursesResponse || !coursesResponse.courses || !Array.isArray(coursesResponse.courses)) {
@@ -439,7 +545,8 @@ async function executeAction(intentData, originalMessage, userToken, req) {
               `${baseUrl}/api/classroom/${courseId}/invite`,
               'POST',
               { email },
-              userToken
+              userToken,
+              req
             )
           );
 
@@ -482,7 +589,8 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           `${baseUrl}/api/classroom`,
           'GET',
           null,
-          userToken
+          userToken,
+          req
         );
 
         if (!teacherCoursesResponse || !teacherCoursesResponse.courses || !Array.isArray(teacherCoursesResponse.courses)) {
@@ -509,7 +617,8 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             `${baseUrl}/api/classroom/${courseId}/invite-teachers`,
             'POST',
             { emails: parameters.emails },
-            userToken
+            userToken,
+            req
           );
 
           return {
@@ -553,7 +662,8 @@ async function executeAction(intentData, originalMessage, userToken, req) {
                 ...assignmentData,
                 materials: []
               },
-              userToken
+              userToken,
+              req
             );
 
             return {
@@ -589,7 +699,8 @@ async function executeAction(intentData, originalMessage, userToken, req) {
                 `${baseUrl}/api/drive/search`,
                 'POST',
                 { query: material.title },
-                userToken
+                userToken,
+                req
               );
 
               if (driveResponse && driveResponse.files && driveResponse.files.length > 0) {
@@ -630,7 +741,8 @@ async function executeAction(intentData, originalMessage, userToken, req) {
                 ...assignmentData,
                 materials: [driveFile]
               },
-              userToken
+              userToken,
+              req
             );
 
             return {
@@ -706,7 +818,7 @@ Just let me know what you'd like to do! For example:
           };
         }
         // Get all courses
-        const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken);
+        const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken, req);
         if (!coursesResponse || !coursesResponse.courses || !Array.isArray(coursesResponse.courses)) {
           return {
             message: "I couldn't find your courses. Please try again.",
@@ -735,7 +847,7 @@ Just let me know what you'd like to do! For example:
         }
         const courseId = matchingCourses[0].id;
         // 2. Find the assignment by title
-        const assignmentsResponse = await makeApiCall(`${baseUrl}/api/courses/${courseId}/assignments`, 'GET', null, userToken);
+        const assignmentsResponse = await makeApiCall(`${baseUrl}/api/courses/${courseId}/assignments`, 'GET', null, userToken, req);
         console.log('DEBUG assignmentsResponse:', assignmentsResponse);
         const assignments = Array.isArray(assignmentsResponse)
           ? assignmentsResponse
@@ -765,7 +877,7 @@ Just let me know what you'd like to do! For example:
         }
         const assignmentId = matchingAssignments[0].id;
         // 3. Get submissions
-        const submissions = await makeApiCall(`${baseUrl}/api/courses/${courseId}/assignments/${assignmentId}/submissions`, 'GET', null, userToken);
+        const submissions = await makeApiCall(`${baseUrl}/api/courses/${courseId}/assignments/${assignmentId}/submissions`, 'GET', null, userToken, req);
         console.log('DEBUG submissions:', submissions);
         const submissionList = Array.isArray(submissions)
           ? submissions
@@ -801,7 +913,7 @@ Just let me know what you'd like to do! For example:
         }
 
         // 2. Find the course
-        const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken);
+        const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken, req);
         if (!coursesResponse || !coursesResponse.courses || !Array.isArray(coursesResponse.courses)) {
           return { message: `Course list not found.`, conversationId: req.body.conversationId };
         }
@@ -809,7 +921,7 @@ Just let me know what you'd like to do! For example:
         if (!course) return { message: `Course "${courseName}" not found.`, conversationId: req.body.conversationId };
 
         // 3. Find the assignment
-        const assignmentsResponse = await makeApiCall(`${baseUrl}/api/courses/${course.id}/assignments`, 'GET', null, userToken);
+        const assignmentsResponse = await makeApiCall(`${baseUrl}/api/courses/${course.id}/assignments`, 'GET', null, userToken, req);
         const assignments = Array.isArray(assignmentsResponse)
           ? assignmentsResponse
           : Array.isArray(assignmentsResponse.courses)
@@ -819,7 +931,7 @@ Just let me know what you'd like to do! For example:
         if (!assignment) return { message: `Assignment "${assignmentTitle}" not found.`, conversationId: req.body.conversationId };
 
         // 4. Find the student submission
-        const submissionsResponse = await makeApiCall(`${baseUrl}/api/courses/${course.id}/assignments/${assignment.id}/submissions`, 'GET', null, userToken);
+        const submissionsResponse = await makeApiCall(`${baseUrl}/api/courses/${course.id}/assignments/${assignment.id}/submissions`, 'GET', null, userToken, req);
         const submissions = Array.isArray(submissionsResponse)
           ? submissionsResponse
           : Array.isArray(submissionsResponse.courses)
@@ -830,7 +942,7 @@ Just let me know what you'd like to do! For example:
         // If the input is an email, look up the userId from the students list
         if (studentEmail.includes('@')) {
           try {
-            const studentsList = await makeApiCall(`${baseUrl}/api/classroom/${course.id}/students`, 'GET', null, userToken);
+            const studentsList = await makeApiCall(`${baseUrl}/api/classroom/${course.id}/students`, 'GET', null, userToken, req);
             const students = Array.isArray(studentsList)
               ? studentsList
               : Array.isArray(studentsList.students)
@@ -868,7 +980,8 @@ Just let me know what you'd like to do! For example:
             `${baseUrl}/api/courses/${course.id}/courseWork/${assignment.id}/studentSubmissions/${submission.id}`,
             'PATCH',
             gradeData,
-            userToken
+            userToken,
+            req
           );
         } catch (error) {
           return { message: `Failed to update grade: ${error.message}`, conversationId: req.body.conversationId };
@@ -880,7 +993,8 @@ Just let me know what you'd like to do! For example:
             `${baseUrl}/api/courses/${course.id}/courseWork/${assignment.id}/studentSubmissions/${submission.id}:return`,
             'POST',
             {},
-            userToken
+            userToken,
+            req
           );
         } catch (error) {
           // Not fatal, just log
@@ -898,7 +1012,7 @@ Just let me know what you'd like to do! For example:
           };
         }
         // Get all courses
-        const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken);
+        const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken, req);
         if (!coursesResponse || !coursesResponse.courses || !Array.isArray(coursesResponse.courses)) {
           return {
             message: "I couldn't find your courses. Please try again.",
@@ -927,7 +1041,7 @@ Just let me know what you'd like to do! For example:
         }
         const courseId = matchingCourses[0].id;
         // Get students
-        const studentsList = await makeApiCall(`${baseUrl}/api/classroom/${courseId}/students`, 'GET', null, userToken);
+        const studentsList = await makeApiCall(`${baseUrl}/api/classroom/${courseId}/students`, 'GET', null, userToken, req);
         const students = Array.isArray(studentsList)
           ? studentsList
           : Array.isArray(studentsList.students)
