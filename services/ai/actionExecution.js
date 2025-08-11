@@ -2,6 +2,7 @@ const { calculateDateFromExpression, convertTimeExpression } = require('../../ut
 const axios = require('axios');
 const jwt = require('jsonwebtoken');
 const { getUserByEmail } = require('../../models/user.model');
+const { generateConversationId } = require('./conversationManager');
 
 /**
  * Reusable function to find and match courses by name
