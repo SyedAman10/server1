@@ -3,6 +3,7 @@ const axios = require('axios');
 const jwt = require('jsonwebtoken');
 const { getUserByEmail } = require('../../models/user.model');
 const { generateConversationId } = require('./conversationManager');
+const { createAssignment } = require('../assignmentService');
 
 /**
  * Reusable function to find and match courses by name
@@ -756,29 +757,42 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             };
           }
           
-          // Exact match - create the assignment immediately, with or without materials
+          // Exact match - create the assignment immediately using internal service
           const courseId = selectedCourse.id;
-          const assignmentData = {
-            title: parameters.title,
-            description: parameters.description || '',
-            materials: parameters.materials || [],
-            state: 'PUBLISHED',
-            maxPoints: parameters.maxPoints || 100,
-            dueDate: parameters.dueDate,
-            dueTime: parameters.dueTime
-          };
-
+          
           try {
-            const response = await makeApiCall(
-              `${baseUrl}/api/courses/${courseId}/assignments`,
-              'POST',
-              assignmentData,
-              userToken,
-              req
+            // Extract user from JWT token
+            const token = userToken.split(' ')[1]; // Remove 'Bearer ' prefix
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const user = await getUserByEmail(decoded.email);
+            
+            if (!user.access_token || !user.refresh_token) {
+              throw new Error('Missing required OAuth2 tokens');
+            }
+            
+            // Prepare assignment data for internal service
+            const assignmentData = {
+              title: parameters.title,
+              description: parameters.description || '',
+              materials: parameters.materials || [],
+              state: 'PUBLISHED',
+              maxPoints: parameters.maxPoints || 100,
+              dueDate: parameters.dueDate,
+              dueTime: parameters.dueTime
+            };
+            
+            // Use internal service function instead of external API call
+            const response = await createAssignment(
+              {
+                access_token: user.access_token,
+                refresh_token: user.refresh_token
+              },
+              courseId,
+              assignmentData
             );
 
             return {
-              message: `Successfully created the assignment "${parameters.title}" in ${selectedCourse.name}.`,
+              message: `🎉 **Assignment "${parameters.title}" created successfully in ${selectedCourse.name}!**\n\n📝 **Assignment Details:**\n• Title: ${parameters.title}${parameters.description ? `\n• Description: ${parameters.description}` : ''}${parameters.dueDate ? `\n• Due Date: ${parameters.dueDate.year}-${parameters.dueDate.month}-${parameters.dueDate.day}` : ''}${parameters.dueTime ? `\n• Due Time: ${parameters.dueTime.hours}:${parameters.dueTime.minutes.toString().padStart(2, '0')}` : ''}${parameters.maxPoints ? `\n• Max Points: ${parameters.maxPoints}` : ''}\n\n✅ Your assignment is now live in Google Classroom and students can start working on it.\n\n💡 **Next steps:**\n• Review student submissions\n• Grade completed assignments\n• Provide feedback to students`,
               assignment: response,
               conversationId: req.body.conversationId || generateConversationId()
             };
@@ -793,6 +807,12 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             } else if (error.message.includes('Invalid time format')) {
               return {
                 message: "I couldn't create the assignment because the time format is invalid. Please use 24-hour format (HH:MM).",
+                error: error.message,
+                conversationId: req.body.conversationId || generateConversationId()
+              };
+            } else if (error.message.includes('Missing required OAuth2 tokens')) {
+              return {
+                message: "I couldn't create the assignment because your Google account isn't properly connected. Please reconnect your Google account.",
                 error: error.message,
                 conversationId: req.body.conversationId || generateConversationId()
               };
