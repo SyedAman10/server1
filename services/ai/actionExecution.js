@@ -3,7 +3,7 @@ const axios = require('axios');
 const jwt = require('jsonwebtoken');
 const { getUserByEmail } = require('../../models/user.model');
 const { generateConversationId } = require('./conversationManager');
-const { createAssignment } = require('../assignmentService');
+const { createAssignment, listAssignments } = require('../assignmentService');
 
 /**
  * Reusable function to find and match courses by name
@@ -480,6 +480,125 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             message: "Sorry, I encountered an error while trying to create the course. Please try again.",
             error: error.message,
             conversationId: req.body.conversationId
+          };
+        }
+      }
+        
+      case 'LIST_ASSIGNMENTS': {
+        if (!parameters.courseName && !parameters.courseIdentifier) {
+          return {
+            message: "I need to know which course you want to see assignments for. Please provide a course name.",
+            conversationId: req.body.conversationId || generateConversationId()
+          };
+        }
+
+        try {
+          // Use the reusable course matching function
+          const courseMatch = await findMatchingCourse(
+            parameters.courseName || parameters.courseIdentifier, 
+            userToken, 
+            req, 
+            baseUrl
+          );
+          
+          if (!courseMatch.success) {
+            return {
+              message: courseMatch.message,
+              conversationId: req.body.conversationId || generateConversationId()
+            };
+          }
+          
+          const selectedCourse = courseMatch.course;
+          
+          if (courseMatch.allMatches && courseMatch.allMatches.length > 1 && !courseMatch.isExactMatch) {
+            // Multiple matches - ask for clarification
+            return {
+              message: `I found multiple courses matching "${parameters.courseName || parameters.courseIdentifier}". Which one would you like to see assignments for?`,
+              options: courseMatch.allMatches.map(course => ({
+                id: course.id,
+                name: course.name,
+                section: course.section || "No section"
+              })),
+              conversationId: req.body.conversationId || generateConversationId()
+            };
+          }
+          
+          // Exact match - list assignments using internal service
+          const courseId = selectedCourse.id;
+          
+          try {
+            // Extract user from JWT token
+            const token = userToken.split(' ')[1]; // Remove 'Bearer ' prefix
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const user = await getUserByEmail(decoded.email);
+            
+            if (!user.access_token || !user.refresh_token) {
+              throw new Error('Missing required OAuth2 tokens');
+            }
+            
+            // Use internal service function instead of external API call
+            const assignments = await listAssignments(
+              {
+                access_token: user.access_token,
+                refresh_token: user.refresh_token
+              },
+              courseId
+            );
+
+            if (!assignments || assignments.length === 0) {
+              return {
+                message: `📚 **No assignments found in ${selectedCourse.name}**\n\nThis course doesn't have any assignments yet. You can create your first assignment by saying something like:\n\n• "Create assignment Math Quiz in ${selectedCourse.name}"\n• "Add homework Problem Set 1 to ${selectedCourse.name}"`,
+                assignments: [],
+                conversationId: req.body.conversationId || generateConversationId()
+              };
+            }
+
+            // Format assignments for display
+            const formattedAssignments = assignments.map(assignment => {
+              const dueDate = assignment.dueDate ? 
+                `${assignment.dueDate.year}-${assignment.dueDate.month.toString().padStart(2, '0')}-${assignment.dueDate.day.toString().padStart(2, '0')}` : 
+                'No due date';
+              
+              const dueTime = assignment.dueTime ? 
+                `${assignment.dueTime.hours}:${assignment.dueTime.minutes.toString().padStart(2, '0')}` : 
+                '';
+              
+              return {
+                title: assignment.title,
+                dueDate: dueDate,
+                dueTime: dueTime,
+                maxPoints: assignment.maxPoints || 'No points',
+                state: assignment.state || 'Unknown',
+                id: assignment.id
+              };
+            });
+
+            const assignmentList = formattedAssignments.map((assignment, index) => {
+              return `${index + 1}. **${assignment.title}**\n   📅 Due: ${assignment.dueDate}${assignment.dueTime ? ` at ${assignment.dueTime}` : ''}\n   🎯 Points: ${assignment.maxPoints}\n   📊 Status: ${assignment.state}`;
+            }).join('\n\n');
+
+            return {
+              message: `📚 **Assignments in ${selectedCourse.name}**\n\n${assignmentList}\n\n📊 **Total: ${assignments.length} assignment${assignments.length === 1 ? '' : 's'}**\n\n💡 **Next steps:**\n• Create a new assignment\n• View student submissions\n• Grade completed assignments`,
+              assignments: formattedAssignments,
+              course: selectedCourse,
+              conversationId: req.body.conversationId || generateConversationId()
+            };
+          } catch (error) {
+            if (error.message.includes('Missing required OAuth2 tokens')) {
+              return {
+                message: "I couldn't retrieve the assignments because your Google account isn't properly connected. Please reconnect your Google account.",
+                error: error.message,
+                conversationId: req.body.conversationId || generateConversationId()
+              };
+            }
+            throw error; // Re-throw other errors
+          }
+        } catch (error) {
+          console.error('Error in LIST_ASSIGNMENTS:', error);
+          return {
+            message: "Sorry, I encountered an error while trying to retrieve the assignments. Please try again.",
+            error: error.message,
+            conversationId: req.body.conversationId || generateConversationId()
           };
         }
       }

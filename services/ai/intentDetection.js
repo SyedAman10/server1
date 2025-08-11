@@ -271,34 +271,61 @@ function detectIntentFallback(message, conversationId) {
   
   // Check assignment submissions
   if (
-    (lowerMessage.includes('who') && lowerMessage.includes('submit')) ||
+    lowerMessage.includes('check') && lowerMessage.includes('assignment') ||
     lowerMessage.includes('assignment submissions') ||
-    lowerMessage.includes('show submissions') ||
-    lowerMessage.includes('view submissions') ||
-    lowerMessage.includes('see submissions')
+    lowerMessage.includes('who submitted') ||
+    lowerMessage.includes('submissions for')
   ) {
     // Try to extract assignment title and course name
     let assignmentTitle = '';
     let courseName = '';
+    
     // e.g. "who has submitted assignment test 2 in sql"
     const assignmentMatch = message.match(/assignment\s+([\w\s-]+)/i);
     if (assignmentMatch && assignmentMatch[1]) {
       assignmentTitle = assignmentMatch[1].trim();
     }
-    const courseMatch = message.match(/in\s+([\w\s-]+)/i);
+    
+    // Extract course name from 'in course X', 'for course X', or 'in X'
+    const courseMatch = message.match(/(?:in|for)\s+(?:course\s+)?([\w\s-]+)/i);
     if (courseMatch && courseMatch[1]) {
       courseName = courseMatch[1].trim();
     }
+    
     return {
       intent: 'CHECK_ASSIGNMENT_SUBMISSIONS',
       confidence: 0.8,
       parameters: {
-        ...(assignmentTitle ? { assignmentTitle } : {}),
+        ...(courseName ? { courseName } : {}),
+        ...(assignmentTitle ? { assignmentTitle } : {})
+      }
+    };
+  }
+
+  // List assignments in a course
+  if (
+    lowerMessage.includes('show') && lowerMessage.includes('assignment') ||
+    lowerMessage.includes('list') && lowerMessage.includes('assignment') ||
+    lowerMessage.includes('all assignment') ||
+    lowerMessage.includes('assignment in') ||
+    lowerMessage.includes('assignments for')
+  ) {
+    // Extract course name from 'in course X', 'for course X', or 'in X'
+    let courseName = '';
+    const courseMatch = message.match(/(?:in|for)\s+(?:course\s+)?([\w\s-]+)/i);
+    if (courseMatch && courseMatch[1]) {
+      courseName = courseMatch[1].trim();
+    }
+    
+    return {
+      intent: 'LIST_ASSIGNMENTS',
+      confidence: 0.8,
+      parameters: {
         ...(courseName ? { courseName } : {})
       }
     };
   }
-  
+
   // Grade assignment
   if (
     lowerMessage.includes('grade') && lowerMessage.includes('assignment') && lowerMessage.match(/student|for|on/)
@@ -411,6 +438,7 @@ async function detectIntent(message, conversationHistory, conversationId) {
       - CREATE_ASSIGNMENT: User wants to create an assignment in a course (extract courseId, title, description, due date, and materials)
       - CHECK_ASSIGNMENT_SUBMISSIONS: User wants to check who has submitted an assignment (extract courseName and assignmentTitle)
       - GRADE_ASSIGNMENT: User wants to grade a student's assignment (extract courseName, assignmentTitle, studentEmail, assignedGrade, draftGrade)
+      - LIST_ASSIGNMENTS: User wants to see all assignments in a course (extract courseName or courseId)
       - SHOW_ENROLLED_STUDENTS: User wants to see the list of enrolled students in a course (extract courseName)
       - PROCEED_WITH_AVAILABLE_INFO: User wants to skip providing more information and proceed with available data (e.g., user says "no", "skip", "that's all", "proceed", etc.)
       - HELP: User needs help or instructions
@@ -436,13 +464,10 @@ async function detectIntent(message, conversationHistory, conversationId) {
       - dueTimeExpr: Natural language time expression (e.g., "5 PM", "9 AM", "noon")
       - maxPoints: The maximum points for the assignment
       - materials: Array of materials to attach to the assignment
-      
-      For showing enrolled students, extract these fields if provided:
-      - courseName: The course name
-      
-      For viewing announcements, extract these fields if provided:
-      - courseId/courseName: The course ID or name to view announcements for
-      
+
+      For listing assignments, extract these fields if provided:
+      - courseId/courseName: The course ID or name to list assignments from
+
       For grading assignments, extract these fields if provided:
       - courseName: The course name
       - assignmentTitle: The assignment title
