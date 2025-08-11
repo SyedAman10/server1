@@ -41,8 +41,22 @@ async function getCourse(tokens, courseId) {
   return res.data;
 }
 
+// ✅ Invite a student to a course
+async function inviteStudent(tokens, courseId, studentEmail) {
+  const classroom = await getClassroomClient(tokens);
+
+  const res = await classroom.courses.students.create({
+    courseId,
+    requestBody: {
+      userId: studentEmail
+    }
+  });
+  return res.data;
+}
+
 module.exports = {
   createCourse,
   listCourses,
-  getCourse
+  getCourse,
+  inviteStudent
 };

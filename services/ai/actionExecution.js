@@ -434,9 +434,29 @@ async function executeAction(intentData, originalMessage, userToken, req) {
 
     switch (intent) {
       case 'LIST_COURSES':
-        return await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken, req);
+        // All users can view courses, but with different messaging
+        if (userRole === 'student') {
+          // Students can view courses they're enrolled in
+          return await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken, req);
+        } else if (userRole === 'teacher' || userRole === 'super_admin') {
+          // Teachers and admins can view all courses
+          return await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken, req);
+        } else {
+          return {
+            message: 'You are not authorized to view courses. Please contact your administrator.',
+            conversationId: req.body.conversationId
+          };
+        }
         
       case 'CREATE_COURSE': {
+        // Only allow teachers and super_admin to create courses
+        if (userRole !== 'teacher' && userRole !== 'super_admin') {
+          return {
+            message: 'You are not authorized to create courses. Only teachers and super admins can create courses.',
+            conversationId: req.body.conversationId
+          };
+        }
+
         if (!parameters.name) {
           return {
             message: "I need a name for the course. Please provide one.",
@@ -485,6 +505,21 @@ async function executeAction(intentData, originalMessage, userToken, req) {
       }
         
       case 'LIST_ASSIGNMENTS': {
+        // Students can view assignments but with different messaging
+        if (userRole === 'student') {
+          if (!parameters.courseName && !parameters.courseIdentifier) {
+            return {
+              message: "I need to know which course you want to see assignments for. Please provide a course name.",
+              conversationId: req.body.conversationId || generateConversationId()
+            };
+          }
+        } else if (userRole !== 'teacher' && userRole !== 'super_admin') {
+          return {
+            message: 'You are not authorized to view assignments. Please contact your administrator.',
+            conversationId: req.body.conversationId || generateConversationId()
+          };
+        }
+
         if (!parameters.courseName && !parameters.courseIdentifier) {
           return {
             message: "I need to know which course you want to see assignments for. Please provide a course name.",
@@ -604,6 +639,14 @@ async function executeAction(intentData, originalMessage, userToken, req) {
       }
         
       case 'CREATE_ANNOUNCEMENT': {
+        // Only allow teachers and super_admin to create announcements
+        if (userRole !== 'teacher' && userRole !== 'super_admin') {
+          return {
+            message: 'You are not authorized to create announcements. Only teachers and super admins can create announcements.',
+            conversationId: req.body.conversationId
+          };
+        }
+
         if (!parameters.courseName && !parameters.courseIdentifier) {
           return {
             message: "I need to know which course you want to create an announcement for. Please provide a course name.",
@@ -688,9 +731,26 @@ async function executeAction(intentData, originalMessage, userToken, req) {
       }
         
       case 'GET_ANNOUNCEMENTS': {
-        if (!parameters.courseName && !parameters.courseIdentifier) {
+        // All users can view announcements, but with different messaging
+        if (userRole === 'student') {
+          // Students can view announcements in courses they're enrolled in
+          if (!parameters.courseName && !parameters.courseIdentifier) {
+            return {
+              message: "I need to know which course you want to view announcements for. Please provide a course name.",
+              conversationId: req.body.conversationId
+            };
+          }
+        } else if (userRole === 'teacher' || userRole === 'super_admin') {
+          // Teachers and admins can view announcements in any course
+          if (!parameters.courseName && !parameters.courseIdentifier) {
+            return {
+              message: "I need to know which course you want to view announcements for. Please provide a course name.",
+              conversationId: req.body.conversationId
+            };
+          }
+        } else {
           return {
-            message: "I need to know which course you want to view announcements for. Please provide a course name.",
+            message: 'You are not authorized to view announcements. Please contact your administrator.',
             conversationId: req.body.conversationId
           };
         }
@@ -764,6 +824,18 @@ async function executeAction(intentData, originalMessage, userToken, req) {
       }
         
       case 'GET_COURSE': {
+        // All users can view course details, but with different messaging
+        if (userRole === 'student') {
+          // Students can view details of courses they're enrolled in
+        } else if (userRole === 'teacher' || userRole === 'super_admin') {
+          // Teachers and admins can view details of any course
+        } else {
+          return {
+            message: 'You are not authorized to view course details. Please contact your administrator.',
+            conversationId: req.body.conversationId
+          };
+        }
+
         // Handle course retrieval by ID or by name
         if (parameters.courseId) {
           return await makeApiCall(`${baseUrl}/api/classroom/${parameters.courseId}`, 'GET', null, userToken, req);
@@ -809,6 +881,14 @@ async function executeAction(intentData, originalMessage, userToken, req) {
       }
         
       case 'CREATE_ASSIGNMENT': {
+        // Only allow teachers and super_admin to create assignments
+        if (userRole !== 'teacher' && userRole !== 'super_admin') {
+          return {
+            message: 'You are not authorized to create assignments. Only teachers and super admins can create assignments.',
+            conversationId: req.body.conversationId || generateConversationId()
+          };
+        }
+
         if (!parameters.courseName && !parameters.courseIdentifier) {
           return {
             message: "I need to know which course you want to create an assignment for. Please provide a course name.",
@@ -1004,29 +1084,50 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             };
           }
           
-          // Exact match - invite the students
+          // Exact match - invite the students using internal service
           const courseId = selectedCourse.id;
-          const invitationPromises = studentEmails.map(email =>
-            makeApiCall(
-              `${baseUrl}/api/classroom/${courseId}/invite`,
-              'POST',
-              { email },
-              userToken,
-              req
-            )
-          );
-
+          
           try {
+            // Extract user from JWT token
+            const token = userToken.split(' ')[1]; // Remove 'Bearer ' prefix
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const user = await getUserByEmail(decoded.email);
+            
+            if (!user.access_token || !user.refresh_token) {
+              throw new Error('Missing required OAuth2 tokens');
+            }
+            
+            // Use internal service function instead of external API call
+            const { inviteStudent } = require('../classroomService');
+            
+            const invitationPromises = studentEmails.map(email =>
+              inviteStudent(
+                {
+                  access_token: user.access_token,
+                  refresh_token: user.refresh_token
+                },
+                courseId,
+                email
+              )
+            );
+
             await Promise.all(invitationPromises);
+            
             return {
-              message: `Successfully invited ${studentEmails.length} students to ${selectedCourse.name}.`,
+              message: `🎉 **Successfully invited ${studentEmails.length} student${studentEmails.length === 1 ? '' : 's'} to ${selectedCourse.name}!**\n\n📧 **Invited Students:**\n${studentEmails.map(email => `• ${email}`).join('\n')}\n\n✅ Invitation emails have been sent. Students can join using the enrollment code or by accepting the invitation.\n\n💡 **Next steps:**\n• Create your first announcement\n• Add course materials\n• Create your first assignment`,
+              course: selectedCourse,
+              invitedEmails: studentEmails,
               conversationId: req.body.conversationId
             };
           } catch (error) {
-            return {
-              message: `Failed to invite students: ${error.message}`,
-              conversationId: req.body.conversationId
-            };
+            if (error.message.includes('Missing required OAuth2 tokens')) {
+              return {
+                message: "I couldn't invite the students because your Google account isn't properly connected. Please reconnect your Google account.",
+                error: error.message,
+                conversationId: req.body.conversationId
+              };
+            }
+            throw error; // Re-throw other errors
           }
         } catch (error) {
           console.error('Error in INVITE_STUDENTS:', error);
@@ -1229,42 +1330,119 @@ async function executeAction(intentData, originalMessage, userToken, req) {
       }
 
       case 'HELP':
-        return {
-          message: `I'm here to help you manage your Google Classroom courses! Here's what I can do:
+        let helpMessage = '';
+        
+        if (userRole === 'student') {
+          helpMessage = `👨‍🎓 **Student Help - Here's what you can do:**
 
-1. Course Management:
-   • List all your courses
-   • Get details for a specific course
-   • Create new courses
+1. **View Your Courses:**
+   • "list my courses" - See all courses you're enrolled in
 
-2. Announcements:
-   • Create announcements in any course
-   • Post updates and messages
+2. **View Course Details:**
+   • "show details for physics 352" - Get information about a specific course
 
-3. Assignments:
-   • Create assignments with due dates
-   • Add materials and documents
-   • Set points and descriptions
+3. **View Assignments:**
+   • "show all assignments in physics 352" - See all assignments in a course
+   • "list assignments for chemistry 101" - View assignments with due dates
 
-4. Student Management:
-   • Invite students to courses
-   • Add multiple students at once
+4. **View Announcements:**
+   • "show announcements in math 201" - See course announcements
 
-5. Document Management:
-   • Attach files from Google Drive
-   • Add URLs as materials
-   • Search for existing documents
+5. **Get Help:**
+   • "help" - Show this help message
 
-Just let me know what you'd like to do! For example:
+**Example commands:**
 • "list my courses"
-• "create a new course"
-• "create announcement in chemistry"
-• "create assignment in history"
-• "invite students to math class"`,
+• "show all assignments in physics 352"
+• "show announcements in chemistry 101"`;
+        } else if (userRole === 'teacher') {
+          helpMessage = `👨‍🏫 **Teacher Help - Here's what you can do:**
+
+1. **Course Management:**
+   • "list my courses" - See all your courses
+   • "create a new course called Advanced Physics" - Create a new course
+   • "get course details for chemistry 101" - View course information
+
+2. **Announcements:**
+   • "create announcement Welcome to the new semester in physics 352" - Post announcements
+   • "show announcements in math 201" - View existing announcements
+
+3. **Assignments:**
+   • "create assignment Math Quiz in physics 352 due next Friday at 5 PM" - Create assignments
+   • "show all assignments in chemistry 101" - View all assignments
+   • "check assignment submissions for test 1 in physics 352" - Check who submitted
+
+4. **Student Management:**
+   • "invite students john@email.com, jane@email.com to physics 352" - Invite students
+   • "show enrolled students in chemistry 101" - View student list
+
+5. **Grading:**
+   • "grade assignment test 1 for student john@email.com to 95 in physics 352" - Grade assignments
+
+**Example commands:**
+• "create a new course called Advanced Physics"
+• "create assignment Math Quiz in physics 352 due next Friday at 5 PM"
+• "invite students john@email.com, jane@email.com to physics 352"`;
+        } else if (userRole === 'super_admin') {
+          helpMessage = `👑 **Super Admin Help - Here's what you can do:**
+
+1. **Course Management:**
+   • "list all courses" - See all courses in the system
+   • "create a new course called Advanced Physics" - Create new courses
+   • "get course details for chemistry 101" - View any course
+
+2. **Announcements:**
+   • "create announcement Welcome to the new semester in physics 352" - Post announcements
+   • "show announcements in math 201" - View announcements
+
+3. **Assignments:**
+   • "create assignment Math Quiz in physics 352 due next Friday at 5 PM" - Create assignments
+   • "show all assignments in chemistry 101" - View all assignments
+   • "check assignment submissions for test 1 in physics 352" - Check submissions
+
+4. **User Management:**
+   • "invite students john@email.com, jane@email.com to physics 352" - Invite students
+   • "invite teachers prof@email.com, dr@email.com to physics 352" - Invite teachers
+   • "show enrolled students in chemistry 101" - View student lists
+
+5. **Grading:**
+   • "grade assignment test 1 for student john@email.com to 95 in physics 352" - Grade assignments
+
+**Example commands:**
+• "create a new course called Advanced Physics"
+• "invite teachers prof@email.com, dr@email.com to physics 352"
+• "create assignment Math Quiz in physics 352 due next Friday at 5 PM"`;
+        } else {
+          helpMessage = `❓ **General Help - Here's what I can do:**
+
+1. **Course Management:**
+   • List and view courses
+   • Get course details
+
+2. **View Content:**
+   • View assignments and announcements
+   • Check course materials
+
+3. **Get Help:**
+   • "help" - Show this help message
+
+**Note:** Some features require specific permissions. Please contact your administrator if you need access to create or manage content.`;
+        }
+
+        return {
+          message: helpMessage,
           conversationId: req.body.conversationId
         };
 
       case 'CHECK_ASSIGNMENT_SUBMISSIONS': {
+        // Only allow teachers and super_admin to check assignment submissions
+        if (userRole !== 'teacher' && userRole !== 'super_admin') {
+          return {
+            message: 'You are not authorized to check assignment submissions. Only teachers and super admins can view submission status.',
+            conversationId: req.body.conversationId
+          };
+        }
+
         // 1. Find the course by name
         if (!parameters.courseName) {
           return {
@@ -1381,6 +1559,14 @@ Just let me know what you'd like to do! For example:
       }
       
       case 'GRADE_ASSIGNMENT': {
+        // Only allow teachers and super_admin to grade assignments
+        if (userRole !== 'teacher' && userRole !== 'super_admin') {
+          return {
+            message: 'You are not authorized to grade assignments. Only teachers and super admins can grade student work.',
+            conversationId: req.body.conversationId
+          };
+        }
+
         // 1. Validate parameters
         const { courseName, assignmentTitle, studentEmail, assignedGrade, draftGrade } = parameters;
         if (!courseName || !assignmentTitle || !studentEmail || (assignedGrade === undefined && draftGrade === undefined)) {
@@ -1480,6 +1666,14 @@ Just let me know what you'd like to do! For example:
       }
 
       case 'SHOW_ENROLLED_STUDENTS': {
+        // Only allow teachers and super_admin to view enrolled students
+        if (userRole !== 'teacher' && userRole !== 'super_admin') {
+          return {
+            message: 'You are not authorized to view enrolled students. Only teachers and super admins can view student lists.',
+            conversationId: req.body.conversationId
+          };
+        }
+
         if (!parameters.courseName) {
           return {
             message: "Please specify the course name to list enrolled students.",
