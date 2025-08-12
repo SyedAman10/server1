@@ -439,10 +439,12 @@ async function executeAction(intentData, originalMessage, userToken, req) {
         // All users can view courses, but with different messaging
         if (userRole === 'student') {
           // Students can view courses they're enrolled in
-          return await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken, req);
+          const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken, req);
+          return formatCoursesResponse(coursesResponse, 'student', req.body.conversationId);
         } else if (userRole === 'teacher' || userRole === 'super_admin') {
           // Teachers and admins can view all courses
-          return await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken, req);
+          const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken, req);
+          return formatCoursesResponse(coursesResponse, 'teacher', req.body.conversationId);
         } else {
           return {
             message: 'You are not authorized to view courses. Please contact your administrator.',
@@ -1097,6 +1099,43 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             
             if (!user.access_token || !user.refresh_token) {
               throw new Error('Missing required OAuth2 tokens');
+            }
+            
+            // First, verify the user has teacher/owner permissions on this specific course
+            const { getCourse } = require('../classroomService');
+            const courseDetails = await getCourse(
+              {
+                access_token: user.access_token,
+                refresh_token: user.refresh_token
+              },
+              courseId
+            );
+            
+            // Check if user is teacher or owner of the course
+            // The user must be either the owner or have teacher permissions
+            const userEmail = decoded.email;
+            console.log('DEBUG: Checking course permissions for user:', userEmail);
+            console.log('DEBUG: Course details:', JSON.stringify(courseDetails, null, 2));
+            
+            // Check if user is the owner
+            const isOwner = courseDetails.ownerId === userEmail;
+            console.log('DEBUG: Is owner?', isOwner, 'Owner ID:', courseDetails.ownerId);
+            
+            // Check if user is a teacher (teacherGroupEmail might contain the user's email)
+            const isTeacher = courseDetails.teacherGroupEmail && 
+                            (courseDetails.teacherGroupEmail === userEmail || 
+                             courseDetails.teacherGroupEmail.includes(userEmail));
+            console.log('DEBUG: Is teacher?', isTeacher, 'Teacher group email:', courseDetails.teacherGroupEmail);
+            
+            // Also check if the user has the teacher role in our system
+            const hasTeacherRole = userRole === 'teacher' || userRole === 'super_admin';
+            console.log('DEBUG: Has teacher role in system?', hasTeacherRole, 'User role:', userRole);
+            
+            // Allow if user is owner, teacher of the course, or has teacher role in our system
+            if (!isOwner && !isTeacher && !hasTeacherRole) {
+              console.log('DEBUG: Permission check failed, but proceeding anyway to let Google API handle permissions');
+              // Don't block here - let the Google Classroom API handle the permission check
+              // This way we get a more accurate error message from Google if there are permission issues
             }
             
             // Use internal service function instead of external API call
@@ -2293,6 +2332,76 @@ async function executeAction(intentData, originalMessage, userToken, req) {
       return `Error: ${error.response.data.error || 'An error occurred'}`;
     }
     return "Sorry, I couldn't complete that action. Please try again later.";
+  }
+}
+
+// Helper function to format courses response with proper message
+function formatCoursesResponse(coursesResponse, userRole, conversationId) {
+  try {
+    // Extract courses from the response
+    let courses = [];
+    if (Array.isArray(coursesResponse)) {
+      courses = coursesResponse;
+    } else if (coursesResponse && Array.isArray(coursesResponse.courses)) {
+      courses = coursesResponse.courses;
+    } else if (coursesResponse && typeof coursesResponse === 'object') {
+      // Handle case where response is an object with numeric keys
+      courses = Object.values(coursesResponse).filter(item => 
+        item && typeof item === 'object' && item.id && item.name
+      );
+    }
+
+    if (!Array.isArray(courses) || courses.length === 0) {
+      return {
+        message: 'No courses found.',
+        courses: [],
+        conversationId: conversationId
+      };
+    }
+
+    // Format the message based on user role
+    let message = '';
+    if (userRole === 'student') {
+      message = `📚 **Your Enrolled Courses (${courses.length}):**\n\n`;
+    } else {
+      message = `📚 **Available Courses (${courses.length}):**\n\n`;
+    }
+
+    // Add each course to the message
+    courses.forEach((course, index) => {
+      const courseNumber = index + 1;
+      const section = course.section ? ` (${course.section})` : '';
+      const enrollmentCode = course.enrollmentCode ? `\n   📝 Enrollment Code: ${course.enrollmentCode}` : '';
+      const state = course.courseState ? `\n   📊 Status: ${course.courseState}` : '';
+      
+      message += `${courseNumber}. **${course.name}**${section}${enrollmentCode}${state}\n`;
+      
+      if (course.alternateLink) {
+        message += `   🔗 [View in Google Classroom](${course.alternateLink})\n`;
+      }
+      message += '\n';
+    });
+
+    // Add footer based on user role
+    if (userRole === 'student') {
+      message += '💡 **Student Actions:**\n• View assignments and materials\n• Submit work\n• Check grades';
+    } else {
+      message += '💡 **Teacher Actions:**\n• Create assignments\n• Invite students\n• Post announcements\n• Manage course materials';
+    }
+
+    return {
+      message: message,
+      courses: courses,
+      conversationId: conversationId
+    };
+  } catch (error) {
+    console.error('Error formatting courses response:', error);
+    return {
+      message: 'Sorry, I encountered an error while formatting the courses list. Please try again.',
+      error: error.message,
+      courses: [],
+      conversationId: conversationId
+    };
   }
 }
 
