@@ -244,10 +244,17 @@ async function getStudentSubmissions(tokens, courseId, assignmentId) {
 async function updateSubmissionGrade(tokens, courseId, assignmentId, submissionId, gradeData) {
   const classroom = await getClassroomClient(tokens);
   
-  const result = await classroom.courses.courseWork.studentSubmissions.modifyAttachments({
+  // Build the update mask based on what fields are being updated
+  const updateMask = [];
+  if (gradeData.assignedGrade !== undefined) updateMask.push('assignedGrade');
+  if (gradeData.draftGrade !== undefined) updateMask.push('draftGrade');
+  
+  // Use the correct API method for updating grades with updateMask
+  const result = await classroom.courses.courseWork.studentSubmissions.patch({
     courseId,
     courseWorkId: assignmentId,
     id: submissionId,
+    updateMask: updateMask.join(','),
     requestBody: {
       assignedGrade: gradeData.assignedGrade,
       draftGrade: gradeData.draftGrade
