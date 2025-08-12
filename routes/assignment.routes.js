@@ -5,7 +5,9 @@ const {
   getAssignmentController,
   updateAssignmentController,
   deleteAssignmentController,
-  getStudentSubmissionsController
+  getStudentSubmissionsController,
+  updateSubmissionGradeController,
+  returnSubmissionController
 } = require('../controllers/assignment.controller');
 const { authenticate } = require('../middleware/auth.middleware');
 
@@ -21,5 +23,9 @@ router.get('/courses/:courseId/assignments/:assignmentId', getAssignmentControll
 router.patch('/courses/:courseId/assignments/:assignmentId', updateAssignmentController);
 router.delete('/courses/:courseId/assignments/:assignmentId', deleteAssignmentController);
 router.get('/courses/:courseId/assignments/:assignmentId/submissions', getStudentSubmissionsController);
+
+// Grading routes
+router.patch('/courses/:courseId/assignments/:assignmentId/submissions/:submissionId', updateSubmissionGradeController);
+router.post('/courses/:courseId/assignments/:assignmentId/submissions/:submissionId/return', returnSubmissionController);
 
 module.exports = router; 

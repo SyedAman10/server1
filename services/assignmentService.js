@@ -232,11 +232,59 @@ async function getStudentSubmissions(tokens, courseId, assignmentId) {
   return result.data.studentSubmissions || [];
 }
 
+/**
+ * Update a student submission grade
+ * @param {Object} tokens - OAuth2 tokens
+ * @param {string} courseId - Course ID
+ * @param {string} assignmentId - Assignment ID
+ * @param {string} submissionId - Submission ID
+ * @param {Object} gradeData - Grade data (assignedGrade, draftGrade)
+ * @returns {Promise<Object>} Updated submission
+ */
+async function updateSubmissionGrade(tokens, courseId, assignmentId, submissionId, gradeData) {
+  const classroom = await getClassroomClient(tokens);
+  
+  const result = await classroom.courses.courseWork.studentSubmissions.modifyAttachments({
+    courseId,
+    courseWorkId: assignmentId,
+    id: submissionId,
+    requestBody: {
+      assignedGrade: gradeData.assignedGrade,
+      draftGrade: gradeData.draftGrade
+    }
+  });
+  
+  return result.data;
+}
+
+/**
+ * Return a student submission (change state to RETURNED)
+ * @param {Object} tokens - OAuth2 tokens
+ * @param {string} courseId - Course ID
+ * @param {string} assignmentId - Assignment ID
+ * @param {string} submissionId - Submission ID
+ * @returns {Promise<Object>} Returned submission
+ */
+async function returnSubmission(tokens, courseId, assignmentId, submissionId) {
+  const classroom = await getClassroomClient(tokens);
+  
+  const result = await classroom.courses.courseWork.studentSubmissions.return({
+    courseId,
+    courseWorkId: assignmentId,
+    id: submissionId,
+    requestBody: {}
+  });
+  
+  return result.data;
+}
+
 module.exports = {
   createAssignment,
   listAssignments,
   getAssignment,
   updateAssignment,
   deleteAssignment,
-  getStudentSubmissions
+  getStudentSubmissions,
+  updateSubmissionGrade,
+  returnSubmission
 }; 

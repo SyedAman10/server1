@@ -6,7 +6,9 @@ const {
   getAssignment,
   updateAssignment,
   deleteAssignment,
-  getStudentSubmissions
+  getStudentSubmissions,
+  updateSubmissionGrade,
+  returnSubmission
 } = require('../services/assignmentService');
 
 /**
@@ -187,11 +189,74 @@ const getStudentSubmissionsController = async (req, res) => {
   }
 };
 
+/**
+ * Update a student submission grade
+ */
+const updateSubmissionGradeController = async (req, res) => {
+  try {
+    const { courseId, assignmentId, submissionId } = req.params;
+    const { assignedGrade, draftGrade } = req.body;
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await getUserByEmail(decoded.email);
+
+    // Validate that at least one grade is provided
+    if (assignedGrade === undefined && draftGrade === undefined) {
+      return res.status(400).json({ error: 'Either assignedGrade or draftGrade must be provided' });
+    }
+
+    const result = await updateSubmissionGrade(
+      {
+        access_token: user.access_token,
+        refresh_token: user.refresh_token
+      },
+      courseId,
+      assignmentId,
+      submissionId,
+      { assignedGrade, draftGrade }
+    );
+
+    res.json(result);
+  } catch (err) {
+    console.error('Error updating submission grade:', err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+/**
+ * Return a student submission (change state to RETURNED)
+ */
+const returnSubmissionController = async (req, res) => {
+  try {
+    const { courseId, assignmentId, submissionId } = req.params;
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await getUserByEmail(decoded.email);
+
+    const result = await returnSubmission(
+      {
+        access_token: user.access_token,
+        refresh_token: user.refresh_token
+      },
+      courseId,
+      assignmentId,
+      submissionId
+    );
+
+    res.json(result);
+  } catch (err) {
+    console.error('Error returning submission:', err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
 module.exports = {
   createAssignmentController,
   listAssignmentsController,
   getAssignmentController,
   updateAssignmentController,
   deleteAssignmentController,
-  getStudentSubmissionsController
+  getStudentSubmissionsController,
+  updateSubmissionGradeController,
+  returnSubmissionController
 }; 

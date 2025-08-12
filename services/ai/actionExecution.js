@@ -1576,14 +1576,81 @@ async function executeAction(intentData, originalMessage, userToken, req) {
               conversationId: req.body.conversationId
             };
           }
-          // 4. Format summary
+          // 4. Format summary with user names
           const turnedIn = submissionList.filter(s => s.state === 'TURNED_IN' || s.state === 'RETURNED');
           const notTurnedIn = submissionList.filter(s => s.state !== 'TURNED_IN' && s.state !== 'RETURNED');
+          
+          // 5. Get user profiles for submitted students
+          const submittedUserIds = turnedIn.map(s => s.userId).filter(Boolean);
+          const userProfiles = {};
+          
+          console.log('🔍 DEBUG: Submitted user IDs:', submittedUserIds);
+          
+          if (submittedUserIds.length > 0) {
+            try {
+              // Get enrolled students to map userIds to names
+              const studentsResponse = await makeApiCall(`${baseUrl}/api/classroom/${courseId}/students`, 'GET', null, userToken, req);
+              const students = Array.isArray(studentsResponse)
+                ? studentsResponse
+                : Array.isArray(studentsResponse.students)
+                  ? studentsResponse.students
+                  : Array.isArray(studentsResponse.courses)
+                    ? studentsResponse.courses
+                    : [];
+              
+              console.log('🔍 DEBUG: Fetched students:', students.length);
+              
+              // Create a map of userId to student profile
+              students.forEach(student => {
+                if (student.userId && student.profile) {
+                  userProfiles[student.userId] = student.profile;
+                  console.log('🔍 DEBUG: Mapped user:', student.userId, '->', student.profile.name?.fullName || student.profile.emailAddress);
+                }
+              });
+              
+              console.log('🔍 DEBUG: User profiles map:', Object.keys(userProfiles).length, 'profiles loaded');
+            } catch (error) {
+              console.log('Could not fetch student profiles, will use userIds instead:', error.message);
+            }
+          }
+          
           let message = `Submissions for "${matchingAssignments[0].title}" in ${selectedCourse.name}:\n`;
           message += `\nSubmitted (${turnedIn.length}):\n`;
-          message += turnedIn.map(s => `• ${s.userId || s.id} (${s.state})`).join('\n') || 'None';
+          
+          if (turnedIn.length > 0) {
+            message += turnedIn.map(s => {
+              const userId = s.userId || s.id;
+              const userProfile = userProfiles[userId];
+              if (userProfile && userProfile.name && userProfile.name.fullName) {
+                return `• ${userProfile.name.fullName} (${userProfile.emailAddress}) - ${s.state}`;
+              } else if (userProfile && userProfile.emailAddress) {
+                return `• ${userProfile.emailAddress} (${s.state})`;
+              } else {
+                return `• ${userId} (${s.state})`;
+              }
+            }).join('\n');
+          } else {
+            message += 'None';
+          }
+          
           message += `\n\nNot Submitted (${notTurnedIn.length}):\n`;
-          message += notTurnedIn.map(s => `• ${s.userId || s.id} (${s.state})`).join('\n') || 'None';
+          
+          if (notTurnedIn.length > 0) {
+            message += notTurnedIn.map(s => {
+              const userId = s.userId || s.id;
+              const userProfile = userProfiles[userId];
+              if (userProfile && userProfile.name && userProfile.name.fullName) {
+                return `• ${userProfile.name.fullName} (${userProfile.emailAddress}) - ${s.state}`;
+              } else if (userProfile && userProfile.emailAddress) {
+                return `• ${userProfile.emailAddress} (${s.state})`;
+              } else {
+                return `• ${userId} (${s.state})`;
+              }
+            }).join('\n');
+          } else {
+            message += 'None';
+          }
+          
           return {
             message,
             submissions: submissionList,
@@ -1614,23 +1681,54 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           return { message: "Please provide course, assignment, student, and grade information.", conversationId: req.body.conversationId };
         }
 
-        // 2. Find the course
-        const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken, req);
-        if (!coursesResponse || !coursesResponse.courses || !Array.isArray(coursesResponse.courses)) {
-          return { message: `Course list not found.`, conversationId: req.body.conversationId };
+        // 2. Find the course using the same logic as CHECK_ASSIGNMENT_SUBMISSIONS
+        const courseMatch = await findMatchingCourse(
+          courseName, 
+          userToken, 
+          req, 
+          baseUrl
+        );
+        
+        if (!courseMatch.success) {
+          return {
+            message: courseMatch.message,
+            conversationId: req.body.conversationId
+          };
         }
-        const course = coursesResponse.courses.find(c => c.name && c.name.toLowerCase().includes(courseName.toLowerCase()));
-        if (!course) return { message: `Course "${courseName}" not found.`, conversationId: req.body.conversationId };
+        
+        const course = courseMatch.course;
 
-        // 3. Find the assignment
+        // 3. Find the assignment using the same logic as CHECK_ASSIGNMENT_SUBMISSIONS
         const assignmentsResponse = await makeApiCall(`${baseUrl}/api/courses/${course.id}/assignments`, 'GET', null, userToken, req);
         const assignments = Array.isArray(assignmentsResponse)
           ? assignmentsResponse
           : Array.isArray(assignmentsResponse.courses)
             ? assignmentsResponse.courses
             : [];
-        const assignment = assignments.find(a => a.title && a.title.toLowerCase().includes(assignmentTitle.toLowerCase()));
-        if (!assignment) return { message: `Assignment "${assignmentTitle}" not found.`, conversationId: req.body.conversationId };
+        
+        if (!Array.isArray(assignments) || assignments.length === 0) {
+          return {
+            message: "I couldn't retrieve assignments for that course.",
+            conversationId: req.body.conversationId
+          };
+        }
+        
+        const assignmentTitleTerm = assignmentTitle.toLowerCase();
+        const matchingAssignments = assignments.filter(a => a.title && a.title.toLowerCase().includes(assignmentTitleTerm));
+        if (matchingAssignments.length === 0) {
+          return {
+            message: `I couldn't find any assignments matching "${assignmentTitle}" in ${course.name}.`,
+            conversationId: req.body.conversationId
+          };
+        } else if (matchingAssignments.length > 1) {
+          return {
+            message: `I found multiple assignments matching "${assignmentTitle}". Which one do you mean?`,
+            options: matchingAssignments.map(a => ({ id: a.id, title: a.title })),
+            conversationId: req.body.conversationId
+          };
+        }
+        
+        const assignment = matchingAssignments[0];
 
         // 4. Find the student submission
         const submissionsResponse = await makeApiCall(`${baseUrl}/api/courses/${course.id}/assignments/${assignment.id}/submissions`, 'GET', null, userToken, req);
@@ -1640,46 +1738,75 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             ? submissionsResponse.courses
             : [];
         console.log('DEBUG GRADE_ASSIGNMENT submissions:', submissions);
-        let matchUserId = studentEmail;
-        // If the input is an email, look up the userId from the students list
-        if (studentEmail.includes('@')) {
-          try {
-            const studentsList = await makeApiCall(`${baseUrl}/api/classroom/${course.id}/students`, 'GET', null, userToken, req);
-            const students = Array.isArray(studentsList)
-              ? studentsList
-              : Array.isArray(studentsList.students)
-                ? studentsList.students
-                : Array.isArray(studentsList.courses)
-                  ? studentsList.courses
-                  : [];
-            console.log('DEBUG GRADE_ASSIGNMENT students:', students);
-            console.log('DEBUG GRADE_ASSIGNMENT searching for email:', studentEmail);
-            const foundStudent = students.find(s => s.profile && s.profile.emailAddress && s.profile.emailAddress.toLowerCase() === studentEmail.toLowerCase());
-            if (foundStudent && foundStudent.userId) {
-              matchUserId = foundStudent.userId;
-            } else {
-              return { message: `No student found in course with email ${studentEmail}.`, conversationId: req.body.conversationId };
+        
+        // 5. Find the student by name or email
+        let matchUserId = null;
+        try {
+          const studentsList = await makeApiCall(`${baseUrl}/api/classroom/${course.id}/students`, 'GET', null, userToken, req);
+          const students = Array.isArray(studentsList)
+            ? studentsList
+            : Array.isArray(studentsList.students)
+              ? studentsList.students
+              : Array.isArray(studentsList.courses)
+                ? studentsList.courses
+                : [];
+          console.log('DEBUG GRADE_ASSIGNMENT students:', students);
+          console.log('DEBUG GRADE_ASSIGNMENT searching for student:', studentEmail);
+          
+          // Try to find student by name or email
+          const foundStudent = students.find(s => {
+            if (!s.profile) return false;
+            
+            // Check by email
+            if (s.profile.emailAddress && s.profile.emailAddress.toLowerCase() === studentEmail.toLowerCase()) {
+              return true;
             }
-          } catch (err) {
-            return { message: `Failed to look up student by email: ${err.message}`, conversationId: req.body.conversationId };
+            
+            // Check by full name
+            if (s.profile.name && s.profile.name.fullName && 
+                s.profile.name.fullName.toLowerCase().includes(studentEmail.toLowerCase())) {
+              return true;
+            }
+            
+            // Check by first name or last name
+            if (s.profile.name) {
+              const firstName = s.profile.name.givenName || '';
+              const lastName = s.profile.name.familyName || '';
+              const fullName = `${firstName} ${lastName}`.trim().toLowerCase();
+              if (fullName.includes(studentEmail.toLowerCase()) || 
+                  firstName.toLowerCase().includes(studentEmail.toLowerCase()) ||
+                  lastName.toLowerCase().includes(studentEmail.toLowerCase())) {
+                return true;
+              }
+            }
+            
+            return false;
+          });
+          
+          if (foundStudent && foundStudent.userId) {
+            matchUserId = foundStudent.userId;
+            console.log('DEBUG GRADE_ASSIGNMENT found student:', foundStudent.userId, foundStudent.profile.name?.fullName);
+          } else {
+            return { message: `No student found in course with name/email "${studentEmail}". Available students: ${students.map(s => s.profile?.name?.fullName || s.profile?.emailAddress || 'Unknown').join(', ')}`, conversationId: req.body.conversationId };
           }
+        } catch (err) {
+          return { message: `Failed to look up student: ${err.message}`, conversationId: req.body.conversationId };
         }
-        // Now match by userId
+        
+        // 6. Find the submission by userId
         let submission = submissions.find(s => s.userId && s.userId === matchUserId);
         if (!submission) {
-          // Try partial match for userId
-          submission = submissions.find(s => s.userId && s.userId.includes(matchUserId));
+          return { message: `Submission for student "${studentEmail}" not found.`, conversationId: req.body.conversationId };
         }
-        if (!submission) return { message: `Submission for student "${studentEmail}" not found.`, conversationId: req.body.conversationId };
 
-        // 5. Update the grade
+        // 7. Update the grade
         const gradeData = {};
         if (assignedGrade !== undefined) gradeData.assignedGrade = assignedGrade;
         if (draftGrade !== undefined) gradeData.draftGrade = draftGrade;
 
         try {
           await makeApiCall(
-            `${baseUrl}/api/courses/${course.id}/courseWork/${assignment.id}/studentSubmissions/${submission.id}`,
+            `${baseUrl}/api/courses/${course.id}/assignments/${assignment.id}/submissions/${submission.id}`,
             'PATCH',
             gradeData,
             userToken,
@@ -1689,10 +1816,10 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           return { message: `Failed to update grade: ${error.message}`, conversationId: req.body.conversationId };
         }
 
-        // 6. Optionally, return the submission (change state to RETURNED)
+        // 8. Optionally, return the submission (change state to RETURNED)
         try {
           await makeApiCall(
-            `${baseUrl}/api/courses/${course.id}/courseWork/${assignment.id}/studentSubmissions/${submission.id}:return`,
+            `${baseUrl}/api/courses/${course.id}/assignments/${assignment.id}/submissions/${submission.id}/return`,
             'POST',
             {},
             userToken,
