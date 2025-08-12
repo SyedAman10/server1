@@ -2323,9 +2323,150 @@ async function executeAction(intentData, originalMessage, userToken, req) {
         }
       }
       
+      case 'READ_EMAIL': {
+        // Only allow authenticated users to read emails
+        if (!userToken) {
+          return {
+            message: 'You need to be authenticated to read emails.',
+            conversationId: req.body.conversationId
+          };
+        }
+        
+        if (!parameters.senderEmail) {
+          return {
+            message: 'I need to know which email address to read emails from. Please provide a sender email.',
+            conversationId: req.body.conversationId
+          };
+        }
+        
+        try {
+          // Extract user from JWT token
+          const token = userToken.split(' ')[1]; // Remove 'Bearer ' prefix
+          const decoded = jwt.verify(token, process.env.JWT_SECRET);
+          const user = await getUserByEmail(decoded.email);
+          
+          if (!user.access_token || !user.refresh_token) {
+            throw new Error('Missing required OAuth2 tokens');
+          }
+          
+          // Use internal service function to read emails
+          const { readEmails } = require('../emailService');
+          
+          const emails = await readEmails(
+            {
+              access_token: user.access_token,
+              refresh_token: user.refresh_token
+            },
+            parameters.senderEmail,
+            parameters.limit || 10,
+            parameters.subject
+          );
+          
+          if (!emails || emails.length === 0) {
+            return {
+              message: `No emails found from ${parameters.senderEmail}.`,
+              emails: [],
+              conversationId: req.body.conversationId
+            };
+          }
+          
+          // Format the email list
+          let message = `📧 **Emails from ${parameters.senderEmail} (${emails.length}):**\n\n`;
+          
+          emails.forEach((email, index) => {
+            const emailNumber = index + 1;
+            const date = email.date ? new Date(email.date).toLocaleString() : 'Unknown date';
+            const snippet = email.snippet ? email.snippet.substring(0, 100) + '...' : 'No preview available';
+            
+            message += `${emailNumber}. **${email.subject || 'No Subject'}**\n`;
+            message += `   📅 Date: ${date}\n`;
+            message += `   📝 Preview: ${snippet}\n`;
+            if (email.hasAttachments) {
+              message += `   📎 Has attachments\n`;
+            }
+            message += '\n';
+          });
+          
+          return {
+            message: message,
+            emails: emails,
+            conversationId: req.body.conversationId
+          };
+        } catch (error) {
+          console.error('Error in READ_EMAIL:', error);
+          return {
+            message: "Sorry, I encountered an error while reading emails. Please try again.",
+            error: error.message,
+            conversationId: req.body.conversationId
+          };
+        }
+      }
+      
+      case 'SEND_EMAIL': {
+        // Only allow authenticated users to send emails
+        if (!userToken) {
+          return {
+            message: 'You need to be authenticated to send emails.',
+            conversationId: req.body.conversationId
+          };
+        }
+        
+        if (!parameters.recipientEmail) {
+          return {
+            message: 'I need to know who to send the email to. Please provide a recipient email address.',
+            conversationId: req.body.conversationId
+          };
+        }
+        
+        if (!parameters.message) {
+          return {
+            message: 'I need to know what message to send. Please provide the email content.',
+            conversationId: req.body.conversationId
+          };
+        }
+        
+        try {
+          // Extract user from JWT token
+          const token = userToken.split(' ')[1]; // Remove 'Bearer ' prefix
+          const decoded = jwt.verify(token, process.env.JWT_SECRET);
+          const user = await getUserByEmail(decoded.email);
+          
+          if (!user.access_token || !user.refresh_token) {
+            throw new Error('Missing required OAuth2 tokens');
+          }
+          
+          // Use internal service function to send email
+          const { sendEmail } = require('../emailService');
+          
+          const result = await sendEmail(
+            {
+              access_token: user.access_token,
+              refresh_token: user.refresh_token
+            },
+            parameters.recipientEmail,
+            parameters.subject || 'Message from AI Assistant',
+            parameters.message,
+            parameters.attachments || []
+          );
+          
+          return {
+            message: `📧 **Email sent successfully to ${parameters.recipientEmail}!**\n\n📝 **Subject:** ${parameters.subject || 'Message from AI Assistant'}\n\n✅ Your email has been sent and is now in the recipient's inbox.`,
+            emailResult: result,
+            conversationId: req.body.conversationId
+          };
+        } catch (error) {
+          console.error('Error in SEND_EMAIL:', error);
+          return {
+            message: "Sorry, I encountered an error while sending the email. Please try again.",
+            error: error.message,
+            conversationId: req.body.conversationId
+          };
+        }
+      }
+      
       default:
         console.log('❌ DEBUG: No matching case found for intent:', intent);
-        console.log('🔍 DEBUG: Available cases: LIST_COURSES, CREATE_COURSE, LIST_ASSIGNMENTS, CREATE_ANNOUNCEMENT, GET_ANNOUNCEMENTS, GET_COURSE, CREATE_ASSIGNMENT, INVITE_STUDENTS, INVITE_TEACHERS, PROVIDE_MATERIALS, HELP, CHECK_ASSIGNMENT_SUBMISSIONS, GRADE_ASSIGNMENT, CREATE_MEETING, SHOW_ENROLLED_STUDENTS');
+        console.log('🔍 DEBUG: Available cases: LIST_COURSES, CREATE_COURSE, LIST_ASSIGNMENTS, CREATE_ANNOUNCEMENT, GET_ANNOUNCEMENTS, GET_COURSE, CREATE_ASSIGNMENT, INVITE_STUDENTS, INVITE_TEACHERS, PROVIDE_MATERIALS, HELP, CHECK_ASSIGNMENT_SUBMISSIONS, GRADE_ASSIGNMENT, CREATE_MEETING, SHOW_ENROLLED_STUDENTS, READ_EMAIL, SEND_EMAIL');
         return "I'm not sure how to handle that request. Please try again or ask for help.";
     }
   } catch (error) {

@@ -580,6 +580,39 @@ function detectIntentFallback(message, conversationId) {
     };
   }
   
+  // Email reading
+  if (lowerMessage.includes('read') && lowerMessage.includes('email')) {
+    const emailMatch = message.match(/from\s+([^\s]+@[^\s]+)/i);
+    const senderEmail = emailMatch ? emailMatch[1] : null;
+    
+    return {
+      intent: 'READ_EMAIL',
+      confidence: 0.9,
+      parameters: {
+        ...(senderEmail ? { senderEmail } : {})
+      }
+    };
+  }
+  
+  // Email sending
+  if (lowerMessage.includes('send') && lowerMessage.includes('email')) {
+    const recipientMatch = message.match(/to\s+([^\s]+@[^\s]+)/i);
+    const recipientEmail = recipientMatch ? recipientMatch[1] : null;
+    
+    // Extract message content after "saying" or similar words
+    const messageMatch = message.match(/saying\s+(.+)/i);
+    const emailMessage = messageMatch ? messageMatch[1].trim() : null;
+    
+    return {
+      intent: 'SEND_EMAIL',
+      confidence: 0.9,
+      parameters: {
+        ...(recipientEmail ? { recipientEmail } : {}),
+        ...(emailMessage ? { message: emailMessage } : {})
+      }
+    };
+  }
+  
   // Default to unknown
   console.log('🔍 DEBUG: No specific intent detected, returning UNKNOWN');
   return {
@@ -645,6 +678,8 @@ async function detectIntent(message, conversationHistory, conversationId) {
       - CREATE_MEETING: User wants to create a meeting or schedule an appointment (extract title, attendees, dateExpr, timeExpr, duration, description)
       - UPDATE_MEETING: User wants to update or reschedule an existing meeting (extract currentDateExpr, currentTimeExpr, newDateExpr, newTimeExpr, newDuration)
       - DELETE_MEETING: User wants to cancel or delete an existing meeting (extract dateExpr, timeExpr)
+      - READ_EMAIL: User wants to read emails from a specific sender (extract senderEmail, limit, subject if specified)
+      - SEND_EMAIL: User wants to send an email to someone (extract recipientEmail, subject, message, attachments if specified)
       - PROCEED_WITH_AVAILABLE_INFO: User wants to skip providing more information and proceed with available data (e.g., user says "no", "skip", "that's all", "proceed", etc.)
       - HELP: User needs help or instructions
       - UNKNOWN: None of the above
@@ -698,6 +733,17 @@ async function detectIntent(message, conversationHistory, conversationId) {
       For meeting deletion/cancellation, extract these fields if provided:
       - dateExpr: Meeting date expression (e.g., "today", "tomorrow")
       - timeExpr: Meeting time expression (e.g., "5pm", "9am")
+      
+      For email reading, extract these fields if provided:
+      - senderEmail: The email address of the sender to read emails from
+      - limit: Number of emails to retrieve (default: 10)
+      - subject: Subject line to filter emails by (optional)
+      
+      For email sending, extract these fields if provided:
+      - recipientEmail: The email address of the recipient
+      - subject: The subject line of the email
+      - message: The body content of the email
+      - attachments: Array of file names or paths to attach (optional)
       
       For date and time expressions:
       - Use dueDateExpr for natural language date expressions like:
