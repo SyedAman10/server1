@@ -842,7 +842,8 @@ async function executeAction(intentData, originalMessage, userToken, req) {
 
         // Handle course retrieval by ID or by name
         if (parameters.courseId) {
-          return await makeApiCall(`${baseUrl}/api/classroom/${parameters.courseId}`, 'GET', null, userToken, req);
+          const courseResponse = await makeApiCall(`${baseUrl}/api/classroom/${parameters.courseId}`, 'GET', null, userToken, req);
+          return formatCourseDetailsResponse(courseResponse, userRole, req.body.conversationId);
         } else if (parameters.courseName || parameters.courseIdentifier) {
           // Use the reusable course matching function
           const courseMatch = await findMatchingCourse(
@@ -875,7 +876,8 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           }
           
           // Exact match - get the details
-          return await makeApiCall(`${baseUrl}/api/classroom/${selectedCourse.id}`, 'GET', null, userToken, req);
+          const courseResponse = await makeApiCall(`${baseUrl}/api/classroom/${selectedCourse.id}`, 'GET', null, userToken, req);
+          return formatCourseDetailsResponse(courseResponse, userRole, req.body.conversationId);
         } else {
           return {
             message: "I need more information about which course you're interested in. Could you provide a course name or ID?",
@@ -2400,6 +2402,101 @@ function formatCoursesResponse(coursesResponse, userRole, conversationId) {
       message: 'Sorry, I encountered an error while formatting the courses list. Please try again.',
       error: error.message,
       courses: [],
+      conversationId: conversationId
+    };
+  }
+}
+
+// Helper function to format course details response with proper message
+function formatCourseDetailsResponse(courseResponse, userRole, conversationId) {
+  try {
+    // Extract course from the response
+    let course = null;
+    if (courseResponse && typeof courseResponse === 'object') {
+      if (courseResponse.id && courseResponse.name) {
+        course = courseResponse;
+      } else if (courseResponse.course && courseResponse.course.id) {
+        course = courseResponse.course;
+      }
+    }
+
+    if (!course) {
+      return {
+        message: 'Course details not found or invalid response format.',
+        course: null,
+        conversationId: conversationId
+      };
+    }
+
+    // Format the message based on user role
+    let message = '';
+    if (userRole === 'student') {
+      message = `📚 **Course Details - ${course.name}**\n\n`;
+    } else {
+      message = `📚 **Course Details - ${course.name}**\n\n`;
+    }
+
+    // Add course information
+    message += `**📖 Basic Information:**\n`;
+    message += `• **Name:** ${course.name}\n`;
+    if (course.section) message += `• **Section:** ${course.section}\n`;
+    if (course.descriptionHeading) message += `• **Description Heading:** ${course.descriptionHeading}\n`;
+    if (course.description) message += `• **Description:** ${course.description}\n`;
+    if (course.room) message += `• **Room:** ${course.room}\n`;
+    message += `• **Status:** ${course.courseState || 'Unknown'}\n`;
+    message += `• **Created:** ${course.creationTime ? new Date(course.creationTime).toLocaleDateString() : 'Unknown'}\n`;
+    message += `• **Last Updated:** ${course.updateTime ? new Date(course.updateTime).toLocaleDateString() : 'Unknown'}\n\n`;
+
+    // Add enrollment information
+    if (course.enrollmentCode) {
+      message += `**🎫 Enrollment Information:**\n`;
+      message += `• **Enrollment Code:** ${course.enrollmentCode}\n`;
+      if (course.alternateLink) {
+        message += `• **Classroom Link:** [Open in Google Classroom](${course.alternateLink})\n`;
+      }
+      message += '\n';
+    }
+
+    // Add Google Drive folder information
+    if (course.teacherFolder && course.teacherFolder.id) {
+      message += `**📁 Course Materials:**\n`;
+      message += `• **Teacher Folder:** [${course.teacherFolder.title}](${course.teacherFolder.alternateLink})\n`;
+      message += '\n';
+    }
+
+    // Add calendar information
+    if (course.calendarId) {
+      message += `**📅 Calendar:**\n`;
+      message += `• **Course Calendar ID:** ${course.calendarId}\n`;
+      message += '\n';
+    }
+
+    // Add gradebook settings
+    if (course.gradebookSettings) {
+      message += `**📊 Gradebook Settings:**\n`;
+      message += `• **Calculation Type:** ${course.gradebookSettings.calculationType || 'Not set'}\n`;
+      message += `• **Display Setting:** ${course.gradebookSettings.displaySetting || 'Not set'}\n`;
+      message += '\n';
+    }
+
+    // Add footer based on user role
+    if (userRole === 'student') {
+      message += '💡 **Student Actions:**\n• View assignments and materials\n• Submit work\n• Check grades\n• Access course resources';
+    } else {
+      message += '💡 **Teacher Actions:**\n• Create assignments\n• Invite students\n• Post announcements\n• Manage course materials\n• View student submissions';
+    }
+
+    return {
+      message: message,
+      course: course,
+      conversationId: conversationId
+    };
+  } catch (error) {
+    console.error('Error formatting course details response:', error);
+    return {
+      message: 'Sorry, I encountered an error while formatting the course details. Please try again.',
+      error: error.message,
+      course: null,
       conversationId: conversationId
     };
   }
