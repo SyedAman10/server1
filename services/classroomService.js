@@ -1,7 +1,11 @@
 const { google } = require('googleapis');
 
 async function getClassroomClient(tokens) {
-  const auth = new google.auth.OAuth2();
+  const auth = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    process.env.GOOGLE_REDIRECT_URI
+  );
   auth.setCredentials(tokens);
   return google.classroom({ version: 'v1', auth });
 }
@@ -43,7 +47,20 @@ async function getCourse(tokens, courseId) {
 
 // ✅ Invite a student to a course
 async function inviteStudent(tokens, courseId, studentEmail) {
-  const classroom = await getClassroomClient(tokens);
+  // Create OAuth2 client with proper configuration
+  const auth = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    process.env.GOOGLE_REDIRECT_URI
+  );
+  
+  // Set the credentials with the provided tokens
+  auth.setCredentials({
+    access_token: tokens.access_token,
+    refresh_token: tokens.refresh_token
+  });
+  
+  const classroom = google.classroom({ version: 'v1', auth });
 
   const res = await classroom.courses.students.create({
     courseId,

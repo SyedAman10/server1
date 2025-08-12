@@ -1090,13 +1090,26 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           const courseId = selectedCourse.id;
           
           try {
-            // Use makeApiCall to invite students (this handles OAuth properly)
+            // Extract user from JWT token
+            const token = userToken.split(' ')[1]; // Remove 'Bearer ' prefix
+            const decoded = jwt.verify(token, process.env.JWT_SECRET);
+            const user = await getUserByEmail(decoded.email);
+            
+            if (!user.access_token || !user.refresh_token) {
+              throw new Error('Missing required OAuth2 tokens');
+            }
+            
+            // Use internal service function instead of external API call
+            const { inviteStudent } = require('../classroomService');
+            
             const invitationPromises = studentEmails.map(email =>
-              makeApiCall(
-                `${baseUrl}/api/classroom/${courseId}/invite`,
-                'POST',
-                { email: email },
-                userToken
+              inviteStudent(
+                {
+                  access_token: user.access_token,
+                  refresh_token: user.refresh_token
+                },
+                courseId,
+                email
               )
             );
 
