@@ -4,6 +4,7 @@ const jwt = require('jsonwebtoken');
 const { getUserByEmail } = require('../../models/user.model');
 const { generateConversationId } = require('./conversationManager');
 const { createAssignment, listAssignments } = require('../assignmentService');
+const { createMeeting, findMeetingByDateTime, updateMeeting, deleteMeeting } = require('../meetingService');
 
 /**
  * Reusable function to find and match courses by name
@@ -404,6 +405,7 @@ async function makeApiCall(url, method, data, userToken, req) {
  * Execute the appropriate action based on the detected intent
  */
 async function executeAction(intentData, originalMessage, userToken, req) {
+  console.log('🔍 DEBUG: executeAction called with intentData:', JSON.stringify(intentData, null, 2));
   let { intent, parameters } = intentData;
   const baseUrl = `${req.protocol}://${req.get('host')}`;
   let userRole = null;
@@ -1348,13 +1350,24 @@ async function executeAction(intentData, originalMessage, userToken, req) {
 4. **View Announcements:**
    • "show announcements in math 201" - See course announcements
 
-5. **Get Help:**
+5. **Meetings:**
+   • "create meeting Study Group with john@email.com tomorrow at 3pm" - Schedule meetings
+   • "schedule call Project Discussion today at 7pm for 1 hour" - Set up calls
+   • "reschedule my today's meeting which is on today at 5pm make it to 6pm tomorrow" - Update meetings
+   • "change my meeting tomorrow at 9am to 10am" - Modify meeting times
+   • "cancel my meeting tomorrow at 5pm" - Cancel meetings
+   • "delete my meeting today at 3pm" - Remove meetings
+
+6. **Get Help:**
    • "help" - Show this help message
 
 **Example commands:**
 • "list my courses"
 • "show all assignments in physics 352"
-• "show announcements in chemistry 101"`;
+• "show announcements in chemistry 101"
+• "create meeting Study Group with john@email.com tomorrow at 3pm"
+• "reschedule my today's meeting which is on today at 5pm make it to 6pm tomorrow"
+• "cancel my meeting tomorrow at 5pm"`;
         } else if (userRole === 'teacher') {
           helpMessage = `👨‍🏫 **Teacher Help - Here's what you can do:**
 
@@ -1379,10 +1392,21 @@ async function executeAction(intentData, originalMessage, userToken, req) {
 5. **Grading:**
    • "grade assignment test 1 for student john@email.com to 95 in physics 352" - Grade assignments
 
+6. **Meetings:**
+   • "create meeting Project Review with saadkhan@erptechnicals.com today at 5pm" - Schedule meetings
+   • "schedule call Team Sync tomorrow at 9am for 30 minutes" - Set up calls
+   • "reschedule my today's meeting which is on today at 5pm make it to 6pm tomorrow" - Update meetings
+   • "change my meeting tomorrow at 9am to 10am" - Modify meeting times
+   • "cancel my meeting tomorrow at 5pm" - Cancel meetings
+   • "delete my meeting today at 3pm" - Remove meetings
+
 **Example commands:**
 • "create a new course called Advanced Physics"
 • "create assignment Math Quiz in physics 352 due next Friday at 5 PM"
-• "invite students john@email.com, jane@email.com to physics 352"`;
+• "invite students john@email.com, jane@email.com to physics 352"
+• "create meeting Project Review with saadkhan@erptechnicals.com today at 5pm"
+• "reschedule my today's meeting which is on today at 5pm make it to 6pm tomorrow"
+• "cancel my meeting tomorrow at 5pm"`;
         } else if (userRole === 'super_admin') {
           helpMessage = `👑 **Super Admin Help - Here's what you can do:**
 
@@ -1408,10 +1432,21 @@ async function executeAction(intentData, originalMessage, userToken, req) {
 5. **Grading:**
    • "grade assignment test 1 for student john@email.com to 95 in physics 352" - Grade assignments
 
+6. **Meetings:**
+   • "create meeting Project Review with saadkhan@erptechnicals.com today at 5pm" - Schedule meetings
+   • "schedule call Team Sync tomorrow at 9am for 30 minutes" - Set up calls
+   • "reschedule my today's meeting which is on today at 5pm make it to 6pm tomorrow" - Update meetings
+   • "change my meeting tomorrow at 9am to 10am" - Modify meeting times
+   • "cancel my meeting tomorrow at 5pm" - Cancel meetings
+   • "delete my meeting today at 3pm" - Remove meetings
+
 **Example commands:**
 • "create a new course called Advanced Physics"
 • "invite teachers prof@email.com, dr@email.com to physics 352"
-• "create assignment Math Quiz in physics 352 due next Friday at 5 PM"`;
+• "create assignment Math Quiz in physics 352 due next Friday at 5 PM"
+• "create meeting Project Review with saadkhan@erptechnicals.com today at 5pm"
+• "reschedule my today's meeting which is on today at 5pm make it to 6pm tomorrow"
+• "cancel my meeting tomorrow at 5pm"`;
         } else {
           helpMessage = `❓ **General Help - Here's what I can do:**
 
@@ -1423,7 +1458,13 @@ async function executeAction(intentData, originalMessage, userToken, req) {
    • View assignments and announcements
    • Check course materials
 
-3. **Get Help:**
+3. **Meetings:**
+   • Schedule meetings and calls
+   • Send calendar invitations
+   • Update and reschedule existing meetings
+   • Cancel and delete meetings
+
+4. **Get Help:**
    • "help" - Show this help message
 
 **Note:** Some features require specific permissions. Please contact your administrator if you need access to create or manage content.`;
@@ -1665,6 +1706,374 @@ async function executeAction(intentData, originalMessage, userToken, req) {
         return { message: `Grade updated for ${studentEmail} on "${assignmentTitle}".`, conversationId: req.body.conversationId };
       }
 
+      case 'CREATE_MEETING': {
+        console.log('🎯 DEBUG: CREATE_MEETING case executed!');
+        console.log('🔍 DEBUG: parameters:', JSON.stringify(parameters, null, 2));
+        
+        // All users can create meetings
+        if (!parameters.title && !parameters.attendees) {
+          console.log('❌ DEBUG: Missing title or attendees');
+          return {
+            message: "I need more information to create a meeting. Please provide a title and at least one attendee email.",
+            conversationId: req.body.conversationId
+          };
+        }
+
+        try {
+          // Extract user from JWT token
+          const token = userToken.split(' ')[1]; // Remove 'Bearer ' prefix
+          const decoded = jwt.verify(token, process.env.JWT_SECRET);
+          const user = await getUserByEmail(decoded.email);
+          
+          if (!user.access_token || !user.refresh_token) {
+            throw new Error('Missing required OAuth2 tokens');
+          }
+          
+          // Prepare meeting data
+          const meetingData = {
+            title: parameters.title || 'Meeting',
+            attendees: parameters.attendees || [],
+            dateExpr: parameters.dateExpr,
+            timeExpr: parameters.timeExpr,
+            duration: parameters.duration || 60,
+            description: parameters.description || '',
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone // User's local timezone
+          };
+          
+          // Use internal service function to create meeting
+          const response = await createMeeting(
+            {
+              access_token: user.access_token,
+              refresh_token: user.refresh_token
+            },
+            meetingData
+          );
+
+          if (!response.success) {
+            throw new Error(response.message || 'Failed to create meeting');
+          }
+
+          // Format the response message
+          let message = `🎉 **Meeting "${meetingData.title}" created successfully!**\n\n`;
+          
+          if (meetingData.dateExpr) {
+            message += `📅 **Date:** ${meetingData.dateExpr}\n`;
+          }
+          
+          if (meetingData.timeExpr) {
+            message += `🕐 **Time:** ${meetingData.timeExpr}\n`;
+          }
+          
+          if (meetingData.duration) {
+            const hours = Math.floor(meetingData.duration / 60);
+            const minutes = meetingData.duration % 60;
+            const durationText = hours > 0 ? `${hours}h ${minutes > 0 ? `${minutes}m` : ''}` : `${minutes}m`;
+            message += `⏱️ **Duration:** ${durationText}\n`;
+          }
+          
+          if (meetingData.attendees && meetingData.attendees.length > 0) {
+            message += `👥 **Attendees:** ${meetingData.attendees.join(', ')}\n`;
+          }
+          
+          if (meetingData.description) {
+            message += `📝 **Description:** ${meetingData.description}\n`;
+          }
+          
+          message += `\n✅ **Meeting Details:**\n`;
+          message += `• **Event ID:** ${response.meeting.id}\n`;
+          message += `• **Calendar Link:** ${response.meeting.htmlLink}\n`;
+          message += `• **Status:** ${response.meeting.status}\n`;
+          
+          message += `\n💡 **Next steps:**\n`;
+          message += `• Check your Google Calendar\n`;
+          message += `• Attendees will receive email invitations\n`;
+          message += `• You can modify the meeting anytime`;
+          
+          return {
+            message: message,
+            meeting: response.meeting,
+            conversationId: req.body.conversationId
+          };
+          
+        } catch (error) {
+          console.error('Error in CREATE_MEETING:', error);
+          
+          if (error.message.includes('Missing required OAuth2 tokens')) {
+            return {
+              message: "I couldn't create the meeting because your Google account isn't properly connected. Please reconnect your Google account.",
+              error: error.message,
+              conversationId: req.body.conversationId
+            };
+          } else if (error.message.includes('Could not parse date expression')) {
+            return {
+              message: `I couldn't understand the date you provided: "${parameters.dateExpr}". Please use expressions like "today", "tomorrow", "next Friday", or specific dates like "December 15".`,
+              error: error.message,
+              conversationId: req.body.conversationId
+            };
+          } else if (error.message.includes('Could not parse time expression')) {
+            return {
+              message: `I couldn't understand the time you provided: "${parameters.timeExpr}". Please use expressions like "5 PM", "9:30 AM", or "noon".`,
+              error: error.message,
+              conversationId: req.body.conversationId
+            };
+          }
+          
+          return {
+            message: "Sorry, I encountered an error while trying to create the meeting. Please try again.",
+            error: error.message,
+            conversationId: req.body.conversationId
+          };
+        }
+      }
+
+      case 'UPDATE_MEETING': {
+        console.log('🎯 DEBUG: UPDATE_MEETING case executed!');
+        console.log('🔍 DEBUG: parameters:', JSON.stringify(parameters, null, 2));
+        
+        // All users can update meetings
+        if (!parameters.currentDateExpr || !parameters.currentTimeExpr) {
+          return {
+            message: "I need to know which meeting you want to update. Please specify the current date and time of the meeting.",
+            conversationId: req.body.conversationId
+          };
+        }
+
+        if (!parameters.newDateExpr && !parameters.newTimeExpr && !parameters.newDuration) {
+          return {
+            message: "I need to know what changes you want to make. Please specify the new date, time, or duration.",
+            conversationId: req.body.conversationId
+          };
+        }
+
+        try {
+          // Extract user from JWT token
+          const token = userToken.split(' ')[1]; // Remove 'Bearer ' prefix
+          const decoded = jwt.verify(token, process.env.JWT_SECRET);
+          const user = await getUserByEmail(decoded.email);
+          
+          if (!user.access_token || !user.refresh_token) {
+            throw new Error('Missing required OAuth2 tokens');
+          }
+          
+          // Find the meeting by current date and time
+          const foundMeeting = await findMeetingByDateTime(
+            {
+              access_token: user.access_token,
+              refresh_token: user.refresh_token
+            },
+            parameters.currentDateExpr,
+            parameters.currentTimeExpr
+          );
+
+          if (!foundMeeting) {
+            return {
+              message: `I couldn't find a meeting on ${parameters.currentDateExpr} at ${parameters.currentTimeExpr}. Please check the date and time, or try listing your upcoming meetings first.`,
+              conversationId: req.body.conversationId
+            };
+          }
+
+          // Prepare update data
+          const updateData = {
+            ...(parameters.newDateExpr ? { dateExpr: parameters.newDateExpr } : {}),
+            ...(parameters.newTimeExpr ? { timeExpr: parameters.newTimeExpr } : {}),
+            ...(parameters.newDuration ? { duration: parameters.newDuration } : {})
+          };
+
+          // Update the meeting
+          const response = await updateMeeting(
+            {
+              access_token: user.access_token,
+              refresh_token: user.refresh_token
+            },
+            foundMeeting.id,
+            updateData
+          );
+
+          if (!response.success) {
+            throw new Error(response.message || 'Failed to update meeting');
+          }
+
+          // Format the response message
+          let message = `🎉 **Meeting "${foundMeeting.summary}" updated successfully!**\n\n`;
+          
+          if (parameters.newDateExpr) {
+            message += `📅 **New Date:** ${parameters.newDateExpr}\n`;
+          }
+          
+          if (parameters.newTimeExpr) {
+            message += `🕐 **New Time:** ${parameters.newTimeExpr}\n`;
+          }
+          
+          if (parameters.newDuration) {
+            const hours = Math.floor(parameters.newDuration / 60);
+            const minutes = parameters.newDuration % 60;
+            const durationText = hours > 0 ? `${hours}h ${minutes > 0 ? `${minutes}m` : ''}` : `${minutes}m`;
+            message += `⏱️ **New Duration:** ${durationText}\n`;
+          }
+          
+          message += `\n✅ **Updated Meeting Details:**\n`;
+          message += `• **Event ID:** ${response.meeting.id}\n`;
+          message += `• **Calendar Link:** ${response.meeting.htmlLink}\n`;
+          message += `• **Status:** ${response.meeting.status}\n`;
+          
+          message += `\n💡 **Next steps:**\n`;
+          message += `• Check your updated Google Calendar\n`;
+          message += `• Attendees will receive updated invitations\n`;
+          message += `• You can make more changes anytime`;
+          
+          return {
+            message: message,
+            meeting: response.meeting,
+            conversationId: req.body.conversationId
+          };
+          
+        } catch (error) {
+          console.error('Error in UPDATE_MEETING:', error);
+          
+          if (error.message.includes('Missing required OAuth2 tokens')) {
+            return {
+              message: "I couldn't update the meeting because your Google account isn't properly connected. Please reconnect your Google account.",
+              error: error.message,
+              conversationId: req.body.conversationId
+            };
+          } else if (error.message.includes('Could not parse date expression')) {
+            return {
+              message: `I couldn't understand the date you provided: "${parameters.newDateExpr || parameters.currentDateExpr}". Please use expressions like "today", "tomorrow", "next Friday", or specific dates like "December 15".`,
+              error: error.message,
+              conversationId: req.body.conversationId
+            };
+          } else if (error.message.includes('Could not parse time expression')) {
+            return {
+              message: `I couldn't understand the time you provided: "${parameters.newTimeExpr || parameters.currentTimeExpr}". Please use expressions like "5 PM", "9:30 AM", or "noon".`,
+              error: error.message,
+              conversationId: req.body.conversationId
+            };
+          } else if (error.message.includes('Meeting not found')) {
+            return {
+              message: `I couldn't find the meeting you specified. Please check the date and time, or try listing your upcoming meetings first.`,
+              error: error.message,
+              conversationId: req.body.conversationId
+            };
+          }
+          
+          return {
+            message: "Sorry, I encountered an error while trying to update the meeting. Please try again.",
+            error: error.message,
+            conversationId: req.body.conversationId
+          };
+        }
+      }
+
+      case 'DELETE_MEETING': {
+        console.log('🎯 DEBUG: DELETE_MEETING case executed!');
+        console.log('🔍 DEBUG: parameters:', JSON.stringify(parameters, null, 2));
+        
+        // All users can delete meetings
+        if (!parameters.dateExpr || !parameters.timeExpr) {
+          return {
+            message: "I need to know which meeting you want to cancel. Please specify the date and time of the meeting.",
+            conversationId: req.body.conversationId
+          };
+        }
+
+        try {
+          // Extract user from JWT token
+          const token = userToken.split(' ')[1]; // Remove 'Bearer ' prefix
+          const decoded = jwt.verify(token, process.env.JWT_SECRET);
+          const user = await getUserByEmail(decoded.email);
+          
+          if (!user.access_token || !user.refresh_token) {
+            throw new Error('Missing required OAuth2 tokens');
+          }
+          
+          // Find the meeting by date and time
+          const foundMeeting = await findMeetingByDateTime(
+            {
+              access_token: user.access_token,
+              refresh_token: user.refresh_token
+            },
+            parameters.dateExpr,
+            parameters.timeExpr
+          );
+
+          if (!foundMeeting) {
+            return {
+              message: `I couldn't find a meeting on ${parameters.dateExpr} at ${parameters.timeExpr}. Please check the date and time, or try listing your upcoming meetings first.`,
+              conversationId: req.body.conversationId
+            };
+          }
+
+          // Delete the meeting
+          const response = await deleteMeeting(
+            {
+              access_token: user.access_token,
+              refresh_token: user.refresh_token
+            },
+            foundMeeting.id
+          );
+
+          if (!response.success) {
+            throw new Error(response.message || 'Failed to delete meeting');
+          }
+
+          // Format the response message
+          let message = `🗑️ **Meeting Cancelled Successfully!**\n\n`;
+          message += `✅ **Cancelled:** "${foundMeeting.summary}"\n`;
+          message += `📅 **Date:** ${parameters.dateExpr}\n`;
+          message += `🕐 **Time:** ${parameters.timeExpr}\n`;
+          
+          if (foundMeeting.attendees && foundMeeting.attendees.length > 0) {
+            message += `👥 **Attendees notified:** ${foundMeeting.attendees.length} people\n`;
+          }
+          
+          message += `\n💡 **Next steps:**\n`;
+          message += `• Check your updated Google Calendar\n`;
+          message += `• Attendees will receive cancellation emails\n`;
+          message += `• You can create new meetings anytime`;
+          
+          return {
+            message: message,
+            deletedMeeting: response.deletedEvent,
+            conversationId: req.body.conversationId
+          };
+          
+        } catch (error) {
+          console.error('Error in DELETE_MEETING:', error);
+          
+          if (error.message.includes('Missing required OAuth2 tokens')) {
+            return {
+              message: "I couldn't cancel the meeting because your Google account isn't properly connected. Please reconnect your Google account.",
+              error: error.message,
+              conversationId: req.body.conversationId
+            };
+          } else if (error.message.includes('Could not parse date expression')) {
+            return {
+              message: `I couldn't understand the date you provided: "${parameters.dateExpr}". Please use expressions like "today", "tomorrow", "next Friday", or specific dates like "December 15".`,
+              error: error.message,
+              conversationId: req.body.conversationId
+            };
+          } else if (error.message.includes('Could not parse time expression')) {
+            return {
+              message: `I couldn't understand the time you provided: "${parameters.timeExpr}". Please use expressions like "5 PM", "9:30 AM", or "noon".`,
+              error: error.message,
+              conversationId: req.body.conversationId
+            };
+          } else if (error.message.includes('Meeting not found')) {
+            return {
+              message: `I couldn't find the meeting you specified. Please check the date and time, or try listing your upcoming meetings first.`,
+              error: error.message,
+              conversationId: req.body.conversationId
+            };
+          }
+          
+          return {
+            message: "Sorry, I encountered an error while trying to cancel the meeting. Please try again.",
+            error: error.message,
+            conversationId: req.body.conversationId
+          };
+        }
+      }
+
       case 'SHOW_ENROLLED_STUDENTS': {
         // Only allow teachers and super_admin to view enrolled students
         if (userRole !== 'teacher' && userRole !== 'super_admin') {
@@ -1747,6 +2156,8 @@ async function executeAction(intentData, originalMessage, userToken, req) {
       }
       
       default:
+        console.log('❌ DEBUG: No matching case found for intent:', intent);
+        console.log('🔍 DEBUG: Available cases: LIST_COURSES, CREATE_COURSE, LIST_ASSIGNMENTS, CREATE_ANNOUNCEMENT, GET_ANNOUNCEMENTS, GET_COURSE, CREATE_ASSIGNMENT, INVITE_STUDENTS, INVITE_TEACHERS, PROVIDE_MATERIALS, HELP, CHECK_ASSIGNMENT_SUBMISSIONS, GRADE_ASSIGNMENT, CREATE_MEETING, SHOW_ENROLLED_STUDENTS');
         return "I'm not sure how to handle that request. Please try again or ask for help.";
     }
   } catch (error) {

@@ -24,6 +24,11 @@ function calculateDateFromExpression(dateExpr) {
     }
   }
   
+  // Handle "today"
+  if (expr === 'today') {
+    return today.toISOString().split('T')[0];
+  }
+  
   // Handle "tomorrow"
   if (expr === 'tomorrow') {
     const tomorrow = new Date(today);
@@ -71,7 +76,21 @@ function convertTimeExpression(timeExpr) {
   // Handle "midnight"
   if (expr === 'midnight') return '00:00';
   
-  // Handle "X AM/PM" format
+  // Handle "X:XX AM/PM" format (with minutes)
+  const timeWithMinutesMatch = expr.match(/(\d+):(\d+)\s*(am|pm)/);
+  if (timeWithMinutesMatch) {
+    let [_, hours, minutes, meridiem] = timeWithMinutesMatch;
+    hours = parseInt(hours);
+    minutes = parseInt(minutes);
+    
+    // Convert to 24-hour format
+    if (meridiem === 'pm' && hours !== 12) hours += 12;
+    if (meridiem === 'am' && hours === 12) hours = 0;
+    
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+  }
+  
+  // Handle "X AM/PM" format (hours only)
   const timeMatch = expr.match(/(\d+)\s*(am|pm)/);
   if (timeMatch) {
     let [_, hours, meridiem] = timeMatch;

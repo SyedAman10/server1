@@ -10,6 +10,7 @@ const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
  * This is a fallback when the Gemini API is not available
  */
 function detectIntentFallback(message, conversationId) {
+  console.log('🔍 DEBUG: detectIntentFallback called with message:', message);
   const lowerMessage = message.toLowerCase();
   const lastMessage = conversationId ? getLastMessage(conversationId) : null;
   const lastMessages = conversationId ? getLastMessages(conversationId, 3) : [];
@@ -55,8 +56,207 @@ function detectIntentFallback(message, conversationId) {
     };
   }
   
+  // Delete/Cancel meeting - MUST come BEFORE UPDATE_MEETING to prevent false positives
+  if (
+    (lowerMessage.includes('cancel') || lowerMessage.includes('delete') || lowerMessage.includes('remove')) && 
+    (lowerMessage.includes('meeting') || lowerMessage.includes('appointment') || lowerMessage.includes('call'))
+  ) {
+    console.log('🎯 DEBUG: DELETE_MEETING intent detected!');
+    
+    // Extract meeting details to identify which meeting to cancel
+    let dateExpr = '';
+    let timeExpr = '';
+    
+    // Extract date and time (e.g., "tomorrow at 5pm")
+    const dateTimeMatch = message.match(/(?:which is\s+)?(?:on\s+)?(today|tomorrow|next\s+\w+|in\s+\d+\s+weeks?|end\s+of\s+month)\s+(?:at\s+)?(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/i);
+    if (dateTimeMatch) {
+      dateExpr = dateTimeMatch[1].trim();
+      timeExpr = dateTimeMatch[2].trim();
+    }
+    
+    return {
+      intent: 'DELETE_MEETING',
+      confidence: 0.9,
+      parameters: {
+        ...(dateExpr ? { dateExpr } : {}),
+        ...(timeExpr ? { timeExpr } : {})
+      }
+    };
+  }
+  
+  // Update/Reschedule meeting - MUST come BEFORE CREATE_MEETING to prevent false positives
+  if (
+    (lowerMessage.includes('reschedule') || lowerMessage.includes('update') || lowerMessage.includes('change') || lowerMessage.includes('move')) && 
+    (lowerMessage.includes('meeting') || lowerMessage.includes('appointment') || lowerMessage.includes('call'))
+  ) {
+    console.log('🎯 DEBUG: UPDATE_MEETING intent detected!');
+    
+    // Extract current meeting details
+    let currentDateExpr = '';
+    let currentTimeExpr = '';
+    let newDateExpr = '';
+    let newTimeExpr = '';
+    let newDuration = null;
+    
+    // Extract current date/time (e.g., "today at 5pm")
+    const currentDateTimeMatch = message.match(/(?:which is\s+)?(?:on\s+)?(today|tomorrow|next\s+\w+|in\s+\d+\s+weeks?|end\s+of\s+month)\s+(?:at\s+)?(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/i);
+    if (currentDateTimeMatch) {
+      currentDateExpr = currentDateTimeMatch[1].trim();
+      currentTimeExpr = currentDateTimeMatch[2].trim();
+    }
+    
+    // Extract new date/time (e.g., "make it to 6pm tomorrow")
+    const newDateTimeMatch = message.match(/(?:make it\s+(?:to\s+)?|change it\s+(?:to\s+)?|reschedule\s+(?:to\s+)?)(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s+(today|tomorrow|next\s+\w+|in\s+\d+\s+weeks?|end\s+of\s+month)/i);
+    if (newDateTimeMatch) {
+      newTimeExpr = newDateTimeMatch[1].trim();
+      newDateExpr = newDateTimeMatch[2].trim();
+    }
+    
+    // Extract duration if mentioned
+    const durationMatch = message.match(/(?:for\s+)?(\d+)\s*(?:hour|minute|min|hr)/i);
+    if (durationMatch) {
+      const value = parseInt(durationMatch[1], 10);
+      if (message.toLowerCase().includes('minute') || message.toLowerCase().includes('min')) {
+        newDuration = value;
+      } else {
+        newDuration = value * 60; // Convert hours to minutes
+      }
+    }
+    
+    return {
+      intent: 'UPDATE_MEETING',
+      confidence: 0.9,
+      parameters: {
+        ...(currentDateExpr ? { currentDateExpr } : {}),
+        ...(currentTimeExpr ? { currentTimeExpr } : {}),
+        ...(newDateExpr ? { newDateExpr } : {}),
+        ...(newTimeExpr ? { newTimeExpr } : {}),
+        ...(newDuration ? { newDuration } : {})
+      }
+    };
+  }
+  
+  // Create meeting - MUST come BEFORE CREATE_COURSE to prevent false positives
+  console.log('🔍 DEBUG: Checking for meeting intent...');
+  console.log('🔍 DEBUG: lowerMessage:', lowerMessage);
+  console.log('🔍 DEBUG: Has create/schedule/set up:', lowerMessage.includes('create') || lowerMessage.includes('schedule') || lowerMessage.includes('set up'));
+  console.log('🔍 DEBUG: Has meeting/appointment/call:', lowerMessage.includes('meeting') || lowerMessage.includes('appointment') || lowerMessage.includes('call'));
+  
+  if (
+    (lowerMessage.includes('create') || lowerMessage.includes('schedule') || lowerMessage.includes('set up')) && 
+    (lowerMessage.includes('meeting') || lowerMessage.includes('appointment') || lowerMessage.includes('call'))
+  ) {
+    console.log('🎯 DEBUG: Meeting intent detected!');
+    // Extract meeting title
+    let title = '';
+    // Try different patterns for title extraction
+    const titlePatterns = [
+      // Pattern 1: "create meeting [title] with [email]"
+      /(?:create|schedule|set up)\s+(?:a\s+)?(?:meeting|appointment|call)\s+([^with]+?)\s+with/i,
+      // Pattern 2: "create meeting [title] at [time]"
+      /(?:create|schedule|set up)\s+(?:a\s+)?(?:meeting|appointment|call)\s+([^at]+?)\s+at/i,
+      // Pattern 3: "create meeting [title] on [date]"
+      /(?:create|schedule|set up)\s+(?:a\s+)?(?:meeting|appointment|call)\s+([^on]+?)\s+on/i,
+      // Pattern 4: "create meeting [title] for [time]"
+      /(?:create|schedule|set up)\s+(?:a\s+)?(?:meeting|appointment|call)\s+([^for]+?)\s+for/i,
+      // Pattern 5: "create meeting [title]" (end of message)
+      /(?:create|schedule|set up)\s+(?:a\s+)?(?:meeting|appointment|call)\s+(.+?)(?:\s+with|\s+at|\s+on|\s+for|$)/i
+    ];
+    
+    for (const pattern of titlePatterns) {
+      const match = message.match(pattern);
+      if (match && match[1]) {
+        title = match[1].trim();
+        break;
+      }
+    }
+    
+    // If no title found, use a default
+    if (!title) {
+      title = 'Meeting';
+    }
+    
+    // Extract attendees (emails)
+    const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+    const attendees = message.match(emailRegex) || [];
+    
+    // Extract date expressions
+    let dateExpr = '';
+    const datePatterns = [
+      /(?:on|at|for)\s+(today|tomorrow|next\s+\w+|in\s+\d+\s+weeks?|end\s+of\s+month)/i,
+      /(?:on|at|for)\s+(\w+\s+\d+)/i, // e.g., "December 15"
+      /(?:on|at|for)\s+(\d{1,2}\/\d{1,2})/i, // e.g., "12/15"
+      // New pattern for "today at 5pm" format
+      /(today|tomorrow|next\s+\w+|in\s+\d+\s+weeks?|end\s+of\s+month)\s+at/i
+    ];
+    
+    for (const pattern of datePatterns) {
+      const match = message.match(pattern);
+      if (match && match[1]) {
+        dateExpr = match[1].trim();
+        break;
+      }
+    }
+    
+    // Extract time expressions
+    let timeExpr = '';
+    const timePatterns = [
+      /(?:at|for)\s+(\d{1,2}:\d{2}\s*(?:am|pm)?)/i, // e.g., "5:30 PM"
+      /(?:at|for)\s+(\d{1,2}\s*(?:am|pm))/i, // e.g., "5 PM"
+      /(?:at|for)\s+(noon|midnight)/i,
+      // New pattern for "today at 5pm" format
+      /at\s+(\d{1,2}:\d{2}\s*(?:am|pm)?)/i, // e.g., "at 5:30 PM"
+      /at\s+(\d{1,2}\s*(?:am|pm))/i, // e.g., "at 5 PM"
+      /at\s+(noon|midnight)/i
+    ];
+    
+    for (const pattern of timePatterns) {
+      const match = message.match(pattern);
+      if (match && match[1]) {
+        timeExpr = match[1].trim();
+        break;
+      }
+    }
+    
+    // Extract duration (optional)
+    let duration = 60; // Default 1 hour
+    const durationMatch = message.match(/(?:for|duration|length)\s+(\d+)\s*(?:hour|minute|min|hr)/i);
+    if (durationMatch && durationMatch[1]) {
+      const value = parseInt(durationMatch[1], 10);
+      if (message.toLowerCase().includes('minute') || message.toLowerCase().includes('min')) {
+        duration = value;
+      } else {
+        duration = value * 60; // Convert hours to minutes
+      }
+    }
+    
+    // Extract description
+    let description = '';
+    const descMatch = message.match(/(?:about|regarding|for)\s+([^with]+?)(?:\s+with|\s+at|\s+on|\s+for|$)/i);
+    if (descMatch && descMatch[1]) {
+      description = descMatch[1].trim();
+    }
+    
+    return {
+      intent: 'CREATE_MEETING',
+      confidence: 0.9,
+      parameters: {
+        ...(title ? { title } : {}),
+        ...(attendees.length > 0 ? { attendees } : {}),
+        ...(dateExpr ? { dateExpr } : {}),
+        ...(timeExpr ? { timeExpr } : {}),
+        ...(duration !== 60 ? { duration } : {}),
+        ...(description ? { description } : {})
+      }
+    };
+  }
+  
   // Create course
+  console.log('🔍 DEBUG: Checking for course intent...');
+  console.log('🔍 DEBUG: Has create/make/new course:', lowerMessage.includes('create') || lowerMessage.includes('make') || lowerMessage.includes('new course'));
+  
   if (lowerMessage.includes('create') || lowerMessage.includes('make') || lowerMessage.includes('new course')) {
+    console.log('🎯 DEBUG: Course intent detected!');
     return {
       intent: 'CREATE_COURSE',
       confidence: 0.7,
@@ -381,6 +581,7 @@ function detectIntentFallback(message, conversationId) {
   }
   
   // Default to unknown
+  console.log('🔍 DEBUG: No specific intent detected, returning UNKNOWN');
   return {
     intent: 'UNKNOWN',
     confidence: 0.5,
@@ -392,6 +593,7 @@ function detectIntentFallback(message, conversationId) {
  * Detect the user's intent using Google's Gemini Flash API
  */
 async function detectIntent(message, conversationHistory, conversationId) {
+  console.log('🔍 DEBUG: detectIntent called with message:', message);
   try {
     // Format conversation history for Gemini
     const formattedHistory = conversationHistory
@@ -440,6 +642,9 @@ async function detectIntent(message, conversationHistory, conversationId) {
       - GRADE_ASSIGNMENT: User wants to grade a student's assignment (extract courseName, assignmentTitle, studentEmail, assignedGrade, draftGrade)
       - LIST_ASSIGNMENTS: User wants to see all assignments in a course (extract courseName or courseId)
       - SHOW_ENROLLED_STUDENTS: User wants to see the list of enrolled students in a course (extract courseName)
+      - CREATE_MEETING: User wants to create a meeting or schedule an appointment (extract title, attendees, dateExpr, timeExpr, duration, description)
+      - UPDATE_MEETING: User wants to update or reschedule an existing meeting (extract currentDateExpr, currentTimeExpr, newDateExpr, newTimeExpr, newDuration)
+      - DELETE_MEETING: User wants to cancel or delete an existing meeting (extract dateExpr, timeExpr)
       - PROCEED_WITH_AVAILABLE_INFO: User wants to skip providing more information and proceed with available data (e.g., user says "no", "skip", "that's all", "proceed", etc.)
       - HELP: User needs help or instructions
       - UNKNOWN: None of the above
@@ -474,6 +679,25 @@ async function detectIntent(message, conversationHistory, conversationId) {
       - studentEmail: The student's email (or name if email not provided)
       - assignedGrade: The grade to assign (final grade)
       - draftGrade: The draft grade (optional, visible only to teachers)
+      
+      For meeting creation, extract these fields if provided:
+      - title: The meeting title or subject
+      - attendees: Array of attendee email addresses
+      - dateExpr: Natural language date expression (e.g., "today", "tomorrow", "next Friday", "December 15")
+      - timeExpr: Natural language time expression (e.g., "5 PM", "9:30 AM", "noon")
+      - duration: Meeting duration in minutes (default: 60)
+      - description: Meeting description or agenda
+      
+      For meeting updates/rescheduling, extract these fields if provided:
+      - currentDateExpr: Current meeting date expression (e.g., "today", "tomorrow")
+      - currentTimeExpr: Current meeting time expression (e.g., "5pm", "9am")
+      - newDateExpr: New meeting date expression (e.g., "tomorrow", "next Friday")
+      - newTimeExpr: New meeting time expression (e.g., "6pm", "10am")
+      - newDuration: New meeting duration in minutes (optional)
+      
+      For meeting deletion/cancellation, extract these fields if provided:
+      - dateExpr: Meeting date expression (e.g., "today", "tomorrow")
+      - timeExpr: Meeting time expression (e.g., "5pm", "9am")
       
       For date and time expressions:
       - Use dueDateExpr for natural language date expressions like:
