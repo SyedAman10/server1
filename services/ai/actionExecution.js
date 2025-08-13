@@ -4,7 +4,7 @@ const jwt = require('jsonwebtoken');
 const { getUserByEmail } = require('../../models/user.model');
 const { generateConversationId } = require('./conversationManager');
 const { createAssignment, listAssignments } = require('../assignmentService');
-const { createMeeting, findMeetingByDateTime, updateMeeting, deleteMeeting } = require('../meetingService');
+const { createMeeting, findMeetingByDateTime, updateMeeting, deleteMeeting, listUpcomingMeetings } = require('../meetingService');
 
 /**
  * Reusable function to find and match courses by name
@@ -1872,6 +1872,86 @@ async function executeAction(intentData, originalMessage, userToken, req) {
         }
 
         return { message: `Grade updated for ${studentEmail} on "${assignmentTitle}".`, conversationId: req.body.conversationId };
+      }
+
+      case 'LIST_MEETINGS': {
+        console.log('🎯 DEBUG: LIST_MEETINGS case executed!');
+        
+        try {
+          // Extract user from JWT token
+          const token = userToken.split(' ')[1]; // Remove 'Bearer ' prefix
+          const decoded = jwt.verify(token, process.env.JWT_SECRET);
+          const user = await getUserByEmail(decoded.email);
+          
+          if (!user.access_token || !user.refresh_token) {
+            throw new Error('Missing required OAuth2 tokens');
+          }
+          
+          // List upcoming meetings from primary calendar
+          const meetings = await listUpcomingMeetings(
+            {
+              access_token: user.access_token,
+              refresh_token: user.refresh_token
+            },
+            'primary', // Use primary calendar
+            null, // timeMin
+            null, // timeMax
+            20 // Show up to 20 meetings
+          );
+
+          if (!meetings || meetings.length === 0) {
+            return {
+              message: "📅 **No upcoming meetings found.**\n\nYou don't have any scheduled meetings in your calendar.",
+              conversationId: req.body.conversationId
+            };
+          }
+
+          // Format the response message
+          let message = `📅 **Your Upcoming Meetings:**\n\n`;
+          
+          meetings.forEach((meeting, index) => {
+            const startTime = meeting.start.dateTime ? 
+              new Date(meeting.start.dateTime).toLocaleString() : 
+              new Date(meeting.start.date).toLocaleDateString();
+            
+            const endTime = meeting.end.dateTime ? 
+              new Date(meeting.end.dateTime).toLocaleString() : 
+              new Date(meeting.end.date).toLocaleDateString();
+            
+            message += `${index + 1}. **${meeting.summary || 'Untitled Meeting'}**\n`;
+            message += `   📅 **Start:** ${startTime}\n`;
+            message += `   📅 **End:** ${endTime}\n`;
+            
+            if (meeting.attendees && meeting.attendees.length > 0) {
+              const attendeeEmails = meeting.attendees.map(a => a.email).join(', ');
+              message += `   👥 **Attendees:** ${attendeeEmails}\n`;
+            }
+            
+            if (meeting.description) {
+              message += `   📝 **Description:** ${meeting.description.substring(0, 100)}${meeting.description.length > 100 ? '...' : ''}\n`;
+            }
+            
+            message += `   🔗 **Calendar Link:** ${meeting.htmlLink}\n\n`;
+          });
+          
+          message += `💡 **Total:** ${meetings.length} upcoming meeting(s)\n`;
+          message += `• You can create new meetings by saying "create meeting [title] with [email] at [time] on [date]"\n`;
+          message += `• Reschedule meetings by saying "reschedule my meeting at [time] to [new time]"\n`;
+          message += `• Cancel meetings by saying "cancel my meeting at [time]"`;
+          
+          return {
+            message: message,
+            meetings: meetings,
+            conversationId: req.body.conversationId
+          };
+          
+        } catch (error) {
+          console.error('Error in LIST_MEETINGS:', error);
+          return {
+            message: `❌ **Error listing meetings:** ${error.message}`,
+            conversationId: req.body.conversationId
+          };
+        }
       }
 
       case 'CREATE_MEETING': {

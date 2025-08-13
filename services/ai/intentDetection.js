@@ -136,15 +136,25 @@ function detectIntentFallback(message, conversationId) {
     };
   }
   
-  // Create meeting - MUST come BEFORE CREATE_COURSE to prevent false positives
-  console.log('🔍 DEBUG: Checking for meeting intent...');
-  console.log('🔍 DEBUG: lowerMessage:', lowerMessage);
-  console.log('🔍 DEBUG: Has create/schedule/set up:', lowerMessage.includes('create') || lowerMessage.includes('schedule') || lowerMessage.includes('set up'));
-  console.log('🔍 DEBUG: Has meeting/appointment/call:', lowerMessage.includes('meeting') || lowerMessage.includes('appointment') || lowerMessage.includes('call'));
-  
+  // List/Show meetings - MUST come BEFORE CREATE_MEETING to prevent false positives
   if (
-    (lowerMessage.includes('create') || lowerMessage.includes('schedule') || lowerMessage.includes('set up')) && 
+    (lowerMessage.includes('show') || lowerMessage.includes('list') || lowerMessage.includes('get all') || lowerMessage.includes('see all')) && 
     (lowerMessage.includes('meeting') || lowerMessage.includes('appointment') || lowerMessage.includes('call'))
+  ) {
+    console.log('🎯 DEBUG: LIST_MEETINGS intent detected!');
+    return {
+      intent: 'LIST_MEETINGS',
+      confidence: 0.9,
+      parameters: {}
+    };
+  }
+  
+  // Create meeting - MUST come BEFORE CREATE_COURSE to prevent false positives
+  // Only trigger if user explicitly wants to create/schedule something
+  if (
+    (lowerMessage.includes('create') || lowerMessage.includes('schedule') || lowerMessage.includes('set up') || lowerMessage.includes('book')) && 
+    (lowerMessage.includes('meeting') || lowerMessage.includes('appointment') || lowerMessage.includes('call')) &&
+    !lowerMessage.includes('show') && !lowerMessage.includes('list') && !lowerMessage.includes('get all') && !lowerMessage.includes('see all')
   ) {
     console.log('🎯 DEBUG: Meeting intent detected!');
     // Extract meeting title
@@ -676,6 +686,7 @@ async function detectIntent(message, conversationHistory, conversationId) {
       - LIST_ASSIGNMENTS: User wants to see all assignments in a course (extract courseName or courseId)
       - SHOW_ENROLLED_STUDENTS: User wants to see the list of enrolled students in a course (extract courseName)
       - CREATE_MEETING: User wants to create a meeting or schedule an appointment (extract title, attendees, dateExpr, timeExpr, duration, description)
+      - LIST_MEETINGS: User wants to see all meetings or list upcoming meetings (no parameters needed)
       - UPDATE_MEETING: User wants to update or reschedule an existing meeting (extract currentDateExpr, currentTimeExpr, newDateExpr, newTimeExpr, newDuration)
       - DELETE_MEETING: User wants to cancel or delete an existing meeting (extract dateExpr, timeExpr)
       - READ_EMAIL: User wants to read emails from a specific sender (extract senderEmail, limit, subject if specified)

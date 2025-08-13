@@ -5,9 +5,10 @@ const { calculateDateFromExpression, convertTimeExpression } = require('../utils
  * Create a meeting in Google Calendar
  * @param {Object} tokens - OAuth2 tokens (access_token, refresh_token)
  * @param {Object} meetingData - Meeting details
+ * @param {string} calendarId - Calendar ID (default: 'primary')
  * @returns {Promise<Object>} Created meeting object
  */
-async function createMeeting(tokens, meetingData) {
+async function createMeeting(tokens, meetingData, calendarId = 'primary') {
   try {
     const calendar = getCalendarClient(tokens);
     
@@ -79,9 +80,9 @@ async function createMeeting(tokens, meetingData) {
       },
     };
     
-    // Insert the event into the primary calendar
+    // Insert the event into the specified calendar
     const response = await calendar.events.insert({
-      calendarId: 'primary',
+      calendarId: calendarId,
       resource: event,
       sendUpdates: 'all', // Send invitations to attendees
     });
@@ -101,21 +102,30 @@ async function createMeeting(tokens, meetingData) {
 /**
  * List upcoming meetings from Google Calendar
  * @param {Object} tokens - OAuth2 tokens (access_token, refresh_token)
+ * @param {string} calendarId - Calendar ID (default: 'primary')
+ * @param {string} timeMin - Start time filter (ISO string)
+ * @param {string} timeMax - End time filter (ISO string)
  * @param {number} maxResults - Maximum number of meetings to return (default: 10)
  * @returns {Promise<Array>} Array of upcoming meetings
  */
-async function listUpcomingMeetings(tokens, maxResults = 10) {
+async function listUpcomingMeetings(tokens, calendarId = 'primary', timeMin = null, timeMax = null, maxResults = 10) {
   try {
     const calendar = getCalendarClient(tokens);
     
     const now = new Date();
-    const response = await calendar.events.list({
-      calendarId: 'primary',
-      timeMin: now.toISOString(),
+    const queryParams = {
+      calendarId: calendarId,
+      timeMin: timeMin || now.toISOString(),
       maxResults: maxResults,
       singleEvents: true,
       orderBy: 'startTime',
-    });
+    };
+
+    if (timeMax) {
+      queryParams.timeMax = timeMax;
+    }
+    
+    const response = await calendar.events.list(queryParams);
     
     return response.data.items || [];
     
@@ -209,7 +219,7 @@ async function findMeetingByDateTime(tokens, dateExpr, timeExpr) {
  * @param {string} eventId - Google Calendar event ID
  * @returns {Promise<Object>} Deletion result
  */
-async function deleteMeeting(tokens, eventId) {
+async function deleteMeeting(tokens, eventId, calendarId = 'primary') {
   try {
     console.log('🔍 DEBUG: deleteMeeting called with eventId:', eventId);
     
@@ -217,7 +227,7 @@ async function deleteMeeting(tokens, eventId) {
     
     // First, get the current event to get details for the response
     const currentEvent = await calendar.events.get({
-      calendarId: 'primary',
+      calendarId: calendarId,
       eventId: eventId,
     });
     
@@ -235,7 +245,7 @@ async function deleteMeeting(tokens, eventId) {
     
     // Delete the event
     await calendar.events.delete({
-      calendarId: 'primary',
+      calendarId: calendarId,
       eventId: eventId,
       sendUpdates: 'all', // Send cancellation to attendees
     });
@@ -259,7 +269,7 @@ async function deleteMeeting(tokens, eventId) {
  * @param {Object} updateData - Update data (dateExpr, timeExpr, duration, title, description, attendees)
  * @returns {Promise<Object>} Updated meeting object
  */
-async function updateMeeting(tokens, eventId, updateData) {
+async function updateMeeting(tokens, eventId, updateData, calendarId = 'primary') {
   try {
     console.log('🔍 DEBUG: updateMeeting called with:', {
       eventId,
@@ -270,7 +280,7 @@ async function updateMeeting(tokens, eventId, updateData) {
     
     // First, get the current event to preserve existing data
     const currentEvent = await calendar.events.get({
-      calendarId: 'primary',
+      calendarId: calendarId,
       eventId: eventId,
     });
     
@@ -343,14 +353,14 @@ async function updateMeeting(tokens, eventId, updateData) {
          
          // Insert the new timed event
          const newEventResponse = await calendar.events.insert({
-           calendarId: 'primary',
+           calendarId: calendarId,
            resource: newEvent,
            sendUpdates: 'all',
          });
          
          // Delete the old all-day event
          await calendar.events.delete({
-           calendarId: 'primary',
+           calendarId: calendarId,
            eventId: eventId,
          });
          
@@ -533,7 +543,7 @@ async function updateMeeting(tokens, eventId, updateData) {
      console.log('🔍 DEBUG: Using method:', method, 'for event update');
      
      const response = await calendar.events[method]({
-       calendarId: 'primary',
+       calendarId: calendarId,
        eventId: eventId,
        resource: method === 'update' ? { ...event, ...updateFields } : updateFields,
        sendUpdates: 'all', // Send updates to attendees
@@ -551,10 +561,34 @@ async function updateMeeting(tokens, eventId, updateData) {
   }
 }
 
+/**
+ * Get a specific meeting by ID
+ * @param {Object} tokens - OAuth2 tokens (access_token, refresh_token)
+ * @param {string} eventId - Event ID
+ * @param {string} calendarId - Calendar ID (default: 'primary')
+ * @returns {Promise<Object>} Meeting object
+ */
+async function getMeeting(tokens, eventId, calendarId = 'primary') {
+  try {
+    const calendar = getCalendarClient(tokens);
+    
+    const response = await calendar.events.get({
+      calendarId: calendarId,
+      eventId: eventId
+    });
+    
+    return response.data;
+  } catch (error) {
+    console.error('Error getting meeting:', error);
+    throw new Error(`Failed to get meeting: ${error.message}`);
+  }
+}
+
 module.exports = {
   createMeeting,
   listUpcomingMeetings,
   findMeetingByDateTime,
   updateMeeting,
-  deleteMeeting
+  deleteMeeting,
+  getMeeting
 };
