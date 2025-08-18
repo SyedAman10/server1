@@ -221,17 +221,54 @@ const handleMobileCallback = async (req, res) => {
     if (!code) {
       // Redirect with error
       console.log('❌ No code received, redirecting with error');
-      return res.redirect(`${EXPO_RETURN_URL}?error=NoCode`);
+      return res.redirect(`${EXPO_RETURN_URL}?error=NoCode&state=${state || 'unknown'}`);
     }
 
-    // Redirect to Expo return URL with code
-    console.log('✅ Code received, redirecting to Expo with code');
-    return res.redirect(`${EXPO_RETURN_URL}?code=${encodeURIComponent(code)}`);
+    // Validate the authorization code
+    if (code.length < 10) {
+      console.log('❌ Invalid code received, redirecting with error');
+      return res.redirect(`${EXPO_RETURN_URL}?error=InvalidCode&state=${state || 'unknown'}`);
+    }
+
+    // Check if the request wants JSON response (mobile app can set this header)
+    const wantsJson = req.headers['accept'] && req.headers['accept'].includes('application/json');
+    
+    if (wantsJson) {
+      // Return JSON response for mobile apps that can't handle redirects
+      console.log('📱 Mobile app requested JSON response');
+      return res.json({
+        success: true,
+        code: code,
+        state: state,
+        redirectUrl: `${EXPO_RETURN_URL}?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state || 'unknown')}`,
+        message: 'Authorization code received successfully'
+      });
+    }
+
+    // Redirect to Expo return URL with code and state
+    console.log('✅ Code received, redirecting to Expo with code and state');
+    const redirectUrl = `${EXPO_RETURN_URL}?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state || 'unknown')}`;
+    console.log('🔄 Full redirect URL:', redirectUrl);
+    
+    return res.redirect(redirectUrl);
   } catch (error) {
     console.error('Mobile callback error:', error);
     const EXPO_RETURN_URL = process.env.EXPO_RETURN_URL || 'exp://localhost:8082/--/auth/callback';
     console.log('❌ Error occurred, redirecting to Expo with error');
-    return res.redirect(`${EXPO_RETURN_URL}?error=AuthFailed`);
+    
+    // Check if the request wants JSON response
+    const wantsJson = req.headers['accept'] && req.headers['accept'].includes('application/json');
+    
+    if (wantsJson) {
+      return res.json({
+        success: false,
+        error: 'AuthFailed',
+        message: error.message,
+        redirectUrl: `${EXPO_RETURN_URL}?error=AuthFailed&message=${encodeURIComponent(error.message)}`
+      });
+    }
+    
+    return res.redirect(`${EXPO_RETURN_URL}?error=AuthFailed&message=${encodeURIComponent(error.message)}`);
   }
 };
 
