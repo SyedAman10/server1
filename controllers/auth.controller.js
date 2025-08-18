@@ -214,7 +214,7 @@ const handleMobileCallback = async (req, res) => {
     console.log('Mobile callback received:', { code, state });
     
     // Use environment variable for Expo return URL, fallback to localhost:8082
-    const EXPO_RETURN_URL = process.env.EXPO_RETURN_URL || 'exp://localhost:8082/--/auth/callback';
+    const EXPO_RETURN_URL = process.env.EXPO_RETURN_URL || 'exp://192.168.0.100:8081/--/auth/callback';
     
     console.log('🔗 Using Expo return URL:', EXPO_RETURN_URL);
 
@@ -253,7 +253,7 @@ const handleMobileCallback = async (req, res) => {
     return res.redirect(redirectUrl);
   } catch (error) {
     console.error('Mobile callback error:', error);
-    const EXPO_RETURN_URL = process.env.EXPO_RETURN_URL || 'exp://localhost:8082/--/auth/callback';
+    const EXPO_RETURN_URL = process.env.EXPO_RETURN_URL || 'exp://192.168.0.100:8081/--/auth/callback';
     console.log('❌ Error occurred, redirecting to Expo with error');
     
     // Check if the request wants JSON response
