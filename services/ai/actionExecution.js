@@ -435,6 +435,29 @@ async function executeAction(intentData, originalMessage, userToken, req) {
     }
 
     switch (intent) {
+      case 'GREETING': {
+        // Handle casual conversation - just respond naturally without executing any actions
+        const greetings = [
+          "Hello! 👋 How can I help you today?",
+          "Hi there! 😊 What would you like to do?",
+          "Hey! 👋 I'm here to help with your classroom tasks. What do you need?",
+          "Good to see you! 🌟 How can I assist you today?",
+          "Hello! ✨ I'm ready to help with courses, assignments, meetings, or anything else you need.",
+          "Hi! 🎓 I'm your classroom assistant. What can I help you with?",
+          "Hey there! 📚 Ready to help with your educational tasks. What do you need?",
+          "Good to see you! 🚀 I'm here to make your classroom management easier. What would you like to do?",
+          "Hello! 🌟 How's your day going? I'm here to help with any classroom tasks you have.",
+          "Hi! ✨ What would you like to work on today? I can help with courses, assignments, meetings, and more!"
+        ];
+        
+        const randomGreeting = greetings[Math.floor(Math.random() * greetings.length)];
+        
+        return {
+          message: randomGreeting,
+          conversationId: req.body.conversationId
+        };
+      }
+      
       case 'LIST_COURSES':
         // All users can view courses, but with different messaging
         if (userRole === 'student') {

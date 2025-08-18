@@ -212,18 +212,25 @@ const handleMobileCallback = async (req, res) => {
   try {
     const { code, state } = req.query;
     console.log('Mobile callback received:', { code, state });
-    const EXPO_RETURN_URL = 'exp://192.168.100.75:8081/--/auth/callback';
+    
+    // Use environment variable for Expo return URL, fallback to localhost:8082
+    const EXPO_RETURN_URL = process.env.EXPO_RETURN_URL || 'exp://localhost:8082/--/auth/callback';
+    
+    console.log('🔗 Using Expo return URL:', EXPO_RETURN_URL);
 
     if (!code) {
       // Redirect with error
+      console.log('❌ No code received, redirecting with error');
       return res.redirect(`${EXPO_RETURN_URL}?error=NoCode`);
     }
 
     // Redirect to Expo return URL with code
+    console.log('✅ Code received, redirecting to Expo with code');
     return res.redirect(`${EXPO_RETURN_URL}?code=${encodeURIComponent(code)}`);
   } catch (error) {
     console.error('Mobile callback error:', error);
-    const EXPO_RETURN_URL = 'exp://192.168.100.75:8081/--/auth/callback';
+    const EXPO_RETURN_URL = process.env.EXPO_RETURN_URL || 'exp://localhost:8082/--/auth/callback';
+    console.log('❌ Error occurred, redirecting to Expo with error');
     return res.redirect(`${EXPO_RETURN_URL}?error=AuthFailed`);
   }
 };

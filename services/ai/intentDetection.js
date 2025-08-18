@@ -623,6 +623,22 @@ function detectIntentFallback(message, conversationId) {
     };
   }
   
+  // Greeting and casual conversation
+  if (lowerMessage.includes('hi') || lowerMessage.includes('hello') || lowerMessage.includes('hey') || 
+      lowerMessage.includes('good morning') || lowerMessage.includes('good afternoon') || 
+      lowerMessage.includes('good evening') || lowerMessage.includes('how are you') ||
+      lowerMessage.includes('what\'s up') || lowerMessage.includes('how\'s it going') ||
+      lowerMessage.includes('sup') || lowerMessage.includes('yo') || lowerMessage.includes('morning') ||
+      lowerMessage.includes('afternoon') || lowerMessage.includes('evening') || 
+      lowerMessage.includes('nice to meet you') || lowerMessage.includes('pleasure') ||
+      lowerMessage.includes('thanks') || lowerMessage.includes('thank you') || lowerMessage.includes('thx')) {
+    return {
+      intent: 'GREETING',
+      confidence: 0.9,
+      parameters: {}
+    };
+  }
+  
   // Default to unknown
   console.log('🔍 DEBUG: No specific intent detected, returning UNKNOWN');
   return {
@@ -692,6 +708,8 @@ async function detectIntent(message, conversationHistory, conversationId) {
       - READ_EMAIL: User wants to read emails from a specific sender (extract senderEmail, limit, subject if specified)
       - SEND_EMAIL: User wants to send an email to someone (extract recipientEmail, subject, message, attachments if specified)
       - PROCEED_WITH_AVAILABLE_INFO: User wants to skip providing more information and proceed with available data (e.g., user says "no", "skip", "that's all", "proceed", etc.)
+      - GREETING: User is saying hello, hi, hey, good morning/afternoon/evening, how are you, what's up, thanks, or engaging in casual conversation (no action needed)
+        Examples: "hi", "hello", "hey there", "good morning", "how are you doing?", "thanks", "thank you"
       - HELP: User needs help or instructions
       - UNKNOWN: None of the above
       

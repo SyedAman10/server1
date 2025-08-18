@@ -10,16 +10,43 @@ const listCourses = async (req, res) => {
   try {
     const token = req.headers.authorization.split(' ')[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await getUserByEmail(decoded.email);    const classroom = getClassroomClient({
+    const user = await getUserByEmail(decoded.email);
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const classroom = getClassroomClient({
       access_token: user.access_token,
       refresh_token: user.refresh_token
     });
-    const result = await classroom.courses.list({
-      pageSize: 30,
-      teacherId: 'me'
-    });
+
+    let result;
+    
+    if (user.role === 'student') {
+      // For students: fetch courses they're enrolled in
+      console.log('DEBUG: Fetching courses for student:', user.email);
+      result = await classroom.courses.list({
+        pageSize: 30,
+        studentId: 'me'
+      });
+    } else if (user.role === 'teacher') {
+      // For teachers: fetch courses they're teaching (not enrolled in)
+      console.log('DEBUG: Fetching courses for teacher:', user.email);
+      result = await classroom.courses.list({
+        pageSize: 30,
+        teacherId: 'me'
+      });
+    } else {
+      // For other roles (like admin), fetch all courses they have access to
+      console.log('DEBUG: Fetching courses for role:', user.role);
+      result = await classroom.courses.list({
+        pageSize: 30
+      });
+    }
+
     console.log('DEBUG: listCourses returning courses:', result.data.courses ? result.data.courses.length : 'no courses');
-    res.json(result.data.courses);
+    res.json(result.data.courses || []);
   } catch (err) {
     console.error('Error listing courses:', err);
     res.status(500).json({ error: err.message });
@@ -31,14 +58,57 @@ const getCourse = async (req, res) => {
     const { courseId } = req.params;
     const token = req.headers.authorization.split(' ')[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await getUserByEmail(decoded.email);    const classroom = getClassroomClient({
+    const user = await getUserByEmail(decoded.email);
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const classroom = getClassroomClient({
       access_token: user.access_token,
       refresh_token: user.refresh_token
     });
-    const result = await classroom.courses.get({id: courseId });
-    res.json(result.data);
+
+    // First, get the course details
+    const courseResult = await classroom.courses.get({ id: courseId });
+    const course = courseResult.data;
+
+    // Check if user has access to this course based on their role
+    if (user.role === 'student') {
+      // For students: check if they're enrolled in this course
+      try {
+        await classroom.courses.students.get({
+          courseId: courseId,
+          userId: 'me'
+        });
+      } catch (err) {
+        if (err.code === 404) {
+          return res.status(403).json({ error: 'You are not enrolled in this course' });
+        }
+        throw err;
+      }
+    } else if (user.role === 'teacher') {
+      // For teachers: check if they're teaching this course
+      try {
+        await classroom.courses.teachers.get({
+          courseId: courseId,
+          userId: 'me'
+        });
+      } catch (err) {
+        if (err.code === 404) {
+          return res.status(403).json({ error: 'You are not teaching this course' });
+        }
+        throw err;
+      }
+    }
+    // For other roles (like admin), allow access to all courses
+
+    res.json(course);
   } catch (err) {
     console.error('Error getting course:', err);
+    if (err.code === 404) {
+      return res.status(404).json({ error: 'Course not found' });
+    }
     res.status(500).json({ error: err.message });
   }
 };
@@ -52,6 +122,15 @@ const createCourse = async (req, res) => {
     const token = req.headers.authorization.split(' ')[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await getUserByEmail(decoded.email);
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Only teachers can create courses
+    if (user.role !== 'teacher') {
+      return res.status(403).json({ error: 'Only teachers can create courses' });
+    }
     
     // Ensure we have valid tokens
     if (!user.access_token || !user.refresh_token) {
@@ -115,10 +194,34 @@ const updateCourse = async (req, res) => {
     const { courseId } = req.params;
     const token = req.headers.authorization.split(' ')[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await getUserByEmail(decoded.email);    const classroom = getClassroomClient({
+    const user = await getUserByEmail(decoded.email);
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Only teachers can update courses
+    if (user.role !== 'teacher') {
+      return res.status(403).json({ error: 'Only teachers can update courses' });
+    }
+
+    const classroom = getClassroomClient({
       access_token: user.access_token,
       refresh_token: user.refresh_token
     });
+
+    // Verify the teacher is teaching this course
+    try {
+      await classroom.courses.teachers.get({
+        courseId: courseId,
+        userId: 'me'
+      });
+    } catch (err) {
+      if (err.code === 404) {
+        return res.status(403).json({ error: 'You are not teaching this course' });
+      }
+      throw err;
+    }
     
     // Create update mask from the request body keys
     const updateMask = Object.keys(req.body).join(',');
@@ -138,13 +241,37 @@ const updateCourse = async (req, res) => {
 const deleteCourse = async (req, res) => {
   try {
     const { courseId } = req.params;
-    const token = req.headers.authorization.split(' ')[1];    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await getUserByEmail(decoded.email);
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Only teachers can delete courses
+    if (user.role !== 'teacher') {
+      return res.status(403).json({ error: 'Only teachers can delete courses' });
+    }
 
     const classroom = getClassroomClient({
       access_token: user.access_token,
       refresh_token: user.refresh_token
     });
+
+    // Verify the teacher is teaching this course
+    try {
+      await classroom.courses.teachers.get({
+        courseId: courseId,
+        userId: 'me'
+      });
+    } catch (err) {
+      if (err.code === 404) {
+        return res.status(403).json({ error: 'You are not teaching this course' });
+      }
+      throw err;
+    }
+
     await classroom.courses.delete({ id: courseId });
     res.status(204).send();
   } catch (err) {
@@ -156,13 +283,38 @@ const deleteCourse = async (req, res) => {
 const archiveCourse = async (req, res) => {
   try {
     const { courseId } = req.params;
-    const token = req.headers.authorization.split(' ')[1];    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const token = req.headers.authorization.split(' ')[1];
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await getUserByEmail(decoded.email);
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Only teachers can archive courses
+    if (user.role !== 'teacher') {
+      return res.status(403).json({ error: 'Only teachers can archive courses' });
+    }
 
     const classroom = getClassroomClient({
       access_token: user.access_token,
       refresh_token: user.refresh_token
-    });    const result = await classroom.courses.patch({
+    });
+
+    // Verify the teacher is teaching this course
+    try {
+      await classroom.courses.teachers.get({
+        courseId: courseId,
+        userId: 'me'
+      });
+    } catch (err) {
+      if (err.code === 404) {
+        return res.status(403).json({ error: 'You are not teaching this course' });
+      }
+      throw err;
+    }
+
+    const result = await classroom.courses.patch({
       id: courseId,
       updateMask: 'courseState',
       requestBody: { courseState: 'ARCHIVED' }
@@ -180,11 +332,33 @@ const createAnnouncement = async (req, res) => {
     const token = req.headers.authorization.split(' ')[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await getUserByEmail(decoded.email);
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Only teachers can create announcements
+    if (user.role !== 'teacher') {
+      return res.status(403).json({ error: 'Only teachers can create announcements' });
+    }
 
     const classroom = getClassroomClient({
       access_token: user.access_token,
       refresh_token: user.refresh_token
     });
+
+    // Verify the teacher is teaching this course
+    try {
+      await classroom.courses.teachers.get({
+        courseId: courseId,
+        userId: 'me'
+      });
+    } catch (err) {
+      if (err.code === 404) {
+        return res.status(403).json({ error: 'You are not teaching this course' });
+      }
+      throw err;
+    }
 
     const result = await classroom.courses.announcements.create({
       courseId,
@@ -224,11 +398,33 @@ const inviteStudents = async (req, res) => {
     const token = req.headers.authorization.split(' ')[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await getUserByEmail(decoded.email);
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Only teachers can invite students
+    if (user.role !== 'teacher') {
+      return res.status(403).json({ error: 'Only teachers can invite students' });
+    }
 
     const classroom = getClassroomClient({
       access_token: user.access_token,
       refresh_token: user.refresh_token
     });
+
+    // Verify the teacher is teaching this course
+    try {
+      await classroom.courses.teachers.get({
+        courseId: courseId,
+        userId: 'me'
+      });
+    } catch (err) {
+      if (err.code === 404) {
+        return res.status(403).json({ error: 'You are not teaching this course' });
+      }
+      throw err;
+    }
 
     // Create an invitation for the user
     const result = await classroom.invitations.create({
@@ -264,11 +460,33 @@ const inviteTeachers = async (req, res) => {
     const token = req.headers.authorization.split(' ')[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await getUserByEmail(decoded.email);
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Only teachers can invite other teachers
+    if (user.role !== 'teacher') {
+      return res.status(403).json({ error: 'Only teachers can invite other teachers' });
+    }
 
     const classroom = getClassroomClient({
       access_token: user.access_token,
       refresh_token: user.refresh_token
     });
+
+    // Verify the teacher is teaching this course
+    try {
+      await classroom.courses.teachers.get({
+        courseId: courseId,
+        userId: 'me'
+      });
+    } catch (err) {
+      if (err.code === 404) {
+        return res.status(403).json({ error: 'You are not teaching this course' });
+      }
+      throw err;
+    }
 
     // Create invitations for all teachers
     const invitationPromises = emails.map(email => 
@@ -306,10 +524,34 @@ const listStudents = async (req, res) => {
     const token = req.headers.authorization.split(' ')[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await getUserByEmail(decoded.email);
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Only teachers can list students
+    if (user.role !== 'teacher') {
+      return res.status(403).json({ error: 'Only teachers can view student lists' });
+    }
+
     const classroom = getClassroomClient({
       access_token: user.access_token,
       refresh_token: user.refresh_token
     });
+
+    // Verify the teacher is teaching this course
+    try {
+      await classroom.courses.teachers.get({
+        courseId: courseId,
+        userId: 'me'
+      });
+    } catch (err) {
+      if (err.code === 404) {
+        return res.status(403).json({ error: 'You are not teaching this course' });
+      }
+      throw err;
+    }
+
     const result = await classroom.courses.students.list({ courseId });
     console.log('DEBUG listStudents result:', result.data);
     res.json(result.data.students || []);
@@ -327,10 +569,44 @@ const getAnnouncements = async (req, res) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await getUserByEmail(decoded.email);
     
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
     const classroom = getClassroomClient({
       access_token: user.access_token,
       refresh_token: user.refresh_token
     });
+
+    // Check if user has access to this course based on their role
+    if (user.role === 'student') {
+      // For students: check if they're enrolled in this course
+      try {
+        await classroom.courses.students.get({
+          courseId: courseId,
+          userId: 'me'
+        });
+      } catch (err) {
+        if (err.code === 404) {
+          return res.status(403).json({ error: 'You are not enrolled in this course' });
+        }
+        throw err;
+      }
+    } else if (user.role === 'teacher') {
+      // For teachers: check if they're teaching this course
+      try {
+        await classroom.courses.teachers.get({
+          courseId: courseId,
+          userId: 'me'
+        });
+      } catch (err) {
+        if (err.code === 404) {
+          return res.status(403).json({ error: 'You are not teaching this course' });
+        }
+        throw err;
+      }
+    }
+    // For other roles (like admin), allow access to all courses
     
     const result = await classroom.courses.announcements.list({ 
       courseId: courseId,
@@ -352,10 +628,32 @@ const getEnrolledStudents = async (req, res) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await getUserByEmail(decoded.email);
     
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Only teachers can view enrolled students
+    if (user.role !== 'teacher') {
+      return res.status(403).json({ error: 'Only teachers can view enrolled students' });
+    }
+
     const classroom = getClassroomClient({
       access_token: user.access_token,
       refresh_token: user.refresh_token
     });
+
+    // Verify the teacher is teaching this course
+    try {
+      await classroom.courses.teachers.get({
+        courseId: courseId,
+        userId: 'me'
+      });
+    } catch (err) {
+      if (err.code === 404) {
+        return res.status(403).json({ error: 'You are not teaching this course' });
+      }
+      throw err;
+    }
     
     const result = await classroom.courses.students.list({ 
       courseId: courseId,
@@ -385,10 +683,44 @@ const getGrades = async (req, res) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await getUserByEmail(decoded.email);
     
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
     const classroom = getClassroomClient({
       access_token: user.access_token,
       refresh_token: user.refresh_token
     });
+
+    // Check if user has access to this course based on their role
+    if (user.role === 'student') {
+      // For students: check if they're enrolled in this course
+      try {
+        await classroom.courses.students.get({
+          courseId: courseId,
+          userId: 'me'
+        });
+      } catch (err) {
+        if (err.code === 404) {
+          return res.status(403).json({ error: 'You are not enrolled in this course' });
+        }
+        throw err;
+      }
+    } else if (user.role === 'teacher') {
+      // For teachers: check if they're teaching this course
+      try {
+        await classroom.courses.teachers.get({
+          courseId: courseId,
+          userId: 'me'
+        });
+      } catch (err) {
+        if (err.code === 404) {
+          return res.status(403).json({ error: 'You are not teaching this course' });
+        }
+        throw err;
+      }
+    }
+    // For other roles (like admin), allow access to all courses
     
     // First get all course work (assignments)
     const courseWorkResult = await classroom.courses.courseWork.list({
