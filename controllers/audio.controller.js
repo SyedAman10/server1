@@ -8,6 +8,13 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+// Log OpenAI configuration for debugging
+console.log('🔧 OpenAI Configuration:');
+console.log('  - API Key Set:', process.env.OPENAI_API_KEY ? '✅ Yes' : '❌ No');
+console.log('  - API Key Length:', process.env.OPENAI_API_KEY ? process.env.OPENAI_API_KEY.length : 'N/A');
+console.log('  - API Key Prefix:', process.env.OPENAI_API_KEY ? process.env.OPENAI_API_KEY.substring(0, 7) + '...' : 'N/A');
+console.log('  - Environment:', process.env.NODE_ENV || 'development');
+
 // Configure multer for audio file uploads
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -68,6 +75,12 @@ async function audioMessageController(req, res) {
       try {
         // Step 1: Convert audio to text using OpenAI Whisper
         console.log('🎤 Converting audio to text...');
+        console.log('  - Audio file path:', audioFilePath);
+        console.log('  - File size:', (fs.statSync(audioFilePath).size / 1024 / 1024).toFixed(2) + ' MB');
+        console.log('  - Using OpenAI API key:', process.env.OPENAI_API_KEY ? 
+          process.env.OPENAI_API_KEY.substring(0, 7) + '...' + process.env.OPENAI_API_KEY.substring(process.env.OPENAI_API_KEY.length - 4) : 
+          'NOT SET');
+        
         const transcription = await openai.audio.transcriptions.create({
           file: fs.createReadStream(audioFilePath),
           model: "whisper-1",
@@ -80,23 +93,49 @@ async function audioMessageController(req, res) {
         // Step 2: Send the transcribed text to your existing AI message endpoint
         console.log('🤖 Sending to AI message system...');
         
-        // Import your existing AI message handler
-        const { handleMessage } = require('./ai-agent.controller');
+        // Import the AI services directly instead of trying to mock the request
+        const { detectIntent } = require('../services/ai/intentDetection');
+        const { executeAction } = require('../services/ai/actionExecution');
+        const {
+          getConversation,
+          addMessage,
+          updateContext
+        } = require('../services/ai/conversationManager');
         
-        // Create a mock request object for the AI message handler
-        const mockReq = {
-          body: {
-            message: transcribedText,
-            conversationId: conversationId,
-            // Add any other required fields
-          },
-          headers: req.headers,
-          protocol: req.protocol,
-          get: req.get.bind(req)
-        };
+        // Get user token from the original request
+        const userToken = req.headers.authorization;
+        
+        if (!userToken) {
+          return res.status(401).json({
+            error: 'Authorization required',
+            message: 'Please provide a valid authorization token'
+          });
+        }
 
-        // Call your existing AI message handler
-        const aiResponse = await handleMessage(mockReq, res);
+        // Get or create conversation
+        const conversation = getConversation(conversationId);
+        
+        // Add user message to conversation
+        addMessage(conversation.id, transcribedText);
+
+        // Get conversation history for better intent detection
+        const history = getFormattedHistory(conversation.id);
+
+        // Detect intent from the transcribed text with conversation history
+        const intentData = await detectIntent(transcribedText, history);
+        console.log('🎯 Detected intent:', intentData);
+
+        // Execute action based on intent
+        const aiResult = await executeAction(intentData, transcribedText, userToken, req);
+        console.log('🤖 AI response:', aiResult);
+
+        // Add AI response to conversation
+        addMessage(conversation.id, aiResult.message || aiResult, 'assistant');
+
+        // Update conversation context if needed
+        if (aiResult.context) {
+          updateContext(conversation.id, aiResult.context);
+        }
 
         // Clean up the uploaded audio file
         fs.unlinkSync(audioFilePath);
@@ -105,7 +144,7 @@ async function audioMessageController(req, res) {
         return res.json({
           success: true,
           transcribedText: transcribedText,
-          aiResponse: aiResponse,
+          aiResponse: aiResult,
           conversationId: conversationId
         });
 
@@ -115,10 +154,50 @@ async function audioMessageController(req, res) {
           fs.unlinkSync(audioFilePath);
         }
 
-        console.error('Audio processing error:', error);
-        return res.status(500).json({
+        // Enhanced error logging for debugging
+        console.error('❌ Audio processing error:', {
+          error: error.message,
+          type: error.type,
+          code: error.code,
+          status: error.status,
+          response: error.response?.data,
+          apiKeyUsed: process.env.OPENAI_API_KEY ? 
+            process.env.OPENAI_API_KEY.substring(0, 7) + '...' + process.env.OPENAI_API_KEY.substring(process.env.OPENAI_API_KEY.length - 4) : 
+            'NOT SET',
+          environment: process.env.NODE_ENV || 'development',
+          timestamp: new Date().toISOString(),
+          audioFile: audioFilePath,
+          conversationId: conversationId
+        });
+
+        // Provide more specific error messages
+        let errorMessage = 'Audio processing failed';
+        let statusCode = 500;
+
+        if (error.code === 'invalid_api_key') {
+          errorMessage = 'OpenAI API key is invalid or expired';
+          statusCode = 401;
+        } else if (error.code === 'insufficient_quota') {
+          errorMessage = 'OpenAI API quota exceeded';
+          statusCode = 429;
+        } else if (error.code === 'rate_limit_exceeded') {
+          errorMessage = 'OpenAI API rate limit exceeded';
+          statusCode = 429;
+        } else if (error.message.includes('API key')) {
+          errorMessage = 'OpenAI API key configuration error';
+          statusCode = 401;
+        }
+
+        return res.status(statusCode).json({
           error: 'Audio processing failed',
-          message: error.message
+          message: errorMessage,
+          details: {
+            originalError: error.message,
+            errorCode: error.code,
+            suggestion: error.code === 'invalid_api_key' ? 
+              'Please check your OPENAI_API_KEY environment variable' : 
+              'Please try again later or contact support'
+          }
         });
       }
     });
@@ -139,7 +218,53 @@ function generateConversationId() {
   return 'conv_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
 }
 
+/**
+ * Validate OpenAI configuration
+ */
+async function validateOpenAIConfig() {
+  try {
+    console.log('🔍 Validating OpenAI configuration...');
+    
+    if (!process.env.OPENAI_API_KEY) {
+      console.error('❌ OPENAI_API_KEY environment variable is not set');
+      return false;
+    }
+
+    if (process.env.OPENAI_API_KEY.length < 20) {
+      console.error('❌ OPENAI_API_KEY appears to be too short');
+      return false;
+    }
+
+    if (!process.env.OPENAI_API_KEY.startsWith('sk-')) {
+      console.error('❌ OPENAI_API_KEY does not start with "sk-"');
+      return false;
+    }
+
+    // Test the API key with a simple request
+    try {
+      const response = await openai.models.list();
+      console.log('✅ OpenAI API key is valid and working');
+      console.log('  - Available models:', response.data.length);
+      return true;
+    } catch (error) {
+      console.error('❌ OpenAI API key validation failed:', {
+        error: error.message,
+        code: error.code,
+        status: error.status
+      });
+      return false;
+    }
+  } catch (error) {
+    console.error('❌ Error validating OpenAI configuration:', error.message);
+    return false;
+  }
+}
+
+// Validate configuration on module load
+validateOpenAIConfig();
+
 module.exports = {
   audioMessageController,
-  upload
+  upload,
+  validateOpenAIConfig
 };
