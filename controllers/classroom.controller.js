@@ -742,19 +742,43 @@ const getGrades = async (req, res) => {
         
         const submissions = submissionsResult.data.studentSubmissions || [];
         
-        submissions.forEach(submission => {
-          grades.push({
-            assignmentId: work.id,
-            assignmentTitle: work.title,
-            studentId: submission.userId,
-            studentEmail: submission.assignedGrade ? submission.assignedGrade : null,
-            grade: submission.assignedGrade,
-            maxPoints: work.maxPoints,
-            state: submission.state,
-            late: submission.late,
-            submittedAt: submission.submittedTime
-          });
-        });
+        // Process each submission and get student details
+        for (const submission of submissions) {
+          try {
+            // Get student profile information
+            const studentProfile = await classroom.userProfiles.get({
+              userId: submission.userId
+            });
+            
+            grades.push({
+              assignmentId: work.id,
+              assignmentTitle: work.title,
+              studentId: submission.userId,
+              studentName: studentProfile.data.name?.fullName || 'Unknown Name',
+              studentEmail: studentProfile.data.emailAddress || 'Unknown Email',
+              grade: submission.assignedGrade,
+              maxPoints: work.maxPoints,
+              state: submission.state,
+              late: submission.late,
+              submittedAt: submission.submittedTime
+            });
+          } catch (studentErr) {
+            console.error(`Error fetching student profile for ${submission.userId}:`, studentErr);
+            // Fallback with basic info if we can't get student profile
+            grades.push({
+              assignmentId: work.id,
+              assignmentTitle: work.title,
+              studentId: submission.userId,
+              studentName: 'Unknown Name',
+              studentEmail: 'Unknown Email',
+              grade: submission.assignedGrade,
+              maxPoints: work.maxPoints,
+              state: submission.state,
+              late: submission.late,
+              submittedAt: submission.submittedTime
+            });
+          }
+        }
       } catch (submissionErr) {
         console.error(`Error fetching submissions for assignment ${work.id}:`, submissionErr);
       }
