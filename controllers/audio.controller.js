@@ -99,7 +99,8 @@ async function audioMessageController(req, res) {
         const {
           getConversation,
           addMessage,
-          updateContext
+          updateContext,
+          getFormattedHistory
         } = require('../services/ai/conversationManager');
         
         // Get user token from the original request
