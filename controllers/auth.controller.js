@@ -46,8 +46,13 @@ const createOAuthClient = (callbackUrl) => {
 // Web OAuth client (uses backend callback URL)
 const webOAuthClient = createOAuthClient(getCallbackUrl());
 
-// Mobile OAuth client (uses a custom redirect URI that works with web clients)
-const mobileOAuthClient = createOAuthClient('https://class.xytek.ai/api/auth/google/mobile-callback');
+// Mobile OAuth client (uses dynamic callback URL)
+const getMobileCallbackUrl = () => {
+  // Use environment variable for mobile callback, fallback to backend callback
+  return process.env.MOBILE_CALLBACK_URL || getCallbackUrl();
+};
+
+const mobileOAuthClient = createOAuthClient(getMobileCallbackUrl());
 
 // Valid roles constant
 const VALID_ROLES = ['student', 'teacher', 'super_admin'];
@@ -210,24 +215,39 @@ const handleMobileAuth = async (req, res) => {
 // Handle Mobile Callback (for OAuth redirect)
 const handleMobileCallback = async (req, res) => {
   try {
-    const { code, state } = req.query;
-    console.log('Mobile callback received:', { code, state });
+    const { code, state, returnUrl } = req.query;
+    console.log('Mobile callback received:', { code, state, returnUrl });
     
-    // Use environment variable for Expo return URL, fallback to localhost:8082
-    const EXPO_RETURN_URL = process.env.EXPO_RETURN_URL || 'exp://127.0.0.1:8081/--/auth/callback';
+    // Parse state parameter for mobile OAuth (may contain role|returnUrl)
+    let userRole = state;
+    let encodedReturnUrl = null;
     
-    console.log('🔗 Using Expo return URL:', EXPO_RETURN_URL);
+    if (state && state.includes('|')) {
+      const [role, encodedUrl] = state.split('|');
+      userRole = role;
+      encodedReturnUrl = decodeURIComponent(encodedUrl);
+      console.log('📱 Parsed state parameter:', { role: userRole, returnUrl: encodedReturnUrl });
+    }
+    
+    // Get return URL from multiple sources (priority order)
+    let expoReturnUrl = returnUrl || 
+                       encodedReturnUrl ||
+                       req.headers['x-expo-return-url'] || 
+                       process.env.EXPO_RETURN_URL || 
+                       'exp://127.0.0.1:8081/--/auth/callback';
+    
+    console.log('🔗 Using Expo return URL:', expoReturnUrl);
 
     if (!code) {
       // Redirect with error
       console.log('❌ No code received, redirecting with error');
-      return res.redirect(`${EXPO_RETURN_URL}?error=NoCode&state=${state || 'unknown'}`);
+      return res.redirect(`${expoReturnUrl}?error=NoCode&state=${userRole || 'unknown'}`);
     }
 
     // Validate the authorization code
     if (code.length < 10) {
       console.log('❌ Invalid code received, redirecting with error');
-      return res.redirect(`${EXPO_RETURN_URL}?error=InvalidCode&state=${state || 'unknown'}`);
+      return res.redirect(`${expoReturnUrl}?error=InvalidCode&state=${userRole || 'unknown'}`);
     }
 
     // Check if the request wants JSON response (mobile app can set this header)
@@ -239,21 +259,26 @@ const handleMobileCallback = async (req, res) => {
       return res.json({
         success: true,
         code: code,
-        state: state,
-        redirectUrl: `${EXPO_RETURN_URL}?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state || 'unknown')}`,
+        role: userRole,
+        returnUrl: expoReturnUrl,
+        redirectUrl: `${expoReturnUrl}?code=${encodeURIComponent(code)}&role=${encodeURIComponent(userRole || 'unknown')}`,
         message: 'Authorization code received successfully'
       });
     }
 
-    // Redirect to Expo return URL with code and state
-    console.log('✅ Code received, redirecting to Expo with code and state');
-    const redirectUrl = `${EXPO_RETURN_URL}?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state || 'unknown')}`;
+    // Redirect to Expo return URL with code and role
+    console.log('✅ Code received, redirecting to Expo with code and role');
+    const redirectUrl = `${expoReturnUrl}?code=${encodeURIComponent(code)}&role=${encodeURIComponent(userRole || 'unknown')}`;
     console.log('🔄 Full redirect URL:', redirectUrl);
     
     return res.redirect(redirectUrl);
   } catch (error) {
     console.error('Mobile callback error:', error);
-    const EXPO_RETURN_URL = process.env.EXPO_RETURN_URL || 'exp://127.0.0.1:8081/--/auth/callback';
+    const expoReturnUrl = req.query.returnUrl || 
+                         req.headers['x-expo-return-url'] || 
+                         process.env.EXPO_RETURN_URL || 
+                         'exp://127.0.0.1:8081/--/auth/callback';
+    
     console.log('❌ Error occurred, redirecting to Expo with error');
     
     // Check if the request wants JSON response
@@ -264,17 +289,18 @@ const handleMobileCallback = async (req, res) => {
         success: false,
         error: 'AuthFailed',
         message: error.message,
-        redirectUrl: `${EXPO_RETURN_URL}?error=AuthFailed&message=${encodeURIComponent(error.message)}`
+        returnUrl: expoReturnUrl,
+        redirectUrl: `${expoReturnUrl}?error=AuthFailed&message=${encodeURIComponent(error.message)}`
       });
     }
     
-    return res.redirect(`${EXPO_RETURN_URL}?error=AuthFailed&message=${encodeURIComponent(error.message)}`);
+    return res.redirect(`${expoReturnUrl}?error=AuthFailed&message=${encodeURIComponent(error.message)}`);
   }
 };
 
 // Get Google OAuth URL
 const getAuthUrl = (req, res) => {
-  const { role, platform } = req.query;
+  const { role, platform, returnUrl } = req.query;
   if (!role || !VALID_ROLES.includes(role)) {
     return res.status(400).json({
       success: false,
@@ -284,6 +310,14 @@ const getAuthUrl = (req, res) => {
 
   // Use different OAuth client based on platform
   const oauthClient = platform === 'mobile' ? mobileOAuthClient : webOAuthClient;
+
+  // For mobile, include return URL in state parameter
+  let stateValue = role;
+  if (platform === 'mobile' && returnUrl) {
+    // Encode return URL and role in state parameter
+    stateValue = `${role}|${encodeURIComponent(returnUrl)}`;
+    console.log('📱 Mobile OAuth with return URL:', { role, returnUrl, stateValue });
+  }
 
   const url = oauthClient.generateAuthUrl({
     access_type: 'offline',
@@ -305,12 +339,14 @@ const getAuthUrl = (req, res) => {
       'https://www.googleapis.com/auth/spreadsheets.readonly'
     ],
     prompt: 'consent',
-    state: role
+    state: stateValue
   });
   
   console.log('🔗 Generated OAuth URL:', {
     platform: platform || 'web',
     role: role,
+    returnUrl: returnUrl || 'none',
+    state: stateValue,
     url: url
   });
   
