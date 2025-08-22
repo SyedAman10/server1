@@ -1,6 +1,7 @@
 const { google } = require('googleapis');
 const jwt = require('jsonwebtoken');
 const { upsertUser } = require('../models/user.model');
+const expoConfig = require('../config/expo');
 
 // Dynamic URLs based on environment
 const getBackendUrl = () => {
@@ -213,10 +214,10 @@ const handleMobileCallback = async (req, res) => {
     const { code, state } = req.query;
     console.log('Mobile callback received:', { code, state });
     
-    // Use environment variable for Expo returnRL, fallback to localhost:8082
-    const EXPO_RETURN_URL = process.env.EXPO_RETURN_URL || 'exp://127.0.0.1:8081/--/auth/callback';
+    // Get dynamic Expo return URL based on environment and client
+    const EXPO_RETURN_URL = getDynamicExpoReturnUrl(req);
     
-    console.log('🔗 Using Expo return URL:', EXPO_RETURN_URL);
+    console.log('🔗 Using dynamic Expo return URL:', EXPO_RETURN_URL);
 
     if (!code) {
       // Redirect with error
@@ -253,7 +254,7 @@ const handleMobileCallback = async (req, res) => {
     return res.redirect(redirectUrl);
   } catch (error) {
     console.error('Mobile callback error:', error);
-    const EXPO_RETURN_URL = process.env.EXPO_RETURN_URL || 'exp://127.0.0.1:8081/--/auth/callback';
+    const EXPO_RETURN_URL = getDynamicExpoReturnUrl(req);
     console.log('❌ Error occurred, redirecting to Expo with error');
     
     // Check if the request wants JSON response
@@ -270,6 +271,95 @@ const handleMobileCallback = async (req, res) => {
     
     return res.redirect(`${EXPO_RETURN_URL}?error=AuthFailed&message=${encodeURIComponent(error.message)}`);
   }
+};
+
+// Dynamic Expo return URL detection
+const getDynamicExpoReturnUrl = (req) => {
+  // Priority 1: Environment variable (for production/override)
+  if (process.env.EXPO_RETURN_URL) {
+    console.log('🔧 Using environment variable EXPO_RETURN_URL:', process.env.EXPO_RETURN_URL);
+    return process.env.EXPO_RETURN_URL;
+  }
+
+  // Priority 2: Check for team member override
+  const userEmail = req.user?.email || req.headers['x-user-email'];
+  if (userEmail && expoConfig.teamOverrides[userEmail]) {
+    const override = expoConfig.teamOverrides[userEmail];
+    if (override.preferredLocalIP && override.preferredPort) {
+      const teamUrl = `exp://${override.preferredLocalIP}:${override.preferredPort}/--/auth/callback`;
+      console.log('👥 Using team member override:', teamUrl);
+      return teamUrl;
+    }
+  }
+
+  // Priority 3: Detect client IP dynamically
+  const clientIP = req.headers['x-forwarded-for'] || 
+                   req.connection.remoteAddress || 
+                   req.socket.remoteAddress || 
+                   req.connection.socket?.remoteAddress || 
+                   '127.0.0.1';
+
+  // Priority 4: Use request host for production builds
+  const requestHost = req.get('host') || req.headers.host;
+  
+  // Priority 5: Check if we're in production
+  const isProduction = process.env.NODE_ENV === 'production';
+  
+  let expoReturnUrl;
+  
+  if (isProduction) {
+    // Production: Use your production Expo app scheme
+    expoReturnUrl = expoConfig.production.appScheme;
+    console.log('🏭 Production mode: Using app scheme:', expoReturnUrl);
+  } else {
+    // Development: Detect local IP dynamically
+    let localIP = clientIP === '127.0.0.1' || clientIP === '::1' ? 
+      getLocalNetworkIP() : clientIP;
+    
+    // Check if team member has preferred IP
+    if (userEmail && expoConfig.teamOverrides[userEmail]?.preferredLocalIP) {
+      localIP = expoConfig.teamOverrides[userEmail].preferredLocalIP;
+      console.log('👥 Using team member preferred IP:', localIP);
+    }
+    
+    // Use configured ports or fallback to common ones
+    const ports = expoConfig.development.ports;
+    const preferredPort = userEmail && expoConfig.teamOverrides[userEmail]?.preferredPort;
+    
+    if (preferredPort) {
+      expoReturnUrl = `exp://${localIP}:${preferredPort}/--/auth/callback`;
+      console.log('👥 Using team member preferred port:', preferredPort);
+    } else {
+      expoReturnUrl = `exp://${localIP}:${ports[0]}/--/auth/callback`;
+      console.log(`🔍 Using first configured port: ${ports[0]}`);
+    }
+  }
+  
+  console.log('🎯 Final Expo return URL:', expoReturnUrl);
+  return expoReturnUrl;
+};
+
+// Get local network IP (not localhost)
+const getLocalNetworkIP = () => {
+  try {
+    const { networkInterfaces } = require('os');
+    const nets = networkInterfaces();
+    
+    for (const name of Object.keys(nets)) {
+      for (const net of nets[name]) {
+        // Skip internal and non-IPv4 addresses
+        if (net.family === 'IPv4' && !net.internal) {
+          console.log('🌐 Detected local network IP:', net.address);
+          return net.address;
+        }
+      }
+    }
+  } catch (error) {
+    console.error('❌ Error detecting local IP:', error);
+  }
+  
+  // Fallback to localhost if detection fails
+  return '127.0.0.1';
 };
 
 // Get Google OAuth URL
