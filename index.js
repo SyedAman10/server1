@@ -68,64 +68,32 @@ app.get('/auth/callback', (req, res) => {
   console.log('🔗 OAuth callback received:', { code, state, error, message });
   
   if (error) {
-    // Redirect to Expo app with error
-    const deepLink = `aiclassroom://auth/callback?error=${encodeURIComponent(error)}&message=${encodeURIComponent(message || '')}`;
-    console.log('❌ Redirecting to app with error:', deepLink);
-    
-    // Send HTML that immediately redirects to the app
-    res.send(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Redirecting to App...</title>
-        </head>
-        <body>
-          <p>Redirecting to your app...</p>
-          <script>
-            window.location.href = "${deepLink}";
-          </script>
-        </body>
-      </html>
-    `);
+    // Return error as JSON instead of redirecting
+    console.log('❌ OAuth error received:', error, message);
+    return res.json({
+      success: false,
+      error: error,
+      message: message || 'Authentication error occurred',
+      state: state
+    });
   } else if (code) {
-    // Redirect to Expo app with success
-    const deepLink = `aiclassroom://auth/callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state || '')}`;
-    console.log('✅ Redirecting to app with success:', deepLink);
-    
-    // Send HTML that immediately redirects to the app
-    res.send(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Redirecting to App...</title>
-        </head>
-        <body>
-          <p>Redirecting to your app...</p>
-          <script>
-            window.location.href = "${deepLink}";
-          </script>
-        </body>
-      </html>
-    `);
+    // Return success as JSON instead of redirecting
+    console.log('✅ OAuth code received successfully:', code);
+    return res.json({
+      success: true,
+      code: code,
+      state: state,
+      message: 'Authorization code received successfully'
+    });
   } else {
-    // No code or error, redirect to app with error
-    const deepLink = `aiclassroom://auth/callback?error=NoCode&message=No authorization code received`;
-    console.log('❌ No code received, redirecting to app with error:', deepLink);
-    
-    res.send(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Redirecting to App...</title>
-        </head>
-        <body>
-          <p>Redirecting to your app...</p>
-          <script>
-            window.location.href = "${deepLink}";
-          </script>
-        </body>
-      </html>
-    `);
+    // No code or error, return error as JSON
+    console.log('❌ No code received');
+    return res.json({
+      success: false,
+      error: 'NoCode',
+      message: 'No authorization code received',
+      state: state
+    });
   }
 });
 
