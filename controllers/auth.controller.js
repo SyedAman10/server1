@@ -215,7 +215,7 @@ const handleMobileCallback = async (req, res) => {
     
     // For mobile OAuth, redirect to web page first, not directly to Expo deep link
     // The web page will then redirect to the Expo app using the deep link
-    const WEB_CALLBACK_URL = process.env.WEB_CALLBACK_URL || 'http://localhost:8081/auth/callback';
+    const WEB_CALLBACK_URL = process.env.WEB_CALLBACK_URL || 'https://class.xytek.ai/auth/callback';
     
     console.log('🔗 Using web callback URL:', WEB_CALLBACK_URL);
 
@@ -255,7 +255,7 @@ const handleMobileCallback = async (req, res) => {
     return res.redirect(redirectUrl);
   } catch (error) {
     console.error('Mobile callback error:', error);
-    const WEB_CALLBACK_URL = process.env.WEB_CALLBACK_URL || 'http://localhost:8081/auth/callback';
+    const WEB_CALLBACK_URL = process.env.WEB_CALLBACK_URL || 'https://class.xytek.ai/auth/callback';
     console.log('❌ Error occurred, redirecting to web page with error');
     
     // Check if the request wants JSON response

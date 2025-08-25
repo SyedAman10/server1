@@ -61,6 +61,74 @@ app.use('/api', assignmentRoutes); // Add assignment routes
 app.use('/api/audio', audioRoutes); // Mount audio routes
 app.use('/api/calendar', calendarRoutes); // Mount calendar routes
 
+// OAuth callback route for mobile apps
+app.get('/auth/callback', (req, res) => {
+  const { code, state, error, message } = req.query;
+  
+  console.log('🔗 OAuth callback received:', { code, state, error, message });
+  
+  if (error) {
+    // Redirect to Expo app with error
+    const deepLink = `aiclassroom://auth/callback?error=${encodeURIComponent(error)}&message=${encodeURIComponent(message || '')}`;
+    console.log('❌ Redirecting to app with error:', deepLink);
+    
+    // Send HTML that immediately redirects to the app
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Redirecting to App...</title>
+        </head>
+        <body>
+          <p>Redirecting to your app...</p>
+          <script>
+            window.location.href = "${deepLink}";
+          </script>
+        </body>
+      </html>
+    `);
+  } else if (code) {
+    // Redirect to Expo app with success
+    const deepLink = `aiclassroom://auth/callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state || '')}`;
+    console.log('✅ Redirecting to app with success:', deepLink);
+    
+    // Send HTML that immediately redirects to the app
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Redirecting to App...</title>
+        </head>
+        <body>
+          <p>Redirecting to your app...</p>
+          <script>
+            window.location.href = "${deepLink}";
+          </script>
+        </body>
+      </html>
+    `);
+  } else {
+    // No code or error, redirect to app with error
+    const deepLink = `aiclassroom://auth/callback?error=NoCode&message=No authorization code received`;
+    console.log('❌ No code received, redirecting to app with error:', deepLink);
+    
+    res.send(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Redirecting to App...</title>
+        </head>
+        <body>
+          <p>Redirecting to your app...</p>
+          <script>
+            window.location.href = "${deepLink}";
+          </script>
+        </body>
+      </html>
+    `);
+  }
+});
+
 // Debug endpoint to test routing
 app.post('/api/classroom/test', (req, res) => {
   console.log('DEBUG: Test POST endpoint hit');
