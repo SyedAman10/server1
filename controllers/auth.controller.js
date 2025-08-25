@@ -213,21 +213,22 @@ const handleMobileCallback = async (req, res) => {
     const { code, state } = req.query;
     console.log('Mobile callback received:', { code, state });
     
-    // Use environment variable for Expo returnRL, fallback to localhost:8082
-    const EXPO_RETURN_URL = process.env.EXPO_RETURN_URL || 'exp://127.0.0.1:8081/--/auth/callback';
+    // For mobile OAuth, redirect to web page first, not directly to Expo deep link
+    // The web page will then redirect to the Expo app using the deep link
+    const WEB_CALLBACK_URL = process.env.WEB_CALLBACK_URL || 'http://localhost:8081/auth/callback';
     
-    console.log('🔗 Using Expo return URL:', EXPO_RETURN_URL);
+    console.log('🔗 Using web callback URL:', WEB_CALLBACK_URL);
 
     if (!code) {
       // Redirect with error
       console.log('❌ No code received, redirecting with error');
-      return res.redirect(`${EXPO_RETURN_URL}?error=NoCode&state=${state || 'unknown'}`);
+      return res.redirect(`${WEB_CALLBACK_URL}?error=NoCode&state=${state || 'unknown'}`);
     }
 
     // Validate the authorization code
     if (code.length < 10) {
       console.log('❌ Invalid code received, redirecting with error');
-      return res.redirect(`${EXPO_RETURN_URL}?error=InvalidCode&state=${state || 'unknown'}`);
+      return res.redirect(`${WEB_CALLBACK_URL}?error=InvalidCode&state=${state || 'unknown'}`);
     }
 
     // Check if the request wants JSON response (mobile app can set this header)
@@ -240,21 +241,22 @@ const handleMobileCallback = async (req, res) => {
         success: true,
         code: code,
         state: state,
-        redirectUrl: `${EXPO_RETURN_URL}?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state || 'unknown')}`,
+        redirectUrl: `${WEB_CALLBACK_URL}?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state || 'unknown')}`,
         message: 'Authorization code received successfully'
       });
     }
 
-    // Redirect to Expo return URL with code and state
-    console.log('✅ Code received, redirecting to Expo with code and state');
-    const redirectUrl = `${EXPO_RETURN_URL}?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state || 'unknown')}`;
+    // Redirect to web page with code and state
+    // The web page will then redirect to the Expo app using the deep link
+    console.log('✅ Code received, redirecting to web page with code and state');
+    const redirectUrl = `${WEB_CALLBACK_URL}?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state || 'unknown')}`;
     console.log('🔄 Full redirect URL:', redirectUrl);
     
     return res.redirect(redirectUrl);
   } catch (error) {
     console.error('Mobile callback error:', error);
-    const EXPO_RETURN_URL = process.env.EXPO_RETURN_URL || 'exp://127.0.0.1:8081/--/auth/callback';
-    console.log('❌ Error occurred, redirecting to Expo with error');
+    const WEB_CALLBACK_URL = process.env.WEB_CALLBACK_URL || 'http://localhost:8081/auth/callback';
+    console.log('❌ Error occurred, redirecting to web page with error');
     
     // Check if the request wants JSON response
     const wantsJson = req.headers['accept'] && req.headers['accept'].includes('application/json');
@@ -264,11 +266,11 @@ const handleMobileCallback = async (req, res) => {
         success: false,
         error: 'AuthFailed',
         message: error.message,
-        redirectUrl: `${EXPO_RETURN_URL}?error=AuthFailed&message=${encodeURIComponent(error.message)}`
+        redirectUrl: `${WEB_CALLBACK_URL}?error=AuthFailed&message=${encodeURIComponent(error.message)}`
       });
     }
     
-    return res.redirect(`${EXPO_RETURN_URL}?error=AuthFailed&message=${encodeURIComponent(error.message)}`);
+    return res.redirect(`${WEB_CALLBACK_URL}?error=AuthFailed&message=${encodeURIComponent(error.message)}`);
   }
 };
 
