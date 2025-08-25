@@ -69,7 +69,7 @@ app.get('/auth/callback', (req, res) => {
   
   if (error) {
     // Redirect to Expo app with error
-    const deepLink = `aiclassroom://auth/callback?error=${encodeURIComponent(error)}&message=${encodeURIComponent(message || '')}`;
+    const deepLink = `exp://localhost:8081/--/auth/callback?error=${encodeURIComponent(error)}&message=${encodeURIComponent(message || '')}`;
     console.log('❌ Redirecting to app with error:', deepLink);
     
     // Send HTML that immediately redirects to the app
@@ -89,7 +89,7 @@ app.get('/auth/callback', (req, res) => {
     `);
   } else if (code) {
     // Redirect to Expo app with success
-    const deepLink = `aiclassroom://auth/callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state || '')}`;
+    const deepLink = `exp://localhost:8081/--/auth/callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state || '')}`;
     console.log('✅ Redirecting to app with success:', deepLink);
     
     // Send HTML that immediately redirects to the app
@@ -109,7 +109,7 @@ app.get('/auth/callback', (req, res) => {
     `);
   } else {
     // No code or error, redirect to app with error
-    const deepLink = `aiclassroom://auth/callback?error=NoCode&message=No authorization code received`;
+    const deepLink = `exp://localhost:8081/--/auth/callback?error=NoCode&message=No authorization code received`;
     console.log('❌ No code received, redirecting to app with error:', deepLink);
     
     res.send(`
