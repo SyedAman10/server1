@@ -292,31 +292,63 @@ const getAuthUrl = (req, res) => {
     });
   }
 
-  // Use different OAuth client based on platform
-  const oauthClient = platform === 'mobile' ? mobileOAuthClient : webOAuthClient;
-
-  const url = oauthClient.generateAuthUrl({
-    access_type: 'offline',
-    scope: [
-      'https://www.googleapis.com/auth/classroom.courses',
-      'https://www.googleapis.com/auth/classroom.coursework.students',
-      'https://www.googleapis.com/auth/classroom.announcements',
-      'https://www.googleapis.com/auth/calendar',
-      'https://www.googleapis.com/auth/meetings',
-      'https://www.googleapis.com/auth/gmail.send',
-      'https://www.googleapis.com/auth/gmail.readonly',
-      'https://www.googleapis.com/auth/contacts.readonly',
-      'https://www.googleapis.com/auth/documents',
-      'https://www.googleapis.com/auth/forms.body',
-      'https://www.googleapis.com/auth/userinfo.email',
-      'https://www.googleapis.com/auth/userinfo.profile',
-      'https://www.googleapis.com/auth/classroom.rosters',
-      'https://www.googleapis.com/auth/classroom.announcements',
-      'https://www.googleapis.com/auth/spreadsheets.readonly'
-    ],
-    prompt: 'consent',
-    state: role
-  });
+  let url;
+  
+  if (platform === 'mobile') {
+    // For mobile, manually construct the OAuth URL with the mobile callback
+    const mobileOAuthClient = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET,
+      'https://class.xytek.ai/api/auth/google/mobile-callback'
+    );
+    
+    url = mobileOAuthClient.generateAuthUrl({
+      access_type: 'offline',
+      scope: [
+        'https://www.googleapis.com/auth/classroom.courses',
+        'https://www.googleapis.com/auth/classroom.coursework.students',
+        'https://www.googleapis.com/auth/classroom.announcements',
+        'https://www.googleapis.com/auth/calendar',
+        'https://www.googleapis.com/auth/meetings',
+        'https://www.googleapis.com/auth/gmail.send',
+        'https://www.googleapis.com/auth/gmail.readonly',
+        'https://www.googleapis.com/auth/contacts.readonly',
+        'https://www.googleapis.com/auth/documents',
+        'https://www.googleapis.com/auth/forms.body',
+        'https://www.googleapis.com/auth/userinfo.email',
+        'https://www.googleapis.com/auth/userinfo.profile',
+        'https://www.googleapis.com/auth/classroom.rosters',
+        'https://www.googleapis.com/auth/classroom.announcements',
+        'https://www.googleapis.com/auth/spreadsheets.readonly'
+      ],
+      prompt: 'consent',
+      state: role
+    });
+  } else {
+    // For web, use the web OAuth client
+    url = webOAuthClient.generateAuthUrl({
+      access_type: 'offline',
+      scope: [
+        'https://www.googleapis.com/auth/classroom.courses',
+        'https://www.googleapis.com/auth/classroom.coursework.students',
+        'https://www.googleapis.com/auth/classroom.announcements',
+        'https://www.googleapis.com/auth/calendar',
+        'https://www.googleapis.com/auth/meetings',
+        'https://www.googleapis.com/auth/gmail.send',
+        'https://www.googleapis.com/auth/gmail.readonly',
+        'https://www.googleapis.com/auth/contacts.readonly',
+        'https://www.googleapis.com/auth/documents',
+        'https://www.googleapis.com/auth/forms.body',
+        'https://www.googleapis.com/auth/userinfo.email',
+        'https://www.googleapis.com/auth/userinfo.profile',
+        'https://www.googleapis.com/auth/classroom.rosters',
+        'https://www.googleapis.com/auth/classroom.announcements',
+        'https://www.googleapis.com/auth/spreadsheets.readonly'
+      ],
+      prompt: 'consent',
+      state: role
+    });
+  }
   
   console.log('🔗 Generated OAuth URL:', {
     platform: platform || 'web',
