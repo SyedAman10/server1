@@ -213,64 +213,72 @@ const handleMobileCallback = async (req, res) => {
     const { code, state } = req.query;
     console.log('Mobile callback received:', { code, state });
     
-    // For mobile OAuth, redirect to web page first, not directly to Expo deep link
-    // The web page will then redirect to the Expo app using the deep link
-    const WEB_CALLBACK_URL = process.env.WEB_CALLBACK_URL || 'https://class.xytek.ai/auth/callback';
-    
-    console.log('🔗 Using web callback URL:', WEB_CALLBACK_URL);
-
     if (!code) {
-      // Redirect with error
-      console.log('❌ No code received, redirecting with error');
-      return res.redirect(`${WEB_CALLBACK_URL}?error=NoCode&state=${state || 'unknown'}`);
+      console.log('❌ No code received');
+      return res.status(400).json({
+        success: false,
+        error: 'NoCode',
+        message: 'No authorization code received'
+      });
     }
 
     // Validate the authorization code
     if (code.length < 10) {
-      console.log('❌ Invalid code received, redirecting with error');
-      return res.redirect(`${WEB_CALLBACK_URL}?error=InvalidCode&state=${state || 'unknown'}`);
-    }
-
-    // Check if the request wants JSON response (mobile app can set this header)
-    const wantsJson = req.headers['accept'] && req.headers['accept'].includes('application/json');
-    
-    if (wantsJson) {
-      // Return JSON response for mobile apps that can't handle redirects
-      console.log('📱 Mobile app requested JSON response');
-      return res.json({
-        success: true,
-        code: code,
-        state: state,
-        redirectUrl: `${WEB_CALLBACK_URL}?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state || 'unknown')}`,
-        message: 'Authorization code received successfully'
+      console.log('❌ Invalid code received');
+      return res.status(400).json({
+        success: false,
+        error: 'InvalidCode',
+        message: 'Invalid authorization code'
       });
     }
 
-    // Redirect to web page with code and state
-    // The web page will then redirect to the Expo app using the deep link
-    console.log('✅ Code received, redirecting to web page with code and state');
-    const redirectUrl = `${WEB_CALLBACK_URL}?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state || 'unknown')}`;
-    console.log('🔄 Full redirect URL:', redirectUrl);
+    if (!state || !VALID_ROLES.includes(state)) {
+      console.log('❌ Invalid role in state:', state);
+      return res.status(400).json({
+        success: false,
+        error: 'InvalidRole',
+        message: 'Invalid role in state parameter'
+      });
+    }
+
+    console.log('🔄 Exchanging authorization code for tokens...');
     
-    return res.redirect(redirectUrl);
+    // Exchange the authorization code for tokens
+    const { tokens } = await mobileOAuthClient.getToken(code);
+    mobileOAuthClient.setCredentials(tokens);
+
+    console.log('✅ Tokens received from Google');
+
+    // Get user information from Google
+    const oauth2 = google.oauth2({ auth: mobileOAuthClient, version: 'v2' });
+    const { data: userInfo } = await oauth2.userinfo.get();
+    
+    console.log('👤 User info received:', { email: userInfo.email, name: userInfo.name });
+
+    // Handle user authentication and generate JWT
+    const user = await handleUserAuth(userInfo, tokens, state);
+
+    console.log('✅ Mobile OAuth completed successfully:', {
+      email: user.userData.email,
+      role: user.userData.role
+    });
+
+    // Return tokens directly to mobile app
+    res.json({
+      success: true,
+      token: user.token,
+      user: user.userData,
+      message: 'Mobile OAuth completed successfully'
+    });
+
   } catch (error) {
     console.error('Mobile callback error:', error);
-    const WEB_CALLBACK_URL = process.env.WEB_CALLBACK_URL || 'https://class.xytek.ai/auth/callback';
-    console.log('❌ Error occurred, redirecting to web page with error');
     
-    // Check if the request wants JSON response
-    const wantsJson = req.headers['accept'] && req.headers['accept'].includes('application/json');
-    
-    if (wantsJson) {
-      return res.json({
-        success: false,
-        error: 'AuthFailed',
-        message: error.message,
-        redirectUrl: `${WEB_CALLBACK_URL}?error=AuthFailed&message=${encodeURIComponent(error.message)}`
-      });
-    }
-    
-    return res.redirect(`${WEB_CALLBACK_URL}?error=AuthFailed&message=${encodeURIComponent(error.message)}`);
+    res.status(500).json({
+      success: false,
+      error: 'AuthFailed',
+      message: error.message
+    });
   }
 };
 
