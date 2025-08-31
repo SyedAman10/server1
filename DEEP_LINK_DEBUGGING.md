@@ -1,4 +1,4 @@
-# Deep Link Debugging Guide (JSON-Based Approach)
+# Deep Link Debugging Guide (Redirect-Based Approach)
 
 ## Problem
 The deep link is not redirecting to the mobile app when clicked, and we need comprehensive logging to debug this issue.
@@ -7,34 +7,20 @@ The deep link is not redirecting to the mobile app when clicked, and we need com
 
 ### 1. Enhanced Logging in Mobile Callback
 - **Backend Logs**: Detailed logging of OAuth callback processing
-- **JSON Response**: Returns deep link URL instead of HTML page
-- **Frontend Handling**: Frontend automatically redirects using the deep link URL
+- **Redirect to Frontend**: Backend redirects to frontend page instead of returning JSON
+- **Frontend Handling**: Frontend page automatically redirects to mobile app using deep link
 
 ### 2. New Endpoints
 - **`/api/auth/log-deep-link`**: Captures all deep link interactions
 - **`/api/auth/test-deep-link`**: Test deep link functionality without OAuth
 
-### 3. JSON Response Format
-The mobile callback now returns JSON instead of HTML:
+### 3. Redirect Flow
+The mobile callback now redirects to a frontend page instead of returning JSON:
 
-```json
-{
-  "success": true,
-  "deepLinkUrl": "xytekclassroom://auth?token=...&role=teacher&email=...",
-  "user": {
-    "email": "user@example.com",
-    "name": "User Name",
-    "picture": "https://...",
-    "role": "teacher"
-  },
-  "message": "OAuth completed successfully. Use deepLinkUrl to redirect to mobile app.",
-  "redirectInstructions": {
-    "method": "window.location.href",
-    "example": "window.location.href = \"xytekclassroom://auth?token=...\"",
-    "note": "Frontend should automatically redirect using the deepLinkUrl"
-  }
-}
-```
+1. **OAuth Callback**: Google redirects to `/api/auth/google/mobile-callback`
+2. **Backend Processing**: Backend processes OAuth and generates deep link
+3. **Frontend Redirect**: Backend redirects to frontend page with parameters
+4. **Auto-Redirect**: Frontend automatically redirects to mobile app
 
 ## How to Debug
 
@@ -57,15 +43,15 @@ Look for these log entries in your server console:
 👤 User info received: { email: "...", name: "..." }
 ✅ Mobile OAuth completed successfully: { email: "...", role: "teacher", tokenLength: 1234, tokenPreview: "eyJhbGciOiJIUzI1NiIs..." }
 🔗 Generated deep link URL: { scheme: "xytekclassroom", path: "/auth", tokenLength: 1234, role: "teacher", email: "...", fullUrl: "xytekclassroom://auth?..." }
-📤 Sending JSON response with deep link URL
+🔄 Redirecting to frontend with success: https://yourfrontend.com/oauth-callback?success=true&deepLinkUrl=...
 ```
 
-### Step 3: Check Frontend Response
-The frontend should receive a JSON response with the `deepLinkUrl` field and automatically redirect:
+### Step 3: Check Frontend Redirect
+The frontend should receive a redirect with URL parameters and automatically redirect:
 
-```javascript
-// Frontend automatically redirects using the deep link URL
-window.location.href = response.deepLinkUrl;
+```
+✅ OAuth successful, preparing to redirect to mobile app
+🚀 Attempting to redirect to mobile app...
 ```
 
 ### Step 4: Monitor Deep Link Interactions
@@ -86,36 +72,39 @@ When users interact with the page, logs are sent to `/api/auth/log-deep-link`:
 
 ## Frontend Implementation
 
-### Basic Frontend Handler
-```javascript
-// Function to handle OAuth callback response
-function handleOAuthCallback(response) {
-    if (response.success) {
-        // Success case - redirect to mobile app
-        const deepLinkUrl = response.deepLinkUrl;
-        console.log('✅ OAuth successful, redirecting to app:', deepLinkUrl);
-        
-        // Automatically redirect to mobile app
-        window.location.href = deepLinkUrl;
-    } else {
-        // Error case - redirect to error deep link
-        const errorDeepLink = response.deepLinkUrl;
-        console.log('❌ OAuth failed, redirecting to error deep link:', errorDeepLink);
-        
-        // Automatically redirect to error deep link
-        window.location.href = errorDeepLink;
-    }
-}
+### OAuth Callback Page
+The frontend needs an OAuth callback page (e.g., `/oauth-callback`) that:
 
-// Example usage in your OAuth callback page
-fetch('/api/auth/google/mobile-callback?' + new URLSearchParams(window.location.search))
-    .then(response => response.json())
-    .then(data => handleOAuthCallback(data))
-    .catch(error => console.error('Error:', error));
+1. **Receives URL parameters** from the backend redirect
+2. **Processes the deep link** automatically
+3. **Redirects to mobile app** using `window.location.href`
+
+### Example Frontend Handler
+```javascript
+// Get URL parameters from backend redirect
+const urlParams = new URLSearchParams(window.location.search);
+const success = urlParams.get('success');
+const deepLinkUrl = urlParams.get('deepLinkUrl');
+const role = urlParams.get('role');
+const email = urlParams.get('email');
+
+if (success === 'true' && deepLinkUrl) {
+    // Success case - automatically redirect to mobile app
+    console.log('✅ OAuth successful, redirecting to app');
+    setTimeout(() => {
+        window.location.href = deepLinkUrl;
+    }, 2000);
+} else if (error) {
+    // Error case - redirect to error deep link
+    const errorDeepLink = `xytekclassroom://auth?error=${encodeURIComponent(message)}`;
+    setTimeout(() => {
+        window.location.href = errorDeepLink;
+    }, 3000);
+}
 ```
 
 ### Complete Frontend Example
-See `mobile-oauth-handler.html` for a complete working example.
+See `oauth-callback.html` for a complete working example.
 
 ## Common Issues and Solutions
 
@@ -143,17 +132,17 @@ See `mobile-oauth-handler.html` for a complete working example.
 2. Verify parameter names match exactly
 3. Test URL decoding
 
-### Issue 3: JSON Response Not Received
-**Symptoms**: Frontend doesn't get the deep link URL
+### Issue 3: Frontend Page Not Receiving Parameters
+**Symptoms**: Frontend page loads but no deep link parameters
 **Causes**:
-- Backend error in OAuth processing
+- Backend redirect failed
+- Incorrect frontend URL
 - Network issues
-- Incorrect endpoint URL
 
 **Debug Steps**:
-1. Check backend server logs
-2. Verify the callback endpoint is working
-3. Test the endpoint directly
+1. Check backend server logs for redirect
+2. Verify frontend URL in backend configuration
+3. Check network tab for redirect chain
 
 ## Testing Commands
 
@@ -188,11 +177,11 @@ adb shell am start -W -a android.intent.action.VIEW -d "xytekclassroom://auth?to
 Collect these logs when testing:
 - OAuth callback processing
 - Deep link generation
-- JSON response creation
+- Frontend redirect URLs
 
 ### 2. Frontend Console Logs
 Collect these logs from the browser:
-- API response data
+- URL parameters received
 - Deep link redirect attempts
 - User interactions
 - Error messages
@@ -200,9 +189,9 @@ Collect these logs from the browser:
 ### 3. Network Requests
 Monitor these API calls:
 - `/api/auth/google/mobile-callback` GET request
+- Frontend redirect chain
 - `/api/auth/log-deep-link` POST requests
-- Any failed fetch requests
-- Network errors
+- Any failed requests
 
 ### 4. User Agent Information
 Collect:
@@ -214,10 +203,10 @@ Collect:
 ## Debugging Checklist
 
 - [ ] Test deep link endpoint works (`/api/auth/test-deep-link`)
-- [ ] Verify OAuth callback returns JSON with deepLinkUrl
-- [ ] Check frontend receives and processes JSON response
+- [ ] Verify OAuth callback redirects to frontend
+- [ ] Check frontend receives URL parameters
 - [ ] Verify automatic redirect to deep link works
-- [ ] Monitor network requests for callback endpoint
+- [ ] Monitor network requests for redirect chain
 - [ ] Test deep link in different browsers
 - [ ] Verify app URL scheme configuration
 - [ ] Check app deep link handling code
@@ -226,8 +215,8 @@ Collect:
 ## Next Steps
 
 1. **Test the deep link endpoint** to isolate the issue
-2. **Verify OAuth callback returns JSON** with deepLinkUrl
-3. **Implement frontend handler** to process JSON response
+2. **Verify OAuth callback redirects** to frontend page
+3. **Implement frontend OAuth callback page** to handle redirects
 4. **Test automatic redirect** to mobile app
 5. **Collect all logs** from backend and frontend
 6. **Share logs with frontend developer** for analysis
@@ -237,15 +226,15 @@ Collect:
 If you need help:
 1. Share the backend server logs
 2. Share the frontend console logs
-3. Share the JSON response from the callback
+3. Share the redirect URL chain
 4. Describe the exact behavior you're seeing
 5. Mention which device/browser you're testing with
 6. Include any error messages
 
-This JSON-based approach ensures that:
-1. ✅ No HTML pages are displayed
-2. ✅ Backend returns clean JSON data
-3. ✅ Frontend handles the redirect automatically
+This redirect-based approach ensures that:
+1. ✅ No JSON responses are displayed in browser
+2. ✅ Backend redirects to frontend page
+3. ✅ Frontend handles the deep link automatically
 4. ✅ Works in production environments
 5. ✅ Provides smooth user experience
-6. ✅ Follows modern API design patterns
+6. ✅ Follows OAuth redirect best practices

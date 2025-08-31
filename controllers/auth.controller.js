@@ -216,7 +216,7 @@ const handleMobileAuth = async (req, res) => {
   }
 };
 
-// Handle Mobile Callback (for OAuth redirect) - Redirects to frontend for handling
+// Handle Mobile Callback (for OAuth redirect) - Redirects directly to deep link
 const handleMobileCallback = async (req, res) => {
   try {
     const { code, state } = req.query;
@@ -230,28 +230,25 @@ const handleMobileCallback = async (req, res) => {
     
     if (!code) {
       console.log('❌ No code received');
-      // Redirect to frontend with error
-      const frontendUrl = getFrontendUrl();
-      const errorRedirectUrl = `${frontendUrl}/oauth-callback?error=NoCode&message=No authorization code received`;
-      console.log('🔄 Redirecting to frontend with error:', errorRedirectUrl);
-      return res.redirect(errorRedirectUrl);
+      // Redirect directly to error deep link
+      const errorDeepLink = `xytekclassroom://auth?error=${encodeURIComponent('No authorization code received')}`;
+      console.log('🔄 Redirecting directly to error deep link:', errorDeepLink);
+      return res.redirect(errorDeepLink);
     }
 
     // Validate the authorization code
     if (code.length < 10) {
       console.log('❌ Invalid code received');
-      const frontendUrl = getFrontendUrl();
-      const errorRedirectUrl = `${frontendUrl}/oauth-callback?error=InvalidCode&message=Invalid authorization code`;
-      console.log('🔄 Redirecting to frontend with error:', errorRedirectUrl);
-      return res.redirect(errorRedirectUrl);
+      const errorDeepLink = `xytekclassroom://auth?error=${encodeURIComponent('Invalid authorization code')}`;
+      console.log('🔄 Redirecting directly to error deep link:', errorDeepLink);
+      return res.redirect(errorDeepLink);
     }
 
     if (!state || !VALID_ROLES.includes(state)) {
       console.log('❌ Invalid role in state:', state);
-      const frontendUrl = getFrontendUrl();
-      const errorRedirectUrl = `${frontendUrl}/oauth-callback?error=InvalidRole&message=Invalid role in state parameter`;
-      console.log('🔄 Redirecting to frontend with error:', errorRedirectUrl);
-      return res.redirect(errorRedirectUrl);
+      const errorDeepLink = `xytekclassroom://auth?error=${encodeURIComponent('Invalid role in state parameter')}`;
+      console.log('🔄 Redirecting directly to error deep link:', errorDeepLink);
+      return res.redirect(errorDeepLink);
     }
 
     console.log('🔄 Exchanging authorization code for tokens...');
@@ -290,25 +287,181 @@ const handleMobileCallback = async (req, res) => {
       fullUrl: deepLinkUrl
     });
 
-    // Redirect to frontend with success parameters
-    const frontendUrl = getFrontendUrl();
-    const successRedirectUrl = `${frontendUrl}/oauth-callback?success=true&deepLinkUrl=${encodeURIComponent(deepLinkUrl)}&role=${encodeURIComponent(user.userData.role)}&email=${encodeURIComponent(user.userData.email)}&name=${encodeURIComponent(user.userData.name)}&picture=${encodeURIComponent(user.userData.picture)}`;
+    // Redirect directly to the deep link URL to open mobile app
+    console.log('🚀 Redirecting directly to deep link to open mobile app');
     
-    console.log('🔄 Redirecting to frontend with success:', successRedirectUrl);
+    // Send HTML page that automatically redirects to deep link
+    const htmlResponse = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Opening Mobile App</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            text-align: center; 
+            padding: 50px; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            margin: 0;
+        }
+        .container { 
+            max-width: 400px; 
+            margin: 0 auto; 
+            background: rgba(255,255,255,0.1); 
+            padding: 30px; 
+            border-radius: 15px; 
+            backdrop-filter: blur(10px);
+        }
+        .spinner { 
+            border: 3px solid rgba(255,255,255,0.3); 
+            border-top: 3px solid white; 
+            border-radius: 50%; 
+            width: 40px; 
+            height: 40px; 
+            animation: spin 1s linear infinite; 
+            margin: 20px auto; 
+        }
+        @keyframes spin { 
+            0% { transform: rotate(0deg); } 
+            100% { transform: rotate(360deg); } 
+        }
+        .fallback {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 10px;
+            display: none;
+        }
+        .fallback a { 
+            color: white; 
+            text-decoration: none; 
+            font-weight: bold; 
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>📱 Opening Mobile App</h2>
+        <p>Redirecting to your mobile app...</p>
+        <div class="spinner"></div>
+        
+        <div class="fallback">
+            <p>If you're not redirected automatically:</p>
+            <a href="${deepLinkUrl}">Click here to open app</a>
+        </div>
+    </div>
     
-    // Redirect to frontend page that will handle the deep link
-    res.redirect(successRedirectUrl);
+    <script>
+        console.log('📱 OAuth callback page loaded');
+        console.log('🔗 Deep link URL:', '${deepLinkUrl}');
+        
+        // Redirect immediately to deep link
+        console.log('🚀 Redirecting to mobile app...');
+        window.location.href = "${deepLinkUrl}";
+        
+        // Show fallback after 3 seconds if app doesn't open
+        setTimeout(function() {
+            document.querySelector('.fallback').style.display = 'block';
+        }, 3000);
+        
+        // Listen for page visibility changes (app switching)
+        document.addEventListener('visibilitychange', function() {
+            console.log('👁️ Visibility changed:', document.hidden ? 'hidden' : 'visible');
+            if (document.hidden) {
+                console.log('✅ App may have opened - page became hidden');
+            }
+        });
+        
+        // Listen for page blur (user switching to another app)
+        window.addEventListener('blur', function() {
+            console.log('🔀 Page lost focus - user switched to another app');
+        });
+        
+        console.log('📱 Deep link redirect setup complete');
+    </script>
+</body>
+</html>`;
+
+    // Send HTML response that immediately redirects to deep link
+    res.setHeader('Content-Type', 'text/html');
+    res.send(htmlResponse);
 
   } catch (error) {
     console.error('❌ Mobile callback error:', error);
     
-    // Redirect to frontend with error
-    const frontendUrl = getFrontendUrl();
-    const errorRedirectUrl = `${frontendUrl}/oauth-callback?error=AuthFailed&message=${encodeURIComponent(error.message)}`;
+    // Generate error deep link
+    const errorDeepLink = `xytekclassroom://auth?error=${encodeURIComponent(error.message)}`;
     
-    console.log('🔄 Redirecting to frontend with error:', errorRedirectUrl);
+    console.log('🚀 Redirecting to error deep link:', errorDeepLink);
     
-    res.redirect(errorRedirectUrl);
+    // Send HTML page that redirects to error deep link
+    const errorHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Authentication Error</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            text-align: center; 
+            padding: 50px; 
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+            color: white;
+            margin: 0;
+        }
+        .container { 
+            max-width: 400px; 
+            margin: 0 auto; 
+            background: rgba(255,255,255,0.1); 
+            padding: 30px; 
+            border-radius: 15px; 
+            backdrop-filter: blur(10px);
+        }
+        .fallback {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 10px;
+        }
+        .fallback a { 
+            color: white; 
+            text-decoration: none; 
+            font-weight: bold; 
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>❌ Authentication Error</h2>
+        <p>Something went wrong during authentication.</p>
+        <p>Error: ${error.message}</p>
+        
+        <div class="fallback">
+            <p>Redirecting to app with error...</p>
+            <a href="${errorDeepLink}">Click here to return to app</a>
+        </div>
+    </div>
+    
+    <script>
+        console.log('❌ Error page loaded');
+        console.log('🚨 Error:', '${error.message}');
+        
+        // Redirect to error deep link after a short delay
+        setTimeout(() => {
+            console.log('🚀 Redirecting to error deep link...');
+            window.location.href = "${errorDeepLink}";
+        }, 2000);
+    </script>
+</body>
+</html>`;
+    
+    res.setHeader('Content-Type', 'text/html');
+    res.status(500).send(errorHtml);
   }
 };
 
