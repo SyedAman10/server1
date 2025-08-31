@@ -216,7 +216,7 @@ const handleMobileAuth = async (req, res) => {
   }
 };
 
-// Handle Mobile Callback (for OAuth redirect) - Returns JSON for frontend handling
+// Handle Mobile Callback (for OAuth redirect) - Redirects to frontend for handling
 const handleMobileCallback = async (req, res) => {
   try {
     const { code, state } = req.query;
@@ -230,30 +230,28 @@ const handleMobileCallback = async (req, res) => {
     
     if (!code) {
       console.log('❌ No code received');
-      return res.status(400).json({
-        success: false,
-        error: 'NoCode',
-        message: 'No authorization code received'
-      });
+      // Redirect to frontend with error
+      const frontendUrl = getFrontendUrl();
+      const errorRedirectUrl = `${frontendUrl}/oauth-callback?error=NoCode&message=No authorization code received`;
+      console.log('🔄 Redirecting to frontend with error:', errorRedirectUrl);
+      return res.redirect(errorRedirectUrl);
     }
 
     // Validate the authorization code
     if (code.length < 10) {
       console.log('❌ Invalid code received');
-      return res.status(400).json({
-        success: false,
-        error: 'InvalidCode',
-        message: 'Invalid authorization code'
-      });
+      const frontendUrl = getFrontendUrl();
+      const errorRedirectUrl = `${frontendUrl}/oauth-callback?error=InvalidCode&message=Invalid authorization code`;
+      console.log('🔄 Redirecting to frontend with error:', errorRedirectUrl);
+      return res.redirect(errorRedirectUrl);
     }
 
     if (!state || !VALID_ROLES.includes(state)) {
       console.log('❌ Invalid role in state:', state);
-      return res.status(400).json({
-        success: false,
-        error: 'InvalidRole',
-        message: 'Invalid role in state parameter'
-      });
+      const frontendUrl = getFrontendUrl();
+      const errorRedirectUrl = `${frontendUrl}/oauth-callback?error=InvalidRole&message=Invalid role in state parameter`;
+      console.log('🔄 Redirecting to frontend with error:', errorRedirectUrl);
+      return res.redirect(errorRedirectUrl);
     }
 
     console.log('🔄 Exchanging authorization code for tokens...');
@@ -292,36 +290,25 @@ const handleMobileCallback = async (req, res) => {
       fullUrl: deepLinkUrl
     });
 
-    // Return JSON response with deep link URL for frontend to handle
-    console.log('📤 Sending JSON response with deep link URL');
+    // Redirect to frontend with success parameters
+    const frontendUrl = getFrontendUrl();
+    const successRedirectUrl = `${frontendUrl}/oauth-callback?success=true&deepLinkUrl=${encodeURIComponent(deepLinkUrl)}&role=${encodeURIComponent(user.userData.role)}&email=${encodeURIComponent(user.userData.email)}&name=${encodeURIComponent(user.userData.name)}&picture=${encodeURIComponent(user.userData.picture)}`;
     
-    res.json({
-      success: true,
-      deepLinkUrl: deepLinkUrl,
-      user: user.userData,
-      message: 'OAuth completed successfully. Use deepLinkUrl to redirect to mobile app.',
-      redirectInstructions: {
-        method: 'window.location.href',
-        example: `window.location.href = "${deepLinkUrl}"`,
-        note: 'Frontend should automatically redirect using the deepLinkUrl'
-      }
-    });
+    console.log('🔄 Redirecting to frontend with success:', successRedirectUrl);
+    
+    // Redirect to frontend page that will handle the deep link
+    res.redirect(successRedirectUrl);
 
   } catch (error) {
     console.error('❌ Mobile callback error:', error);
     
-    // Return error as JSON
-    res.status(500).json({
-      success: false,
-      error: 'AuthFailed',
-      message: error.message,
-      deepLinkUrl: `xytekclassroom://auth?error=${encodeURIComponent(error.message)}`,
-      redirectInstructions: {
-        method: 'window.location.href',
-        example: `window.location.href = "xytekclassroom://auth?error=${encodeURIComponent(error.message)}"`,
-        note: 'Frontend should redirect to error deep link'
-      }
-    });
+    // Redirect to frontend with error
+    const frontendUrl = getFrontendUrl();
+    const errorRedirectUrl = `${frontendUrl}/oauth-callback?error=AuthFailed&message=${encodeURIComponent(error.message)}`;
+    
+    console.log('🔄 Redirecting to frontend with error:', errorRedirectUrl);
+    
+    res.redirect(errorRedirectUrl);
   }
 };
 

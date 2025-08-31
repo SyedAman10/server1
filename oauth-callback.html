@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OAuth Callback</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            text-align: center; 
+            padding: 50px; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            margin: 0;
+        }
+        .container { 
+            max-width: 500px; 
+            margin: 0 auto; 
+            background: rgba(255,255,255,0.1); 
+            padding: 30px; 
+            border-radius: 15px; 
+            backdrop-filter: blur(10px);
+        }
+        .spinner { 
+            border: 3px solid rgba(255,255,255,0.3); 
+            border-top: 3px solid white; 
+            border-radius: 50%; 
+            width: 40px; 
+            height: 40px; 
+            animation: spin 1s linear infinite; 
+            margin: 20px auto; 
+        }
+        @keyframes spin { 
+            0% { transform: rotate(0deg); } 
+            100% { transform: rotate(360deg); } 
+        }
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 10px;
+            text-align: left;
+        }
+        .success { background: rgba(76, 175, 80, 0.3); }
+        .error { background: rgba(244, 67, 54, 0.3); }
+        .info { background: rgba(33, 150, 243, 0.3); }
+        
+        .deep-link-info {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 10px;
+            font-size: 12px;
+            text-align: left;
+            word-break: break-all;
+        }
+        
+        .copy-button {
+            background: rgba(255,255,255,0.2);
+            border: 1px solid white;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-left: 10px;
+            font-size: 10px;
+        }
+        
+        .fallback {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 10px;
+            display: none;
+        }
+        .fallback a { 
+            color: white; 
+            text-decoration: none; 
+            font-weight: bold; 
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>📱 OAuth Callback</h2>
+        <p id="statusText">Processing OAuth callback...</p>
+        <div class="spinner"></div>
+        
+        <div id="fallback" class="fallback">
+            <p>If you're not redirected automatically:</p>
+            <a href="#" id="fallbackLink">Click here to open app</a>
+        </div>
+        
+        <div id="deepLinkInfo" class="deep-link-info" style="display: none;">
+            <strong>Deep Link Information:</strong><br>
+            <div id="deepLinkContent"></div>
+        </div>
+    </div>
+    
+    <script>
+        console.log('📱 OAuth Callback page loaded');
+        
+        // Get URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const success = urlParams.get('success');
+        const error = urlParams.get('error');
+        const message = urlParams.get('message');
+        const deepLinkUrl = urlParams.get('deepLinkUrl');
+        const role = urlParams.get('role');
+        const email = urlParams.get('email');
+        const name = urlParams.get('name');
+        const picture = urlParams.get('picture');
+        
+        console.log('🔍 URL Parameters:', {
+            success,
+            error,
+            message,
+            deepLinkUrl: deepLinkUrl ? deepLinkUrl.substring(0, 50) + '...' : 'undefined',
+            role,
+            email,
+            name
+        });
+        
+        let appOpened = false;
+        let redirectAttempted = false;
+        
+        // Function to show status
+        function showStatus(message, type = 'info') {
+            const statusText = document.getElementById('statusText');
+            statusText.textContent = message;
+            
+            const statusDiv = document.querySelector('.status');
+            if (statusDiv) {
+                statusDiv.className = `status ${type}`;
+                statusDiv.style.display = 'block';
+            }
+        }
+        
+        // Function to show deep link information
+        function showDeepLinkInfo() {
+            const deepLinkDiv = document.getElementById('deepLinkInfo');
+            const deepLinkContent = document.getElementById('deepLinkContent');
+            
+            if (success === 'true' && deepLinkUrl) {
+                const content = `
+                    <strong>Success Response:</strong><br>
+                    Deep Link: <span id="linkText">${deepLinkUrl}</span>
+                    <button class="copy-button" onclick="copyDeepLink()">Copy</button><br>
+                    User Role: ${role || 'N/A'}<br>
+                    User Email: ${email || 'N/A'}<br>
+                    User Name: ${name || 'N/A'}<br>
+                    <br>
+                    <strong>Redirect Instructions:</strong><br>
+                    Method: window.location.href<br>
+                    Example: <code>window.location.href = "${deepLinkUrl}"</code><br>
+                    Note: This page automatically redirects to your mobile app
+                `;
+                deepLinkContent.innerHTML = content;
+                deepLinkDiv.style.display = 'block';
+            }
+        }
+        
+        // Function to copy deep link
+        function copyDeepLink() {
+            const linkText = document.getElementById('linkText').textContent;
+            navigator.clipboard.writeText(linkText).then(() => {
+                const btn = document.querySelector('.copy-button');
+                btn.textContent = 'Copied!';
+                setTimeout(() => btn.textContent = 'Copy', 2000);
+            }).catch(err => {
+                console.log('Copy failed, using fallback');
+                const textArea = document.createElement('textarea');
+                textArea.value = linkText;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                const btn = document.querySelector('.copy-button');
+                btn.textContent = 'Copied!';
+                setTimeout(() => btn.textContent = 'Copy', 2000);
+            });
+        }
+        
+        // Function to handle success case
+        function handleSuccess() {
+            console.log('✅ OAuth successful, preparing to redirect to mobile app');
+            showStatus('✅ OAuth completed successfully! Redirecting to mobile app...', 'success');
+            showDeepLinkInfo();
+            
+            // Show fallback link
+            const fallbackDiv = document.getElementById('fallback');
+            const fallbackLink = document.getElementById('fallbackLink');
+            fallbackLink.href = deepLinkUrl;
+            fallbackDiv.style.display = 'block';
+            
+            // Automatically redirect to mobile app after a short delay
+            setTimeout(() => {
+                if (!appOpened) {
+                    console.log('🚀 Attempting to redirect to mobile app...');
+                    redirectAttempted = true;
+                    window.location.href = deepLinkUrl;
+                }
+            }, 2000);
+        }
+        
+        // Function to handle error case
+        function handleError() {
+            console.log('❌ OAuth failed:', error, message);
+            showStatus(`❌ OAuth failed: ${message}`, 'error');
+            
+            // Generate error deep link
+            const errorDeepLink = `xytekclassroom://auth?error=${encodeURIComponent(message)}`;
+            
+            // Show fallback link
+            const fallbackDiv = document.getElementById('fallback');
+            const fallbackLink = document.getElementById('fallbackLink');
+            fallbackLink.href = errorDeepLink;
+            fallbackLink.textContent = 'Click here to return to app with error';
+            fallbackDiv.style.display = 'block';
+            
+            // Automatically redirect to error deep link after a delay
+            setTimeout(() => {
+                if (!appOpened) {
+                    console.log('🚀 Redirecting to error deep link...');
+                    window.location.href = errorDeepLink;
+                }
+            }, 3000);
+        }
+        
+        // Main processing logic
+        if (success === 'true' && deepLinkUrl) {
+            console.log('✅ Success case detected');
+            handleSuccess();
+        } else if (error) {
+            console.log('❌ Error case detected');
+            handleError();
+        } else {
+            console.log('⚠️ Invalid parameters detected');
+            showStatus('⚠️ Invalid OAuth callback parameters', 'error');
+        }
+        
+        // Listen for page visibility changes (app switching)
+        document.addEventListener('visibilitychange', function() {
+            console.log('👁️ Visibility changed:', document.hidden ? 'hidden' : 'visible');
+            if (document.hidden && !appOpened) {
+                appOpened = true;
+                console.log('✅ App may have opened - page became hidden');
+            }
+        });
+        
+        // Listen for page blur (user switching to another app)
+        window.addEventListener('blur', function() {
+            console.log('🔀 Page lost focus - user switched to another app');
+            if (!appOpened) {
+                appOpened = true;
+                console.log('✅ App may have opened - page lost focus');
+            }
+        });
+        
+        // Listen for page focus (user returned to this page)
+        window.addEventListener('focus', function() {
+            console.log('🎯 Page gained focus - user returned');
+            if (appOpened) {
+                console.log('🔄 User returned to page after app opened');
+            }
+        });
+        
+        // Fallback: if deep link doesn't work, show manual link after 5 seconds
+        setTimeout(function() {
+            if (!appOpened && !redirectAttempted) {
+                console.log('⏰ Fallback: showing manual link');
+                const fallbackDiv = document.getElementById('fallback');
+                fallbackDiv.style.display = 'block';
+            }
+        }, 5000);
+        
+        console.log('📱 OAuth callback page setup complete');
+    </script>
+</body>
+</html>
