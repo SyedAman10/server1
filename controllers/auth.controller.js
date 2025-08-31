@@ -216,11 +216,17 @@ const handleMobileAuth = async (req, res) => {
   }
 };
 
-// Handle Mobile Callback (for OAuth redirect) - Updated for proper mobile flow
+// Handle Mobile Callback (for OAuth redirect) - Returns JSON for frontend handling
 const handleMobileCallback = async (req, res) => {
   try {
     const { code, state } = req.query;
-    console.log('Mobile callback received:', { code, state });
+    console.log('🔍 Mobile callback received:', { 
+      code: code ? `${code.substring(0, 10)}...` : 'undefined', 
+      state,
+      userAgent: req.headers['user-agent'],
+      referer: req.headers.referer,
+      timestamp: new Date().toISOString()
+    });
     
     if (!code) {
       console.log('❌ No code received');
@@ -269,168 +275,53 @@ const handleMobileCallback = async (req, res) => {
 
     console.log('✅ Mobile OAuth completed successfully:', {
       email: user.userData.email,
-      role: user.userData.role
+      role: user.userData.role,
+      tokenLength: user.token.length,
+      tokenPreview: `${user.token.substring(0, 20)}...`
     });
 
-    // For mobile apps, redirect to a deep link or custom URL scheme
-    // This will open the mobile app instead of showing a web page
+    // Generate the deep link URL
     const deepLinkUrl = `xytekclassroom://auth?token=${encodeURIComponent(user.token)}&role=${encodeURIComponent(user.userData.role)}&email=${encodeURIComponent(user.userData.email)}&name=${encodeURIComponent(user.userData.name)}&picture=${encodeURIComponent(user.userData.picture)}`;
     
-    // Create an HTML page that automatically redirects to the deep link
-    const htmlResponse = `
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Authentication Complete</title>
-    <style>
-        body { 
-            font-family: Arial, sans-serif; 
-            text-align: center; 
-            padding: 50px; 
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            margin: 0;
-        }
-        .container { 
-            max-width: 400px; 
-            margin: 0 auto; 
-            background: rgba(255,255,255,0.1); 
-            padding: 30px; 
-            border-radius: 15px; 
-            backdrop-filter: blur(10px);
-        }
-        .spinner { 
-            border: 3px solid rgba(255,255,255,0.3); 
-            border-top: 3px solid white; 
-            border-radius: 50%; 
-            width: 40px; 
-            height: 40px; 
-            animation: spin 1s linear infinite; 
-            margin: 20px auto; 
-        }
-        @keyframes spin { 
-            0% { transform: rotate(0deg); } 
-            100% { transform: rotate(360deg); } 
-        }
-        .fallback { 
-            margin-top: 20px; 
-            padding: 15px; 
-            background: rgba(255,255,255,0.2); 
-            border-radius: 10px; 
-        }
-        .fallback a { 
-            color: white; 
-            text-decoration: none; 
-            font-weight: bold; 
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h2>✅ Authentication Complete!</h2>
-        <p>Redirecting to your app...</p>
-        <div class="spinner"></div>
-        
-        <div class="fallback">
-            <p>If you're not redirected automatically:</p>
-            <a href="${deepLinkUrl}">Click here to open app</a>
-        </div>
-    </div>
-    
-    <script>
-        // Try to redirect to the deep link immediately
-        window.location.href = "${deepLinkUrl}";
-        
-        // Fallback: if deep link doesn't work, show manual link after 3 seconds
-        setTimeout(function() {
-            document.querySelector('.fallback').style.display = 'block';
-        }, 3000);
-        
-        // Additional fallback: try to detect if the app opened
-        let hasAppOpened = false;
-        
-        // Listen for page visibility changes (app switching)
-        document.addEventListener('visibilitychange', function() {
-            if (document.hidden && !hasAppOpened) {
-                hasAppOpened = true;
-                console.log('App may have opened');
-            }
-        });
-        
-        // Listen for page blur (user switching to another app)
-        window.addEventListener('blur', function() {
-            if (!hasAppOpened) {
-                hasAppOpened = true;
-                console.log('User switched to another app');
-            }
-        });
-    </script>
-</body>
-</html>`;
+    console.log('🔗 Generated deep link URL:', {
+      scheme: 'xytekclassroom',
+      path: '/auth',
+      tokenLength: user.token.length,
+      role: user.userData.role,
+      email: user.userData.email,
+      fullUrl: deepLinkUrl
+    });
 
-    // Send the HTML response that handles the deep link redirect
-    res.setHeader('Content-Type', 'text/html');
-    res.send(htmlResponse);
+    // Return JSON response with deep link URL for frontend to handle
+    console.log('📤 Sending JSON response with deep link URL');
+    
+    res.json({
+      success: true,
+      deepLinkUrl: deepLinkUrl,
+      user: user.userData,
+      message: 'OAuth completed successfully. Use deepLinkUrl to redirect to mobile app.',
+      redirectInstructions: {
+        method: 'window.location.href',
+        example: `window.location.href = "${deepLinkUrl}"`,
+        note: 'Frontend should automatically redirect using the deepLinkUrl'
+      }
+    });
 
   } catch (error) {
-    console.error('Mobile callback error:', error);
+    console.error('❌ Mobile callback error:', error);
     
-    // Send error page with deep link fallback
-    const errorHtml = `
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Authentication Error</title>
-    <style>
-        body { 
-            font-family: Arial, sans-serif; 
-            text-align: center; 
-            padding: 50px; 
-            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
-            color: white;
-            margin: 0;
-        }
-        .container { 
-            max-width: 400px; 
-            margin: 0 auto; 
-            background: rgba(255,255,255,0.1); 
-            padding: 30px; 
-            border-radius: 15px; 
-            backdrop-filter: blur(10px);
-        }
-        .error { 
-            margin-top: 20px; 
-            padding: 15px; 
-            background: rgba(255,255,255,0.2); 
-            border-radius: 10px; 
-        }
-        .error a { 
-            color: white; 
-            text-decoration: none; 
-            font-weight: bold; 
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h2>❌ Authentication Error</h2>
-        <p>Something went wrong during authentication.</p>
-        <p>Error: ${error.message}</p>
-        
-        <div class="error">
-            <p>Please try again or contact support.</p>
-            <a href="xytekclassroom://auth?error=${encodeURIComponent(error.message)}">Return to app</a>
-        </div>
-    </div>
-</body>
-</html>`;
-    
-    res.setHeader('Content-Type', 'text/html');
-    res.status(500).send(errorHtml);
+    // Return error as JSON
+    res.status(500).json({
+      success: false,
+      error: 'AuthFailed',
+      message: error.message,
+      deepLinkUrl: `xytekclassroom://auth?error=${encodeURIComponent(error.message)}`,
+      redirectInstructions: {
+        method: 'window.location.href',
+        example: `window.location.href = "xytekclassroom://auth?error=${encodeURIComponent(error.message)}"`,
+        note: 'Frontend should redirect to error deep link'
+      }
+    });
   }
 };
 
