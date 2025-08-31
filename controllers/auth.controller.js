@@ -230,25 +230,202 @@ const handleMobileCallback = async (req, res) => {
     
     if (!code) {
       console.log('❌ No code received');
-      // Redirect directly to error deep link
-      const errorDeepLink = `xytekclassroom://auth?error=${encodeURIComponent('No authorization code received')}`;
-      console.log('🔄 Redirecting directly to error deep link:', errorDeepLink);
-      return res.redirect(errorDeepLink);
+      // Send error HTML page instead of redirecting
+      const errorHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Authentication Error</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            text-align: center; 
+            padding: 50px; 
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+            color: white;
+            margin: 0;
+        }
+        .container { 
+            max-width: 400px; 
+            margin: 0 auto; 
+            background: rgba(255,255,255,0.1); 
+            padding: 30px; 
+            border-radius: 15px; 
+            backdrop-filter: blur(10px);
+        }
+        .fallback {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 10px;
+        }
+        .fallback a { 
+            color: white; 
+            text-decoration: none; 
+            font-weight: bold; 
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>❌ Authentication Error</h2>
+        <p>No authorization code received.</p>
+        
+        <div class="fallback">
+            <p>Redirecting to app with error...</p>
+            <a href="xytekclassroom://auth?error=No authorization code received">Click here to return to app</a>
+        </div>
+    </div>
+    
+    <script>
+        console.log('❌ Error page loaded - No code received');
+        
+        // Redirect to error deep link after a short delay
+        setTimeout(() => {
+            console.log('🚀 Redirecting to error deep link...');
+            window.location.href = "xytekclassroom://auth?error=No authorization code received";
+        }, 2000);
+    </script>
+</body>
+</html>`;
+      
+      res.setHeader('Content-Type', 'text/html');
+      return res.status(400).send(errorHtml);
     }
 
     // Validate the authorization code
     if (code.length < 10) {
       console.log('❌ Invalid code received');
-      const errorDeepLink = `xytekclassroom://auth?error=${encodeURIComponent('Invalid authorization code')}`;
-      console.log('🔄 Redirecting directly to error deep link:', errorDeepLink);
-      return res.redirect(errorDeepLink);
+      const errorHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Authentication Error</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            text-align: center; 
+            padding: 50px; 
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+            color: white;
+            margin: 0;
+        }
+        .container { 
+            max-width: 400px; 
+            margin: 0 auto; 
+            background: rgba(255,255,255,0.1); 
+            padding: 30px; 
+            border-radius: 15px; 
+            backdrop-filter: blur(10px);
+        }
+        .fallback {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 10px;
+        }
+        .fallback a { 
+            color: white; 
+            text-decoration: none; 
+            font-weight: bold; 
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>❌ Authentication Error</h2>
+        <p>Invalid authorization code received.</p>
+        
+        <div class="fallback">
+            <p>Redirecting to app with error...</p>
+            <a href="xytekclassroom://auth?error=Invalid authorization code">Click here to return to app</a>
+        </div>
+    </div>
+    
+    <script>
+        console.log('❌ Error page loaded - Invalid code');
+        
+        // Redirect to error deep link after a short delay
+        setTimeout(() => {
+            console.log('🚀 Redirecting to error deep link...');
+            window.location.href = "xytekclassroom://auth?error=Invalid authorization code";
+        }, 2000);
+    </script>
+</body>
+</html>`;
+      
+      res.setHeader('Content-Type', 'text/html');
+      return res.status(400).send(errorHtml);
     }
 
     if (!state || !VALID_ROLES.includes(state)) {
       console.log('❌ Invalid role in state:', state);
-      const errorDeepLink = `xytekclassroom://auth?error=${encodeURIComponent('Invalid role in state parameter')}`;
-      console.log('🔄 Redirecting directly to error deep link:', errorDeepLink);
-      return res.redirect(errorDeepLink);
+      const errorHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Authentication Error</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            text-align: center; 
+            padding: 50px; 
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+            color: white;
+            margin: 0;
+        }
+        .container { 
+            max-width: 400px; 
+            margin: 0 auto; 
+            background: rgba(255,255,255,0.1); 
+            padding: 30px; 
+            border-radius: 15px; 
+            backdrop-filter: blur(10px);
+        }
+        .fallback {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 10px;
+        }
+        .fallback a { 
+            color: white; 
+            text-decoration: none; 
+            font-weight: bold; 
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>❌ Authentication Error</h2>
+        <p>Invalid role in state parameter: ${state}</p>
+        
+        <div class="fallback">
+            <p>Redirecting to app with error...</p>
+            <a href="xytekclassroom://auth?error=Invalid role in state parameter">Click here to return to app</a>
+        </div>
+    </div>
+    
+    <script>
+        console.log('❌ Error page loaded - Invalid role:', '${state}');
+        
+        // Redirect to error deep link after a short delay
+        setTimeout(() => {
+            console.log('🚀 Redirecting to error deep link...');
+            window.location.href = "xytekclassroom://auth?error=Invalid role in state parameter";
+        }, 2000);
+    </script>
+</body>
+</html>`;
+      
+      res.setHeader('Content-Type', 'text/html');
+      return res.status(400).send(errorHtml);
     }
 
     console.log('🔄 Exchanging authorization code for tokens...');
