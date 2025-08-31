@@ -287,10 +287,9 @@ const handleMobileCallback = async (req, res) => {
       fullUrl: deepLinkUrl
     });
 
-    // Redirect directly to the deep link URL to open mobile app
-    console.log('🚀 Redirecting directly to deep link to open mobile app');
+    // Send HTML page that handles deep linking more robustly
+    console.log('🚀 Sending HTML page with robust deep linking...');
     
-    // Send HTML page that automatically redirects to deep link
     const htmlResponse = `
 <!DOCTYPE html>
 <html>
@@ -302,18 +301,22 @@ const handleMobileCallback = async (req, res) => {
         body { 
             font-family: Arial, sans-serif; 
             text-align: center; 
-            padding: 50px; 
+            padding: 20px; 
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         .container { 
             max-width: 400px; 
-            margin: 0 auto; 
             background: rgba(255,255,255,0.1); 
             padding: 30px; 
             border-radius: 15px; 
             backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
         }
         .spinner { 
             border: 3px solid rgba(255,255,255,0.3); 
@@ -328,6 +331,13 @@ const handleMobileCallback = async (req, res) => {
             0% { transform: rotate(0deg); } 
             100% { transform: rotate(360deg); } 
         }
+        .status {
+            margin: 20px 0;
+            padding: 15px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 10px;
+            font-size: 14px;
+        }
         .fallback {
             margin-top: 20px;
             padding: 15px;
@@ -339,6 +349,40 @@ const handleMobileCallback = async (req, res) => {
             color: white; 
             text-decoration: none; 
             font-weight: bold; 
+            display: inline-block;
+            padding: 10px 20px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 5px;
+            margin: 5px;
+        }
+        .deep-link-info {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 10px;
+            font-size: 12px;
+            text-align: left;
+            word-break: break-all;
+            display: none;
+        }
+        .copy-button {
+            background: rgba(255,255,255,0.2);
+            border: 1px solid white;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-left: 10px;
+            font-size: 10px;
+        }
+        .debug-info {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 10px;
+            font-size: 11px;
+            text-align: left;
+            display: none;
         }
     </style>
 </head>
@@ -348,9 +392,28 @@ const handleMobileCallback = async (req, res) => {
         <p>Redirecting to your mobile app...</p>
         <div class="spinner"></div>
         
-        <div class="fallback">
-            <p>If you're not redirected automatically:</p>
-            <a href="${deepLinkUrl}">Click here to open app</a>
+        <div class="status" id="status">
+            Processing authentication...
+        </div>
+        
+        <div class="fallback" id="fallback">
+            <p><strong>If the app doesn't open automatically:</strong></p>
+            <a href="${deepLinkUrl}" id="deepLinkBtn">🔗 Click to Open App</a>
+            <br><br>
+            <a href="#" id="copyLinkBtn">📋 Copy Deep Link</a>
+            <br><br>
+            <a href="#" id="showDebugBtn">🐛 Show Debug Info</a>
+        </div>
+        
+        <div class="deep-link-info" id="deepLinkInfo">
+            <strong>Deep Link:</strong><br>
+            <span id="linkText">${deepLinkUrl}</span>
+            <button class="copy-button" onclick="copyDeepLink()">Copy</button>
+        </div>
+        
+        <div class="debug-info" id="debugInfo">
+            <strong>Debug Information:</strong><br>
+            <div id="debugContent"></div>
         </div>
     </div>
     
@@ -358,34 +421,191 @@ const handleMobileCallback = async (req, res) => {
         console.log('📱 OAuth callback page loaded');
         console.log('🔗 Deep link URL:', '${deepLinkUrl}');
         
-        // Redirect immediately to deep link
-        console.log('🚀 Redirecting to mobile app...');
-        window.location.href = "${deepLinkUrl}";
+        let appOpened = false;
+        let redirectAttempted = false;
+        let redirectCount = 0;
+        const maxRedirects = 3;
         
-        // Show fallback after 3 seconds if app doesn't open
-        setTimeout(function() {
-            document.querySelector('.fallback').style.display = 'block';
-        }, 3000);
+        // Update status
+        function updateStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = \`status \${type}\`;
+        }
         
-        // Listen for page visibility changes (app switching)
+        // Show fallback
+        function showFallback() {
+            document.getElementById('fallback').style.display = 'block';
+        }
+        
+        // Show deep link info
+        function showDeepLinkInfo() {
+            document.getElementById('deepLinkInfo').style.display = 'block';
+        }
+        
+        // Show debug info
+        function showDebugInfo() {
+            const debugDiv = document.getElementById('debugInfo');
+            const debugContent = document.getElementById('debugContent');
+            
+            debugContent.innerHTML = \`
+                <strong>User Agent:</strong> \${navigator.userAgent}<br>
+                <strong>Platform:</strong> \${navigator.platform}<br>
+                <strong>Language:</strong> \${navigator.language}<br>
+                <strong>Cookie Enabled:</strong> \${navigator.cookieEnabled}<br>
+                <strong>Online:</strong> \${navigator.onLine}<br>
+                <strong>Deep Link:</strong> \${deepLinkUrl}<br>
+                <strong>Redirect Count:</strong> \${redirectCount}<br>
+                <strong>App Opened:</strong> \${appOpened}<br>
+                <strong>Redirect Attempted:</strong> \${redirectAttempted}
+            \`;
+            
+            debugDiv.style.display = 'block';
+        }
+        
+        // Copy deep link
+        function copyDeepLink() {
+            const linkText = document.getElementById('linkText').textContent;
+            navigator.clipboard.writeText(linkText).then(() => {
+                const btn = document.querySelector('.copy-button');
+                btn.textContent = 'Copied!';
+                setTimeout(() => btn.textContent = 'Copy', 2000);
+            }).catch(err => {
+                console.log('Copy failed, using fallback');
+                const textArea = document.createElement('textarea');
+                textArea.value = linkText;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                const btn = document.querySelector('.copy-button');
+                btn.textContent = 'Copied!';
+                setTimeout(() => btn.textContent = 'Copy', 2000);
+            });
+        }
+        
+        // Attempt to open app
+        function attemptAppOpen() {
+            if (redirectCount >= maxRedirects) {
+                updateStatus('❌ Maximum redirect attempts reached. Please use the manual link below.', 'error');
+                showFallback();
+                return;
+            }
+            
+            redirectCount++;
+            console.log(\`🚀 Attempt \${redirectCount} to open mobile app...\`);
+            updateStatus(\`🔄 Attempting to open app... (Attempt \${redirectCount}/\${maxRedirects})\`);
+            
+            // Try different methods to open the app
+            try {
+                // Method 1: Direct location change
+                window.location.href = "${deepLinkUrl}";
+                
+                // Method 2: Try with a small delay
+                setTimeout(() => {
+                    if (!appOpened) {
+                        console.log('🔄 Trying alternative redirect method...');
+                        window.location.replace("${deepLinkUrl}");
+                    }
+                }, 1000);
+                
+                // Method 3: Try with iframe (for some mobile browsers)
+                setTimeout(() => {
+                    if (!appOpened) {
+                        console.log('🔄 Trying iframe method...');
+                        const iframe = document.createElement('iframe');
+                        iframe.style.display = 'none';
+                        iframe.src = "${deepLinkUrl}";
+                        document.body.appendChild(iframe);
+                        setTimeout(() => {
+                            if (iframe.parentNode) {
+                                iframe.parentNode.removeChild(iframe);
+                            }
+                        }, 2000);
+                    }
+                }, 2000);
+                
+            } catch (error) {
+                console.error('❌ Error during redirect:', error);
+                updateStatus(\`❌ Redirect error: \${error.message}\`, 'error');
+            }
+        }
+        
+        // Event listeners for app detection
         document.addEventListener('visibilitychange', function() {
             console.log('👁️ Visibility changed:', document.hidden ? 'hidden' : 'visible');
-            if (document.hidden) {
+            if (document.hidden && !appOpened) {
+                appOpened = true;
                 console.log('✅ App may have opened - page became hidden');
+                updateStatus('✅ App opened successfully!', 'success');
             }
         });
         
-        // Listen for page blur (user switching to another app)
         window.addEventListener('blur', function() {
             console.log('🔀 Page lost focus - user switched to another app');
+            if (!appOpened) {
+                appOpened = true;
+                console.log('✅ App may have opened - page lost focus');
+                updateStatus('✅ App opened successfully!', 'success');
+            }
         });
+        
+        window.addEventListener('focus', function() {
+            console.log('🎯 Page gained focus - user returned');
+            if (appOpened) {
+                console.log('🔄 User returned to page after app opened');
+            }
+        });
+        
+        // Button event listeners
+        document.getElementById('deepLinkBtn').addEventListener('click', function(e) {
+            e.preventDefault();
+            console.log('🔗 Manual deep link button clicked');
+            attemptAppOpen();
+        });
+        
+        document.getElementById('copyLinkBtn').addEventListener('click', function(e) {
+            e.preventDefault();
+            console.log('📋 Copy link button clicked');
+            copyDeepLink();
+        });
+        
+        document.getElementById('showDebugBtn').addEventListener('click', function(e) {
+            e.preventDefault();
+            console.log('🐛 Show debug button clicked');
+            showDebugInfo();
+        });
+        
+        // Start the process
+        updateStatus('✅ Authentication successful! Opening mobile app...', 'success');
+        showDeepLinkInfo();
+        
+        // Attempt to open app immediately
+        attemptAppOpen();
+        
+        // Show fallback after 3 seconds
+        setTimeout(function() {
+            if (!appOpened) {
+                console.log('⏰ Showing fallback options');
+                showFallback();
+            }
+        }, 3000);
+        
+        // Final fallback after 8 seconds
+        setTimeout(function() {
+            if (!appOpened) {
+                console.log('⏰ Final fallback - showing all options');
+                updateStatus('⚠️ App may not have opened. Please use the manual options below.', 'error');
+                showFallback();
+            }
+        }, 8000);
         
         console.log('📱 Deep link redirect setup complete');
     </script>
 </body>
 </html>`;
 
-    // Send HTML response that immediately redirects to deep link
+    // Send HTML response that handles deep linking robustly
     res.setHeader('Content-Type', 'text/html');
     res.send(htmlResponse);
 
