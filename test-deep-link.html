@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deep Link Test</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            text-align: center; 
+            padding: 50px; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            margin: 0;
+        }
+        .container { 
+            max-width: 400px; 
+            margin: 0 auto; 
+            background: rgba(255,255,255,0.1); 
+            padding: 30px; 
+            border-radius: 15px; 
+            backdrop-filter: blur(10px);
+        }
+        .test-button {
+            background: rgba(255,255,255,0.2);
+            border: 2px solid white;
+            color: white;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px;
+            transition: all 0.3s ease;
+        }
+        .test-button:hover {
+            background: rgba(255,255,255,0.3);
+            transform: translateY(-2px);
+        }
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 10px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>🔗 Deep Link Test</h2>
+        <p>Test the deep link functionality for mobile OAuth</p>
+        
+        <button class="test-button" onclick="testDeepLink()">
+            Test Deep Link
+        </button>
+        
+        <button class="test-button" onclick="testErrorDeepLink()">
+            Test Error Deep Link
+        </button>
+        
+        <div id="status" class="status">
+            <p id="statusText"></p>
+        </div>
+    </div>
+    
+    <script>
+        function testDeepLink() {
+            const testToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c';
+            const deepLinkUrl = `xytekclassroom://auth?token=${encodeURIComponent(testToken)}&role=teacher&email=test@example.com&name=Test%20User&picture=https://example.com/avatar.jpg`;
+            
+            document.getElementById('statusText').innerHTML = `
+                <strong>Testing Deep Link:</strong><br>
+                <code>${deepLinkUrl}</code><br><br>
+                <strong>Status:</strong> Attempting to open app...
+            `;
+            document.getElementById('status').style.display = 'block';
+            
+            // Try to open the deep link
+            window.location.href = deepLinkUrl;
+            
+            // Check if app opened after a delay
+            setTimeout(() => {
+                document.getElementById('statusText').innerHTML += '<br><br><strong>Result:</strong> Deep link attempted. Check if your mobile app opened.';
+            }, 2000);
+        }
+        
+        function testErrorDeepLink() {
+            const errorMessage = 'Authentication failed - Invalid credentials';
+            const deepLinkUrl = `xytekclassroom://auth?error=${encodeURIComponent(errorMessage)}`;
+            
+            document.getElementById('statusText').innerHTML = `
+                <strong>Testing Error Deep Link:</strong><br>
+                <code>${deepLinkUrl}</code><br><br>
+                <strong>Status:</strong> Attempting to open app with error...
+            `;
+            document.getElementById('status').style.display = 'block';
+            
+            // Try to open the deep link
+            window.location.href = deepLinkUrl;
+            
+            // Check if app opened after a delay
+            setTimeout(() => {
+                document.getElementById('statusText').innerHTML += '<br><br><strong>Result:</strong> Error deep link attempted. Check if your mobile app opened with error handling.';
+            }, 2000);
+        }
+        
+        // Detect if page becomes hidden (user switched to app)
+        document.addEventListener('visibilitychange', function() {
+            if (document.hidden) {
+                document.getElementById('statusText').innerHTML += '<br><br><strong>✅ Success:</strong> Page became hidden - app may have opened!';
+            }
+        });
+        
+        // Detect if page loses focus (user switched to another app)
+        window.addEventListener('blur', function() {
+            document.getElementById('statusText').innerHTML += '<br><br><strong>✅ Success:</strong> Page lost focus - user switched to another app!';
+        });
+    </script>
+</body>
+</html>

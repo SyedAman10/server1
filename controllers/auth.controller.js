@@ -511,9 +511,291 @@ const getAuthUrl = (req, res) => {
   res.json({ url });
 };
 
+// Log deep link interactions for debugging
+const logDeepLinkInteraction = async (req, res) => {
+  try {
+    const logData = req.body;
+    
+    console.log('📊 Deep Link Interaction Log:', {
+      type: logData.type,
+      deepLinkUrl: logData.deepLinkUrl,
+      userRole: logData.userRole,
+      userEmail: logData.userEmail,
+      timestamp: logData.timestamp,
+      userAgent: logData.userAgent,
+      ip: req.ip,
+      headers: {
+        'user-agent': req.headers['user-agent'],
+        'referer': req.headers.referer,
+        'origin': req.headers.origin
+      }
+    });
+    
+    // Store log in database or file for analysis
+    // You can implement persistent logging here
+    
+    res.json({
+      success: true,
+      message: 'Deep link interaction logged',
+      logId: Date.now()
+    });
+    
+  } catch (error) {
+    console.error('❌ Deep link logging error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'LoggingFailed',
+      message: error.message
+    });
+  }
+};
+
+// Test endpoint for deep link functionality
+const testDeepLink = (req, res) => {
+  try {
+    const { role = 'teacher', email = 'test@example.com', name = 'Test User' } = req.query;
+    
+    // Generate a test JWT token
+    const testToken = jwt.sign({
+      email: email,
+      name: name,
+      role: role,
+      sub: 'test-user-id',
+      iat: Math.floor(Date.now() / 1000),
+    }, process.env.JWT_SECRET || 'test-secret', {
+      expiresIn: '1h',
+      algorithm: 'HS256'
+    });
+
+    const deepLinkUrl = `xytekclassroom://auth?token=${encodeURIComponent(testToken)}&role=${encodeURIComponent(role)}&email=${encodeURIComponent(email)}&name=${encodeURIComponent(name)}&picture=https://example.com/avatar.jpg`;
+    
+    console.log('🧪 Test deep link generated:', {
+      role,
+      email,
+      name,
+      tokenLength: testToken.length,
+      deepLinkUrl
+    });
+    
+    const htmlResponse = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deep Link Test</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            text-align: center; 
+            padding: 50px; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            margin: 0;
+        }
+        .container { 
+            max-width: 500px; 
+            margin: 0 auto; 
+            background: rgba(255,255,255,0.1); 
+            padding: 30px; 
+            border-radius: 15px; 
+            backdrop-filter: blur(10px);
+        }
+        .test-button {
+            background: rgba(255,255,255,0.2);
+            border: 2px solid white;
+            color: white;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px;
+            transition: all 0.3s ease;
+        }
+        .test-button:hover {
+            background: rgba(255,255,255,0.3);
+            transform: translateY(-2px);
+        }
+        .debug-info {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+            font-size: 12px;
+            text-align: left;
+        }
+        .copy-button {
+            background: rgba(255,255,255,0.2);
+            border: 1px solid white;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-left: 10px;
+            font-size: 10px;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 10px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>🧪 Deep Link Test</h2>
+        <p>Test the deep link functionality for mobile OAuth</p>
+        
+        <button class="test-button" onclick="testDeepLink()">
+            Test Deep Link
+        </button>
+        
+        <button class="test-button" onclick="testErrorDeepLink()">
+            Test Error Deep Link
+        </button>
+        
+        <div id="status" class="status">
+            <p id="statusText"></p>
+        </div>
+        
+        <div class="debug-info">
+            <strong>Test Parameters:</strong><br>
+            Role: ${role}<br>
+            Email: ${email}<br>
+            Name: ${name}<br>
+            Token Length: ${testToken.length} characters<br>
+            <br>
+            <strong>Deep Link URL:</strong><br>
+            <div style="background: rgba(0,0,0,0.3); padding: 10px; border-radius: 5px; word-break: break-all;">
+                <span id="linkText">${deepLinkUrl}</span>
+                <button class="copy-button" onclick="copyLink()">Copy</button>
+            </div>
+            <br>
+            <small>Make sure your mobile app has the URL scheme 'xytekclassroom://' configured.</small>
+        </div>
+    </div>
+    
+    <script>
+        console.log('🧪 Deep link test page loaded');
+        console.log('🔗 Test deep link URL:', '${deepLinkUrl}');
+        
+        function testDeepLink() {
+            const deepLinkUrl = '${deepLinkUrl}';
+            
+            document.getElementById('statusText').innerHTML = \`
+                <strong>Testing Deep Link:</strong><br>
+                <code>\${deepLinkUrl}</code><br><br>
+                <strong>Status:</strong> Attempting to open app...
+            \`;
+            document.getElementById('status').style.display = 'block';
+            
+            try {
+                // Try to open the deep link
+                console.log('🔗 Attempting to open deep link:', deepLinkUrl);
+                window.location.href = deepLinkUrl;
+                
+                // Check if app opened after a delay
+                setTimeout(() => {
+                    document.getElementById('statusText').innerHTML += '<br><br><strong>Result:</strong> Deep link attempted. Check if your mobile app opened.';
+                }, 2000);
+            } catch (error) {
+                console.error('❌ Deep link failed:', error);
+                document.getElementById('statusText').innerHTML += '<br><br><strong>Error:</strong> ' + error.message;
+            }
+        }
+        
+        function testErrorDeepLink() {
+            const errorMessage = 'Authentication failed - Invalid credentials';
+            const deepLinkUrl = \`xytekclassroom://auth?error=\${encodeURIComponent(errorMessage)}\`;
+            
+            document.getElementById('statusText').innerHTML = \`
+                <strong>Testing Error Deep Link:</strong><br>
+                <code>\${deepLinkUrl}</code><br><br>
+                <strong>Status:</strong> Attempting to open app with error...
+            \`;
+            document.getElementById('status').style.display = 'block';
+            
+            try {
+                console.log('🔗 Attempting to open error deep link:', deepLinkUrl);
+                window.location.href = deepLinkUrl;
+                
+                setTimeout(() => {
+                    document.getElementById('statusText').innerHTML += '<br><br><strong>Result:</strong> Error deep link attempted. Check if your mobile app opened with error handling.';
+                }, 2000);
+            } catch (error) {
+                console.error('❌ Error deep link failed:', error);
+                document.getElementById('statusText').innerHTML += '<br><br><strong>Error:</strong> ' + error.message;
+            }
+        }
+        
+        function copyLink() {
+            const linkText = document.getElementById('linkText').textContent;
+            navigator.clipboard.writeText(linkText).then(() => {
+                const btn = document.querySelector('.copy-button');
+                btn.textContent = 'Copied!';
+                setTimeout(() => btn.textContent = 'Copy', 2000);
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = linkText;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                const btn = document.querySelector('.copy-button');
+                btn.textContent = 'Copied!';
+                setTimeout(() => btn.textContent = 'Copy', 2000);
+            });
+        }
+        
+        // Detect if page becomes hidden (user switched to app)
+        document.addEventListener('visibilitychange', function() {
+            console.log('👁️ Visibility changed:', document.hidden ? 'hidden' : 'visible');
+            if (document.hidden) {
+                console.log('✅ Page became hidden - app may have opened!');
+                document.getElementById('statusText').innerHTML += '<br><br><strong>✅ Success:</strong> Page became hidden - app may have opened!';
+            }
+        });
+        
+        // Detect if page loses focus (user switched to another app)
+        window.addEventListener('blur', function() {
+            console.log('🔀 Page lost focus - user switched to another app!');
+            document.getElementById('statusText').innerHTML += '<br><br><strong>✅ Success:</strong> Page lost focus - user switched to another app!';
+        });
+        
+        // Listen for page focus (user returned to this page)
+        window.addEventListener('focus', function() {
+            console.log('🎯 Page gained focus - user returned');
+        });
+        
+        console.log('📱 Deep link test setup complete');
+    </script>
+</body>
+</html>`;
+
+    console.log('🧪 Sending test deep link HTML response');
+    
+    res.setHeader('Content-Type', 'text/html');
+    res.send(htmlResponse);
+    
+  } catch (error) {
+    console.error('❌ Test deep link error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'TestFailed',
+      message: error.message
+    });
+  }
+};
+
 module.exports = {
   getAuthUrl,
   handleWebAuth,
   handleMobileAuth,
-  handleMobileCallback
+  handleMobileCallback,
+  logDeepLinkInteraction,
+  testDeepLink
 };
