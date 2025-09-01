@@ -2,9 +2,234 @@ const { calculateDateFromExpression, convertTimeExpression } = require('../../ut
 const axios = require('axios');
 const jwt = require('jsonwebtoken');
 const { getUserByEmail } = require('../../models/user.model');
-const { generateConversationId } = require('./conversationManager');
+const { 
+  generateConversationId, 
+  startOngoingAction, 
+  updateOngoingActionParameters, 
+  isActionComplete, 
+  getOngoingActionContext, 
+  completeOngoingAction, 
+  isNewActionAttempt, 
+  getContextAwareMessage 
+} = require('./conversationManager');
 const { createAssignment, listAssignments } = require('../assignmentService');
 const { createMeeting, findMeetingByDateTime, updateMeeting, deleteMeeting, listUpcomingMeetings } = require('../meetingService');
+
+/**
+ * Check if user is trying to start a new action while one is in progress
+ * If so, remind them about the ongoing action and ask if they want to continue
+ */
+function checkForNewActionAttempt(intent, conversationId) {
+  if (!conversationId) return null;
+  
+  if (isNewActionAttempt(conversationId, intent)) {
+    const context = getOngoingActionContext(conversationId);
+    const contextMessage = getContextAwareMessage(conversationId);
+    
+    return {
+      shouldBlock: true,
+      message: `🔄 **I'm still working on something else!**\n\n${contextMessage}\n\n💡 **Would you like to continue with that first?**\n\nIf you want to start something new, please say "cancel" or "stop" to clear the current task.`,
+      ongoingAction: context
+    };
+  }
+  
+  return null;
+}
+
+/**
+ * Handle parameter collection for ongoing actions
+ * This function processes user input to collect missing parameters
+ */
+function handleParameterCollection(intent, parameters, conversationId, originalMessage) {
+  if (!conversationId) return null;
+  
+  const context = getOngoingActionContext(conversationId);
+  if (!context) return null;
+  
+  const { action, missingParameters, collectedParameters } = context;
+  
+  // Check if this message provides any of the missing parameters
+  let newParameters = {};
+  let parametersFound = false;
+  
+  switch (action) {
+    case 'CREATE_COURSE':
+      // Check if user provided a course name
+      if (missingParameters.includes('name')) {
+        // Extract course name from the message
+        const nameMatch = originalMessage.match(/(?:called|named|name is|call it)\s+(.+?)(?:\s|$)/i);
+        if (nameMatch && nameMatch[1]) {
+          newParameters.name = nameMatch[1].trim();
+          parametersFound = true;
+        }
+        // Also check if they just said the name directly
+        else if (!originalMessage.toLowerCase().includes('create') && 
+                 !originalMessage.toLowerCase().includes('make') && 
+                 !originalMessage.toLowerCase().includes('new course')) {
+          // If they didn't use action words, treat the whole message as the name
+          newParameters.name = originalMessage.trim();
+          parametersFound = true;
+        }
+      }
+      break;
+      
+    case 'CREATE_ASSIGNMENT':
+      // Check if user provided assignment title
+      if (missingParameters.includes('title')) {
+        const titleMatch = originalMessage.match(/(?:called|titled|title is|call it)\s+(.+?)(?:\s|$)/i);
+        if (titleMatch && titleMatch[1]) {
+          newParameters.title = titleMatch[1].trim();
+          parametersFound = true;
+        }
+        // Also check if they just said the title directly
+        else if (!originalMessage.toLowerCase().includes('assignment') && 
+                 !originalMessage.toLowerCase().includes('create') && 
+                 !originalMessage.toLowerCase().includes('make')) {
+          newParameters.title = originalMessage.trim();
+          parametersFound = true;
+        }
+      }
+      
+      // Check if user provided course name
+      if (missingParameters.includes('courseName')) {
+        const courseMatch = originalMessage.match(/(?:in|for)\s+(.+?)(?:\s|$)/i);
+        if (courseMatch && courseMatch[1]) {
+          newParameters.courseName = courseMatch[1].trim();
+          parametersFound = true;
+        }
+      }
+      break;
+      
+    case 'CREATE_ANNOUNCEMENT':
+      // Check if user provided announcement text
+      if (missingParameters.includes('announcementText')) {
+        if (!originalMessage.toLowerCase().includes('announcement') && 
+            !originalMessage.toLowerCase().includes('create') && 
+            !originalMessage.toLowerCase().includes('make') && 
+            !originalMessage.toLowerCase().includes('post')) {
+          newParameters.announcementText = originalMessage.trim();
+          parametersFound = true;
+        }
+      }
+      
+      // Check if user provided course name
+      if (missingParameters.includes('courseName')) {
+        const courseMatch = originalMessage.match(/(?:in|for)\s+(.+?)(?:\s|$)/i);
+        if (courseMatch && courseMatch[1]) {
+          newParameters.courseName = courseMatch[1].trim();
+          parametersFound = true;
+        }
+      }
+      break;
+      
+    case 'CREATE_MEETING':
+      // Check if user provided meeting title
+      if (missingParameters.includes('title')) {
+        if (!originalMessage.toLowerCase().includes('meeting') && 
+            !originalMessage.toLowerCase().includes('create') && 
+            !originalMessage.toLowerCase().includes('schedule')) {
+          newParameters.title = originalMessage.trim();
+          parametersFound = true;
+        }
+      }
+      
+      // Check if user provided attendees
+      if (missingParameters.includes('attendees')) {
+        const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+        const emails = originalMessage.match(emailRegex) || [];
+        if (emails.length > 0) {
+          newParameters.attendees = emails;
+          parametersFound = true;
+        }
+      }
+      
+      // Check if user provided date
+      if (missingParameters.includes('dateExpr')) {
+        const datePatterns = [
+          /(today|tomorrow|next\s+\w+|in\s+\d+\s+weeks?|end\s+of\s+month)/i,
+          /(\w+\s+\d+)/i, // e.g., "December 15"
+          /(\d{1,2}\/\d{1,2})/i // e.g., "12/15"
+        ];
+        
+        for (const pattern of datePatterns) {
+          const match = originalMessage.match(pattern);
+          if (match && match[1]) {
+            newParameters.dateExpr = match[1].trim();
+            parametersFound = true;
+            break;
+          }
+        }
+      }
+      
+      // Check if user provided time
+      if (missingParameters.includes('timeExpr')) {
+        const timePatterns = [
+          /(\d{1,2}:\d{2}\s*(?:am|pm)?)/i, // e.g., "5:30 PM"
+          /(\d{1,2}\s*(?:am|pm))/i, // e.g., "5 PM"
+          /(noon|midnight)/i
+        ];
+        
+        for (const pattern of timePatterns) {
+          const match = originalMessage.match(pattern);
+          if (match && match[1]) {
+            newParameters.timeExpr = match[1].trim();
+            parametersFound = true;
+            break;
+          }
+        }
+      }
+      break;
+      
+    case 'INVITE_STUDENTS':
+      // Check if user provided course name
+      if (missingParameters.includes('courseName')) {
+        const courseMatch = originalMessage.match(/(?:to|in)\s+(.+?)(?:\s|$)/i);
+        if (courseMatch && courseMatch[1]) {
+          newParameters.courseName = courseMatch[1].trim();
+          parametersFound = true;
+        }
+      }
+      
+      // Check if user provided student emails
+      if (missingParameters.includes('studentEmails')) {
+        const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+        const emails = originalMessage.match(emailRegex) || [];
+        if (emails.length > 0) {
+          newParameters.studentEmails = emails;
+          parametersFound = true;
+        }
+      }
+      break;
+  }
+  
+  if (parametersFound) {
+    // Update the ongoing action with new parameters
+    updateOngoingActionParameters(conversationId, newParameters);
+    
+    // Check if the action is now complete
+    if (isActionComplete(conversationId)) {
+      return {
+        actionComplete: true,
+        action: action,
+        allParameters: { ...collectedParameters, ...newParameters }
+      };
+    } else {
+      // Still missing some parameters
+      const updatedContext = getOngoingActionContext(conversationId);
+      const nextMessage = getContextAwareMessage(conversationId);
+      
+      return {
+        actionComplete: false,
+        action: action,
+        collectedParameters: { ...collectedParameters, ...newParameters },
+        missingParameters: updatedContext.missingParameters,
+        nextMessage: nextMessage
+      };
+    }
+  }
+  
+  return null;
+}
 
 /**
  * Reusable function to find and match courses by name
@@ -409,6 +634,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
   let { intent, parameters } = intentData;
   const baseUrl = `${req.protocol}://${req.get('host')}`;
   let userRole = null;
+  const conversationId = req.body.conversationId;
   
   try {
     // Decode JWT to get user role
@@ -420,6 +646,42 @@ async function executeAction(intentData, originalMessage, userToken, req) {
       } catch (jwtErr) {
         // If decoding fails, userRole remains null
         userRole = null;
+      }
+    }
+
+    // 🔍 CONTEXT CHECK: Check if user is trying to start a new action while one is in progress
+    const newActionCheck = checkForNewActionAttempt(intent, conversationId);
+    if (newActionCheck && newActionCheck.shouldBlock) {
+      return {
+        message: newActionCheck.message,
+        conversationId: conversationId,
+        ongoingAction: newActionCheck.ongoingAction
+      };
+    }
+
+    // 🔍 CONTEXT CHECK: Check if this message provides parameters for an ongoing action
+    const parameterCollection = handleParameterCollection(intent, parameters, conversationId, originalMessage);
+    if (parameterCollection) {
+      if (parameterCollection.actionComplete) {
+        // Action is now complete, execute it with all collected parameters
+        console.log(`🎯 Action ${parameterCollection.action} is now complete with parameters:`, parameterCollection.allParameters);
+        
+        // Update the intent data with the complete parameters
+        intentData.parameters = parameterCollection.allParameters;
+        parameters = parameterCollection.allParameters;
+        
+        // Continue with normal execution below
+      } else {
+        // Still missing parameters, ask for the next one
+        return {
+          message: parameterCollection.nextMessage,
+          conversationId: conversationId,
+          ongoingAction: {
+            action: parameterCollection.action,
+            collectedParameters: parameterCollection.collectedParameters,
+            missingParameters: parameterCollection.missingParameters
+          }
+        };
       }
     }
 
@@ -435,6 +697,29 @@ async function executeAction(intentData, originalMessage, userToken, req) {
     }
 
     switch (intent) {
+      case 'CANCEL_ACTION': {
+        // Handle user wanting to cancel or stop an ongoing action
+        if (conversationId) {
+          const context = getOngoingActionContext(conversationId);
+          if (context) {
+            completeOngoingAction(conversationId);
+            return {
+              message: `✅ **Action cancelled!**\n\nI've stopped working on ${context.action.toLowerCase().replace(/_/g, ' ')}.\n\n💡 **What would you like to do instead?**\n\nI can help you with:\n• Creating courses, assignments, or announcements\n• Scheduling meetings\n• Managing your classroom\n• Or anything else you need!`,
+              conversationId: conversationId
+            };
+          } else {
+            return {
+              message: "There's nothing to cancel - I'm not working on any tasks right now.\n\n💡 **What would you like to do?**",
+              conversationId: conversationId
+            };
+          }
+        }
+        
+        return {
+          message: "There's nothing to cancel - I'm not working on any tasks right now.\n\n💡 **What would you like to do?**"
+        };
+      }
+      
       case 'GREETING': {
         // Handle casual conversation - just respond naturally without executing any actions
         const greetings = [
@@ -454,7 +739,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
         
         return {
           message: randomGreeting,
-          conversationId: req.body.conversationId
+          conversationId: conversationId
         };
       }
       
@@ -480,14 +765,22 @@ async function executeAction(intentData, originalMessage, userToken, req) {
         if (userRole !== 'teacher' && userRole !== 'super_admin') {
           return {
             message: 'You are not authorized to create courses. Only teachers and super admins can create courses.',
-            conversationId: req.body.conversationId
+            conversationId: conversationId
           };
         }
 
         if (!parameters.name) {
+          // 🚀 START TRACKING: Start tracking this action for parameter collection
+          startOngoingAction(conversationId, 'CREATE_COURSE', ['name'], {});
+          
           return {
             message: "I need a name for the course. Please provide one.",
-            conversationId: req.body.conversationId
+            conversationId: conversationId,
+            ongoingAction: {
+              action: 'CREATE_COURSE',
+              missingParameters: ['name'],
+              collectedParameters: {}
+            }
           };
         }
 
@@ -516,17 +809,28 @@ async function executeAction(intentData, originalMessage, userToken, req) {
 
           console.log('DEBUG: CREATE_COURSE - makeApiCall response:', response);
 
+          // ✅ COMPLETE ACTION: Mark the ongoing action as completed
+          if (conversationId) {
+            completeOngoingAction(conversationId);
+          }
+          
           return {
             message: `🎉 **Course "${parameters.name}" created successfully!**\n\n📚 **Course Details:**\n• Name: ${parameters.name}${parameters.section ? `\n• Section: ${parameters.section}` : ''}${parameters.description ? `\n• Description: ${parameters.description}` : ''}\n\n✅ Your course is now active in Google Classroom. Students can join using the enrollment code, and you can start posting announcements, assignments, and materials.\n\n💡 **Next steps:**\n• Post a welcome announcement\n• Create your first assignment\n• Invite students to join`,
             course: response.course,
-            conversationId: req.body.conversationId
+            conversationId: conversationId
           };
         } catch (error) {
           console.error('Error in CREATE_COURSE:', error);
+          
+          // ✅ COMPLETE ACTION: Mark the ongoing action as completed even on error
+          if (conversationId) {
+            completeOngoingAction(conversationId);
+          }
+          
           return {
             message: "Sorry, I encountered an error while trying to create the course. Please try again.",
             error: error.message,
-            conversationId: req.body.conversationId
+            conversationId: conversationId
           };
         }
       }

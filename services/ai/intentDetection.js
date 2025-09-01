@@ -623,6 +623,17 @@ function detectIntentFallback(message, conversationId) {
     };
   }
   
+  // Cancel or stop ongoing actions
+  if (lowerMessage.includes('cancel') || lowerMessage.includes('stop') || lowerMessage.includes('never mind') || 
+      lowerMessage.includes('forget it') || lowerMessage.includes('that\'s all') || lowerMessage.includes('done') ||
+      lowerMessage.includes('quit') || lowerMessage.includes('exit') || lowerMessage.includes('abort')) {
+    return {
+      intent: 'CANCEL_ACTION',
+      confidence: 0.9,
+      parameters: {}
+    };
+  }
+  
   // Greeting and casual conversation
   if (lowerMessage.includes('hi') || lowerMessage.includes('hello') || lowerMessage.includes('hey') || 
       lowerMessage.includes('good morning') || lowerMessage.includes('good afternoon') || 
@@ -707,6 +718,7 @@ async function detectIntent(message, conversationHistory, conversationId) {
       - DELETE_MEETING: User wants to cancel or delete an existing meeting (extract dateExpr, timeExpr)
       - READ_EMAIL: User wants to read emails from a specific sender (extract senderEmail, limit, subject if specified)
       - SEND_EMAIL: User wants to send an email to someone (extract recipientEmail, subject, message, attachments if specified)
+      - CANCEL_ACTION: User wants to cancel, stop, or abort an ongoing action (e.g., user says "cancel", "stop", "never mind", "forget it", "that's all", "done", "quit", "exit", "abort")
       - PROCEED_WITH_AVAILABLE_INFO: User wants to skip providing more information and proceed with available data (e.g., user says "no", "skip", "that's all", "proceed", etc.)
       - GREETING: User is saying hello, hi, hey, good morning/afternoon/evening, how are you, what's up, thanks, or engaging in casual conversation (no action needed)
         Examples: "hi", "hello", "hey there", "good morning", "how are you doing?", "thanks", "thank you"
