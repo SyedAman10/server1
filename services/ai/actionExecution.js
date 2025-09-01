@@ -1021,17 +1021,37 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           };
         }
 
+        // Check what parameters are missing and start tracking if needed
+        const missingParams = [];
         if (!parameters.courseName && !parameters.courseIdentifier) {
-          return {
-            message: "I need to know which course you want to create an announcement for. Please provide a course name.",
-            conversationId: req.body.conversationId
-          };
+          missingParams.push('courseName');
+        }
+        if (!parameters.announcementText) {
+          missingParams.push('announcementText');
         }
 
-        if (!parameters.announcementText) {
+        if (missingParams.length > 0) {
+          // 🚀 START TRACKING: Start tracking this action for parameter collection
+          startOngoingAction(conversationId, 'CREATE_ANNOUNCEMENT', missingParams, parameters);
+          
+          // Generate appropriate message based on what's missing
+          let message;
+          if (missingParams.includes('courseName') && missingParams.includes('announcementText')) {
+            message = "What would you like to announce and which course should I post it in?";
+          } else if (missingParams.includes('courseName')) {
+            message = "Which course should I post this announcement in?";
+          } else if (missingParams.includes('announcementText')) {
+            message = "What would you like to announce?";
+          }
+          
           return {
-            message: "Please provide the text for your announcement.",
-            conversationId: req.body.conversationId
+            message: message,
+            conversationId: conversationId,
+            ongoingAction: {
+              action: 'CREATE_ANNOUNCEMENT',
+              missingParameters: missingParams,
+              collectedParameters: parameters
+            }
           };
         }
 
@@ -1089,17 +1109,28 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             };
           }
           
+          // ✅ COMPLETE ACTION: Mark the ongoing action as completed
+          if (conversationId) {
+            completeOngoingAction(conversationId);
+          }
+
           return {
-            message: `✅ Announcement posted successfully in **${selectedCourse.name}**!\n\n📢 **${parameters.announcementText}**\n\nYour students will now see this announcement in their Google Classroom. You can view all announcements anytime by asking me to show the announcements for this course.`,
+            message: `Great! I've posted your announcement "${parameters.announcementText}" in ${selectedCourse.name}. Your students will now see this announcement in their Google Classroom.`,
             announcement: response.announcement,
-            conversationId: req.body.conversationId
+            conversationId: conversationId
           };
         } catch (error) {
           console.error('Error in CREATE_ANNOUNCEMENT:', error);
+          
+          // ✅ COMPLETE ACTION: Mark the ongoing action as completed even on error
+          if (conversationId) {
+            completeOngoingAction(conversationId);
+          }
+          
           return {
-            message: "Sorry, I encountered an error while creating the announcement. Please try again.",
+            message: "I'm sorry, but I couldn't create the announcement right now. Please try again in a moment.",
             error: error.message,
-            conversationId: req.body.conversationId
+            conversationId: conversationId
           };
         }
       }
