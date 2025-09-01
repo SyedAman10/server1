@@ -748,15 +748,15 @@ async function executeAction(intentData, originalMessage, userToken, req) {
         if (userRole === 'student') {
           // Students can view courses they're enrolled in
           const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken, req);
-          return formatCoursesResponse(coursesResponse, 'student', req.body.conversationId);
+          return formatCoursesResponse(coursesResponse, 'student', conversationId);
         } else if (userRole === 'teacher' || userRole === 'super_admin') {
           // Teachers and admins can view all courses
           const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken, req);
-          return formatCoursesResponse(coursesResponse, 'teacher', req.body.conversationId);
+          return formatCoursesResponse(coursesResponse, 'teacher', conversationId);
         } else {
           return {
             message: 'You are not authorized to view courses. Please contact your administrator.',
-            conversationId: req.body.conversationId
+            conversationId: conversationId
           };
         }
         
@@ -1816,7 +1816,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
 • "reschedule my today's meeting which is on today at 5pm make it to 6pm tomorrow"
 • "cancel my meeting tomorrow at 5pm"`;
         } else {
-          helpMessage = `❓ **General Help - Here's what I can do:**
+          helpMessage = `❓ **General Help - Here's what you can do:**
 
 1. **Course Management:**
    • List and view courses
@@ -1840,7 +1840,56 @@ async function executeAction(intentData, originalMessage, userToken, req) {
 
         return {
           message: helpMessage,
-          conversationId: req.body.conversationId
+          conversationId: conversationId
+        };
+
+      case 'UNKNOWN':
+        // Handle unknown intents gracefully
+        // Check if there's an ongoing action that this message might provide parameters for
+        if (conversationId) {
+          const context = getOngoingActionContext(conversationId);
+          if (context) {
+            // There's an ongoing action, try to extract parameters from this message
+            const parameterCollection = handleParameterCollection('UNKNOWN', {}, conversationId, originalMessage);
+            if (parameterCollection) {
+              if (parameterCollection.actionComplete) {
+                // Action is now complete, execute it with all collected parameters
+                console.log(`🎯 Action ${parameterCollection.action} is now complete with parameters:`, parameterCollection.allParameters);
+                
+                // Update the intent data and execute the action
+                intentData.intent = parameterCollection.action;
+                intentData.parameters = parameterCollection.allParameters;
+                
+                // Recursively call executeAction with the completed action
+                return await executeAction(intentData, originalMessage, userToken, req);
+              } else {
+                // Still missing parameters, ask for the next one
+                return {
+                  message: parameterCollection.nextMessage,
+                  conversationId: conversationId,
+                  ongoingAction: {
+                    action: parameterCollection.action,
+                    collectedParameters: parameterCollection.collectedParameters,
+                    missingParameters: parameterCollection.missingParameters
+                  }
+                };
+              }
+            } else {
+              // No parameters found, but there's an ongoing action
+              const contextMessage = getContextAwareMessage(conversationId);
+              return {
+                message: `🤔 I didn't understand that message, but I'm still working on something else!\n\n${contextMessage}\n\n💡 **Please provide the information I need, or say 'cancel' to stop.**`,
+                conversationId: conversationId,
+                ongoingAction: context
+              };
+            }
+          }
+        }
+        
+        // No ongoing action or no parameters found
+        return {
+          message: `🤔 I didn't understand that message. Could you please rephrase it?\n\n💡 **I can help you with:**\n• Creating courses, assignments, or announcements\n• Scheduling meetings\n• Managing your classroom\n• And much more!\n\nSay "help" to see all available commands.`,
+          conversationId: conversationId
         };
 
       case 'CHECK_ASSIGNMENT_SUBMISSIONS': {
@@ -2198,7 +2247,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           console.error('Failed to return submission:', error.message);
         }
 
-        return { message: `Grade updated for ${studentEmail} on "${assignmentTitle}".`, conversationId: req.body.conversationId };
+        return { message: `Grade updated for ${studentEmail} on "${assignmentTitle}".`, conversationId: conversationId };
       }
 
       case 'LIST_MEETINGS': {
@@ -2874,14 +2923,23 @@ async function executeAction(intentData, originalMessage, userToken, req) {
       default:
         console.log('❌ DEBUG: No matching case found for intent:', intent);
         console.log('🔍 DEBUG: Available cases: LIST_COURSES, CREATE_COURSE, LIST_ASSIGNMENTS, CREATE_ANNOUNCEMENT, GET_ANNOUNCEMENTS, GET_COURSE, CREATE_ASSIGNMENT, INVITE_STUDENTS, INVITE_TEACHERS, PROVIDE_MATERIALS, HELP, CHECK_ASSIGNMENT_SUBMISSIONS, GRADE_ASSIGNMENT, CREATE_MEETING, SHOW_ENROLLED_STUDENTS, READ_EMAIL, SEND_EMAIL');
-        return "I'm not sure how to handle that request. Please try again or ask for help.";
+        return {
+          message: "I'm not sure how to handle that request. Please try again or ask for help.",
+          conversationId: conversationId
+        };
     }
   } catch (error) {
     console.error('Action execution error:', error);
     if (error.response && error.response.data) {
-      return `Error: ${error.response.data.error || 'An error occurred'}`;
+      return {
+        message: `Error: ${error.response.data.error || 'An error occurred'}`,
+        conversationId: conversationId
+      };
     }
-    return "Sorry, I couldn't complete that action. Please try again later.";
+    return {
+      message: "Sorry, I couldn't complete that action. Please try again later.",
+      conversationId: conversationId
+    };
   }
 }
 
