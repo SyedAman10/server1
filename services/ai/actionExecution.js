@@ -699,21 +699,21 @@ async function executeAction(intentData, originalMessage, userToken, req) {
     const parameterCollection = handleParameterCollection(intent, parameters, conversationId, originalMessage);
     console.log('🔍 Parameter collection result:', parameterCollection);
     
-            if (parameterCollection) {
-          if (parameterCollection.actionComplete) {
-            // Action is now complete, execute it with all collected parameters
-            console.log(`🎯 Action ${parameterCollection.action} is now complete with parameters:`, parameterCollection.allParameters);
-            
-            // Update the intent data with the complete parameters
-            intentData.intent = parameterCollection.action;  // Change the intent!
-            intentData.parameters = parameterCollection.allParameters;
-            intent = parameterCollection.action;  // Update the local intent variable
-            parameters = parameterCollection.allParameters;
-            
-            console.log(`🔄 Updated intent from UNKNOWN to ${parameterCollection.action}`);
-            
-            // Continue with normal execution below
-          } else {
+    if (parameterCollection) {
+      if (parameterCollection.actionComplete) {
+        // Action is now complete, execute it with all collected parameters
+        console.log(`🎯 Action ${parameterCollection.action} is now complete with parameters:`, parameterCollection.allParameters);
+        
+        // Update the intent data with the complete parameters
+        intentData.intent = parameterCollection.action;  // Change the intent!
+        intentData.parameters = parameterCollection.allParameters;
+        intent = parameterCollection.action;  // Update the local intent variable
+        parameters = parameterCollection.allParameters;
+        
+        console.log(`🔄 Updated intent to ${parameterCollection.action}`);
+        
+        // Continue with normal execution below
+      } else {
         // Still missing parameters, ask for the next one
         console.log('🔍 Still missing parameters:', parameterCollection.missingParameters);
         return {
@@ -1888,66 +1888,6 @@ async function executeAction(intentData, originalMessage, userToken, req) {
 
       case 'UNKNOWN':
         // Handle unknown intents gracefully
-        // Check if there's an ongoing action that this message might provide parameters for
-        if (conversationId) {
-          const context = getOngoingActionContext(conversationId);
-          if (context) {
-            // There's an ongoing action, try to extract parameters from this message
-            const parameterCollection = handleParameterCollection('UNKNOWN', {}, conversationId, originalMessage);
-            if (parameterCollection) {
-              if (parameterCollection.actionComplete) {
-                // Action is now complete, execute it with all collected parameters
-                console.log(`🎯 Action ${parameterCollection.action} is now complete with parameters:`, parameterCollection.allParameters);
-                
-                // Update the intent data and execute the action
-                intentData.intent = parameterCollection.action;
-                intentData.parameters = parameterCollection.allParameters;
-                
-                // Recursively call executeAction with the completed action
-                console.log(`🔄 Executing completed action: ${parameterCollection.action}`);
-                return await executeAction(intentData, originalMessage, userToken, req);
-              } else {
-                // Still missing parameters, ask for the next one
-                return {
-                  message: parameterCollection.nextMessage,
-                  conversationId: conversationId,
-                  ongoingAction: {
-                    action: parameterCollection.action,
-                    collectedParameters: parameterCollection.collectedParameters,
-                    missingParameters: parameterCollection.missingParameters
-                  }
-                };
-              }
-            } else {
-              // No parameters found, but there's an ongoing action
-              const contextMessage = getContextAwareMessage(conversationId);
-              
-              // If contextMessage is null, it means the action is complete
-              if (!contextMessage) {
-                // Action should be complete, let's check
-                if (isActionComplete(conversationId)) {
-                  console.log(`🎯 Action ${context.action} is complete but not handled, completing it now...`);
-                  completeOngoingAction(conversationId);
-                  return {
-                    message: `✅ **Action completed!**\n\nI've finished ${context.action.toLowerCase().replace(/_/g, ' ')}.\n\n💡 **What would you like to do next?**`,
-                    conversationId: conversationId
-                  };
-                }
-              }
-              
-              // Use contextMessage or fallback
-              const displayMessage = contextMessage || `I'm still working on ${context.action.toLowerCase().replace(/_/g, ' ')}. Please provide the information I need.`;
-              
-              return {
-                message: `I didn't understand that, but I'm still working on something else. ${displayMessage} Please provide the information I need, or say 'cancel' to stop.`,
-                conversationId: conversationId,
-                ongoingAction: context
-              };
-            }
-          }
-        }
-        
-        // No ongoing action or no parameters found
         return {
           message: `I didn't understand that. Could you please rephrase it? I can help you with creating courses, assignments, announcements, scheduling meetings, and managing your classroom. Say "help" to see all available commands.`,
           conversationId: conversationId
