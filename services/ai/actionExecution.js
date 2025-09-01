@@ -663,17 +663,21 @@ async function executeAction(intentData, originalMessage, userToken, req) {
     const parameterCollection = handleParameterCollection(intent, parameters, conversationId, originalMessage);
     console.log('🔍 Parameter collection result:', parameterCollection);
     
-    if (parameterCollection) {
-      if (parameterCollection.actionComplete) {
-        // Action is now complete, execute it with all collected parameters
-        console.log(`🎯 Action ${parameterCollection.action} is now complete with parameters:`, parameterCollection.allParameters);
-        
-        // Update the intent data with the complete parameters
-        intentData.parameters = parameterCollection.allParameters;
-        parameters = parameterCollection.allParameters;
-        
-        // Continue with normal execution below
-      } else {
+            if (parameterCollection) {
+          if (parameterCollection.actionComplete) {
+            // Action is now complete, execute it with all collected parameters
+            console.log(`🎯 Action ${parameterCollection.action} is now complete with parameters:`, parameterCollection.allParameters);
+            
+            // Update the intent data with the complete parameters
+            intentData.intent = parameterCollection.action;  // Change the intent!
+            intentData.parameters = parameterCollection.allParameters;
+            intent = parameterCollection.action;  // Update the local intent variable
+            parameters = parameterCollection.allParameters;
+            
+            console.log(`🔄 Updated intent from UNKNOWN to ${parameterCollection.action}`);
+            
+            // Continue with normal execution below
+          } else {
         // Still missing parameters, ask for the next one
         console.log('🔍 Still missing parameters:', parameterCollection.missingParameters);
         return {
