@@ -233,49 +233,49 @@ function getContextAwareMessage(conversationId) {
   switch (action) {
     case 'CREATE_COURSE':
       if (missingParameters.includes('name')) {
-        return `I'm still waiting for the course name to create your course. What would you like to call it?`;
+        return `What would you like to call your new course?`;
       }
       break;
       
     case 'CREATE_ASSIGNMENT':
       if (missingParameters.includes('title')) {
-        return `I'm still waiting for the assignment title. What would you like to call this assignment?`;
+        return `What should I call this assignment?`;
       }
       if (missingParameters.includes('courseName')) {
-        return `I'm still waiting for the course name. Which course should I create the assignment "${collectedParameters.title || 'this assignment'}" in?`;
+        return `Which course should I create this assignment in?`;
       }
       break;
       
     case 'CREATE_ANNOUNCEMENT':
       if (missingParameters.includes('announcementText')) {
-        return `I'm still waiting for the announcement text. What would you like to announce?`;
+        return `What would you like to announce?`;
       }
       if (missingParameters.includes('courseName')) {
-        return `I'm still waiting for the course name. Which course should I post the announcement in?`;
+        return `Which course should I post this announcement in?`;
       }
       break;
       
     case 'CREATE_MEETING':
       if (missingParameters.includes('title')) {
-        return `I'm still waiting for the meeting title. What should I call this meeting?`;
+        return `What should I call this meeting?`;
       }
       if (missingParameters.includes('attendees')) {
-        return `I'm still waiting for the attendee emails. Who should I invite to the meeting "${collectedParameters.title || 'this meeting'}"?`;
+        return `Who should I invite to this meeting?`;
       }
       if (missingParameters.includes('dateExpr')) {
-        return `I'm still waiting for the meeting date. When should I schedule the meeting "${collectedParameters.title || 'this meeting'}"?`;
+        return `When should I schedule this meeting?`;
       }
       if (missingParameters.includes('timeExpr')) {
-        return `I'm still waiting for the meeting time. What time should I schedule the meeting "${collectedParameters.title || 'this meeting'}" for?`;
+        return `What time should I schedule this meeting for?`;
       }
       break;
       
     case 'INVITE_STUDENTS':
       if (missingParameters.includes('courseName')) {
-        return `I'm still waiting for the course name. Which course should I invite the students to?`;
+        return `Which course should I invite the students to?`;
       }
       if (missingParameters.includes('studentEmails')) {
-        return `I'm still waiting for the student emails. Which students should I invite to the course?`;
+        return `Which students should I invite?`;
       }
       break;
   }

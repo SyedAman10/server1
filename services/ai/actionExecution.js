@@ -28,7 +28,7 @@ function checkForNewActionAttempt(intent, conversationId) {
     
     return {
       shouldBlock: true,
-      message: `🔄 **I'm still working on something else!**\n\n${contextMessage}\n\n💡 **Would you like to continue with that first?**\n\nIf you want to start something new, please say "cancel" or "stop" to clear the current task.`,
+      message: `I'm still working on something else. ${contextMessage} Would you like to continue with that first? If you want to start something new, just say "cancel" or "stop".`,
       ongoingAction: context
     };
   }
@@ -747,19 +747,19 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           if (context) {
             completeOngoingAction(conversationId);
             return {
-              message: `✅ **Action cancelled!**\n\nI've stopped working on ${context.action.toLowerCase().replace(/_/g, ' ')}.\n\n💡 **What would you like to do instead?**\n\nI can help you with:\n• Creating courses, assignments, or announcements\n• Scheduling meetings\n• Managing your classroom\n• Or anything else you need!`,
+              message: `Got it! I've stopped working on ${context.action.toLowerCase().replace(/_/g, ' ')}. What would you like to do instead?`,
               conversationId: conversationId
             };
           } else {
             return {
-              message: "There's nothing to cancel - I'm not working on any tasks right now.\n\n💡 **What would you like to do?**",
+              message: "There's nothing to cancel - I'm not working on any tasks right now. What would you like to do?",
               conversationId: conversationId
             };
           }
         }
         
         return {
-          message: "There's nothing to cancel - I'm not working on any tasks right now.\n\n💡 **What would you like to do?**"
+          message: "There's nothing to cancel - I'm not working on any tasks right now. What would you like to do?"
         };
       }
       
@@ -817,7 +817,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           startOngoingAction(conversationId, 'CREATE_COURSE', ['name'], {});
           
           return {
-            message: "I need a name for the course. Please provide one.",
+            message: "What would you like to call your new course?",
             conversationId: conversationId,
             ongoingAction: {
               action: 'CREATE_COURSE',
@@ -858,7 +858,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           }
 
           return {
-            message: `🎉 **Course "${parameters.name}" created successfully!**\n\n📚 **Course Details:**\n• Name: ${parameters.name}${parameters.section ? `\n• Section: ${parameters.section}` : ''}${parameters.description ? `\n• Description: ${parameters.description}` : ''}\n\n✅ Your course is now active in Google Classroom. Students can join using the enrollment code, and you can start posting announcements, assignments, and materials.\n\n💡 **Next steps:**\n• Post a welcome announcement\n• Create your first assignment\n• Invite students to join`,
+            message: `Great! I've successfully created your course "${parameters.name}". Your course is now live in Google Classroom and ready for students to join. You can start posting announcements, creating assignments, and adding course materials right away.`,
             course: response.course,
             conversationId: conversationId
           };
@@ -871,7 +871,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           }
           
           return {
-            message: "Sorry, I encountered an error while trying to create the course. Please try again.",
+            message: "I'm sorry, but I couldn't create the course right now. Please try again in a moment.",
             error: error.message,
             conversationId: conversationId
           };
@@ -1939,7 +1939,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
               const displayMessage = contextMessage || `I'm still working on ${context.action.toLowerCase().replace(/_/g, ' ')}. Please provide the information I need.`;
               
               return {
-                message: `🤔 I didn't understand that message, but I'm still working on something else!\n\n${displayMessage}\n\n💡 **Please provide the information I need, or say 'cancel' to stop.**`,
+                message: `I didn't understand that, but I'm still working on something else. ${displayMessage} Please provide the information I need, or say 'cancel' to stop.`,
                 conversationId: conversationId,
                 ongoingAction: context
               };
@@ -1949,7 +1949,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
         
         // No ongoing action or no parameters found
         return {
-          message: `🤔 I didn't understand that message. Could you please rephrase it?\n\n💡 **I can help you with:**\n• Creating courses, assignments, or announcements\n• Scheduling meetings\n• Managing your classroom\n• And much more!\n\nSay "help" to see all available commands.`,
+          message: `I didn't understand that. Could you please rephrase it? I can help you with creating courses, assignments, announcements, scheduling meetings, and managing your classroom. Say "help" to see all available commands.`,
           conversationId: conversationId
         };
 
