@@ -98,6 +98,42 @@ function handleParameterCollection(intent, parameters, conversationId, originalM
           parametersFound = true;
         }
       }
+      
+      // Check if user provided due date
+      if (missingParameters.includes('dueDateExpr')) {
+        const datePatterns = [
+          /(?:due|by)\s+(today|tomorrow|next\s+\w+|in\s+\d+\s+weeks?|end\s+of\s+month)/i,
+          /(?:due|by)\s+(\w+\s+\d+)/i, // e.g., "December 15"
+          /(?:due|by)\s+(\d{1,2}\/\d{1,2})/i // e.g., "12/15"
+        ];
+        
+        for (const pattern of datePatterns) {
+          const match = originalMessage.match(pattern);
+          if (match && match[1]) {
+            newParameters.dueDateExpr = match[1].trim();
+            parametersFound = true;
+            break;
+          }
+        }
+      }
+      
+      // Check if user provided due time
+      if (missingParameters.includes('dueTimeExpr')) {
+        const timePatterns = [
+          /(?:at|by)\s+(\d{1,2}:\d{2}\s*(?:am|pm)?)/i, // e.g., "5:30 PM"
+          /(?:at|by)\s+(\d{1,2}\s*(?:am|pm))/i, // e.g., "5 PM"
+          /(?:at|by)\s+(noon|midnight)/i
+        ];
+        
+        for (const pattern of timePatterns) {
+          const match = originalMessage.match(pattern);
+          if (match && match[1]) {
+            newParameters.dueTimeExpr = match[1].trim();
+            parametersFound = true;
+            break;
+          }
+        }
+      }
       break;
       
     case 'CREATE_ANNOUNCEMENT':
@@ -1863,56 +1899,13 @@ async function executeAction(intentData, originalMessage, userToken, req) {
                 // Action is now complete, execute it with all collected parameters
                 console.log(`🎯 Action ${parameterCollection.action} is now complete with parameters:`, parameterCollection.allParameters);
                 
-                // Instead of recursive call, let's handle this directly
-                if (parameterCollection.action === 'CREATE_COURSE') {
-                  // Execute course creation directly
-                  try {
-                    const courseData = {
-                      name: parameterCollection.allParameters.name,
-                      section: parameterCollection.allParameters.section || '',
-                      descriptionHeading: parameterCollection.allParameters.descriptionHeading || '',
-                      description: parameterCollection.allParameters.description || '',
-                      room: parameterCollection.allParameters.description || ''
-                    };
-
-                    console.log('🎯 Executing CREATE_COURSE with data:', courseData);
-                    
-                    const response = await makeApiCall(
-                      `${baseUrl}/api/classroom`,
-                      'POST',
-                      courseData,
-                      userToken,
-                      req
-                    );
-
-                    console.log('🎯 Course creation response:', response);
-
-                    // Complete the ongoing action
-                    completeOngoingAction(conversationId);
-
-                    return {
-                      message: `🎉 **Course "${parameterCollection.allParameters.name}" created successfully!**\n\n📚 **Course Details:**\n• Name: ${parameterCollection.allParameters.name}${parameterCollection.allParameters.section ? `\n• Section: ${parameterCollection.allParameters.section}` : ''}${parameterCollection.allParameters.description ? `\n• Description: ${parameterCollection.allParameters.description}` : ''}\n\n✅ Your course is now active in Google Classroom. Students can join using the enrollment code, and you can start posting announcements, assignments, and materials.\n\n💡 **Next steps:**\n• Post a welcome announcement\n• Create your first assignment\n• Invite students to join`,
-                      course: response.course,
-                      conversationId: conversationId
-                    };
-                  } catch (error) {
-                    console.error('Error executing CREATE_COURSE:', error);
-                    
-                    // Complete the ongoing action even on error
-                    completeOngoingAction(conversationId);
-                    
-                    return {
-                      message: "Sorry, I encountered an error while trying to create the course. Please try again.",
-                      error: error.message,
-                      conversationId: conversationId
-                    };
-                  }
-                } else {
-                  // For other actions, use recursive call
-                  intentData.intent = parameterCollection.action;
-                  intentData.parameters = parameterCollection.allParameters;
-                  return await executeAction(intentData, originalMessage, userToken, req);
-                }
+                // Update the intent data and execute the action
+                intentData.intent = parameterCollection.action;
+                intentData.parameters = parameterCollection.allParameters;
+                
+                // Recursively call executeAction with the completed action
+                console.log(`🔄 Executing completed action: ${parameterCollection.action}`);
+                return await executeAction(intentData, originalMessage, userToken, req);
               } else {
                 // Still missing parameters, ask for the next one
                 return {
