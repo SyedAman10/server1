@@ -661,6 +661,8 @@ async function executeAction(intentData, originalMessage, userToken, req) {
 
     // 🔍 CONTEXT CHECK: Check if this message provides parameters for an ongoing action
     const parameterCollection = handleParameterCollection(intent, parameters, conversationId, originalMessage);
+    console.log('🔍 Parameter collection result:', parameterCollection);
+    
     if (parameterCollection) {
       if (parameterCollection.actionComplete) {
         // Action is now complete, execute it with all collected parameters
@@ -673,6 +675,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
         // Continue with normal execution below
       } else {
         // Still missing parameters, ask for the next one
+        console.log('🔍 Still missing parameters:', parameterCollection.missingParameters);
         return {
           message: parameterCollection.nextMessage,
           conversationId: conversationId,
@@ -813,7 +816,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           if (conversationId) {
             completeOngoingAction(conversationId);
           }
-          
+
           return {
             message: `🎉 **Course "${parameters.name}" created successfully!**\n\n📚 **Course Details:**\n• Name: ${parameters.name}${parameters.section ? `\n• Section: ${parameters.section}` : ''}${parameters.description ? `\n• Description: ${parameters.description}` : ''}\n\n✅ Your course is now active in Google Classroom. Students can join using the enrollment code, and you can start posting announcements, assignments, and materials.\n\n💡 **Next steps:**\n• Post a welcome announcement\n• Create your first assignment\n• Invite students to join`,
             course: response.course,
@@ -1856,12 +1859,56 @@ async function executeAction(intentData, originalMessage, userToken, req) {
                 // Action is now complete, execute it with all collected parameters
                 console.log(`🎯 Action ${parameterCollection.action} is now complete with parameters:`, parameterCollection.allParameters);
                 
-                // Update the intent data and execute the action
-                intentData.intent = parameterCollection.action;
-                intentData.parameters = parameterCollection.allParameters;
-                
-                // Recursively call executeAction with the completed action
-                return await executeAction(intentData, originalMessage, userToken, req);
+                // Instead of recursive call, let's handle this directly
+                if (parameterCollection.action === 'CREATE_COURSE') {
+                  // Execute course creation directly
+                  try {
+                    const courseData = {
+                      name: parameterCollection.allParameters.name,
+                      section: parameterCollection.allParameters.section || '',
+                      descriptionHeading: parameterCollection.allParameters.descriptionHeading || '',
+                      description: parameterCollection.allParameters.description || '',
+                      room: parameterCollection.allParameters.description || ''
+                    };
+
+                    console.log('🎯 Executing CREATE_COURSE with data:', courseData);
+                    
+                    const response = await makeApiCall(
+                      `${baseUrl}/api/classroom`,
+                      'POST',
+                      courseData,
+                      userToken,
+                      req
+                    );
+
+                    console.log('🎯 Course creation response:', response);
+
+                    // Complete the ongoing action
+                    completeOngoingAction(conversationId);
+
+                    return {
+                      message: `🎉 **Course "${parameterCollection.allParameters.name}" created successfully!**\n\n📚 **Course Details:**\n• Name: ${parameterCollection.allParameters.name}${parameterCollection.allParameters.section ? `\n• Section: ${parameterCollection.allParameters.section}` : ''}${parameterCollection.allParameters.description ? `\n• Description: ${parameterCollection.allParameters.description}` : ''}\n\n✅ Your course is now active in Google Classroom. Students can join using the enrollment code, and you can start posting announcements, assignments, and materials.\n\n💡 **Next steps:**\n• Post a welcome announcement\n• Create your first assignment\n• Invite students to join`,
+                      course: response.course,
+                      conversationId: conversationId
+                    };
+                  } catch (error) {
+                    console.error('Error executing CREATE_COURSE:', error);
+                    
+                    // Complete the ongoing action even on error
+                    completeOngoingAction(conversationId);
+                    
+                    return {
+                      message: "Sorry, I encountered an error while trying to create the course. Please try again.",
+                      error: error.message,
+                      conversationId: conversationId
+                    };
+                  }
+                } else {
+                  // For other actions, use recursive call
+                  intentData.intent = parameterCollection.action;
+                  intentData.parameters = parameterCollection.allParameters;
+                  return await executeAction(intentData, originalMessage, userToken, req);
+                }
               } else {
                 // Still missing parameters, ask for the next one
                 return {
@@ -1877,8 +1924,25 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             } else {
               // No parameters found, but there's an ongoing action
               const contextMessage = getContextAwareMessage(conversationId);
+              
+              // If contextMessage is null, it means the action is complete
+              if (!contextMessage) {
+                // Action should be complete, let's check
+                if (isActionComplete(conversationId)) {
+                  console.log(`🎯 Action ${context.action} is complete but not handled, completing it now...`);
+                  completeOngoingAction(conversationId);
+                  return {
+                    message: `✅ **Action completed!**\n\nI've finished ${context.action.toLowerCase().replace(/_/g, ' ')}.\n\n💡 **What would you like to do next?**`,
+                    conversationId: conversationId
+                  };
+                }
+              }
+              
+              // Use contextMessage or fallback
+              const displayMessage = contextMessage || `I'm still working on ${context.action.toLowerCase().replace(/_/g, ' ')}. Please provide the information I need.`;
+              
               return {
-                message: `🤔 I didn't understand that message, but I'm still working on something else!\n\n${contextMessage}\n\n💡 **Please provide the information I need, or say 'cancel' to stop.**`,
+                message: `🤔 I didn't understand that message, but I'm still working on something else!\n\n${displayMessage}\n\n💡 **Please provide the information I need, or say 'cancel' to stop.**`,
                 conversationId: conversationId,
                 ongoingAction: context
               };
