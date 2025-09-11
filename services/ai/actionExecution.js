@@ -463,9 +463,27 @@ async function handleParameterCollection(intent, parameters, conversationId, ori
       
       // Check if user provided course name
       if (missingParameters.includes('courseName')) {
-        const courseMatch = originalMessage.match(/(?:in|for)\s+(.+?)(?:\s|$)/i);
+        const courseMatch = originalMessage.match(/(?:in|for|to)\s+(.+?)(?:\s|$)/i);
         if (courseMatch && courseMatch[1]) {
-          newParameters.courseName = courseMatch[1].trim();
+          const extractedCourseName = courseMatch[1].trim();
+          
+          // Check if it's a generic term that needs clarification
+          const genericTerms = [
+            'my class', 'my course', 'the class', 'the course', 'class', 'course',
+            'it', 'this', 'that', 'one', 'some', 'any', 'a class', 'a course'
+          ];
+          
+          if (genericTerms.includes(extractedCourseName.toLowerCase())) {
+            return {
+              action: 'CREATE_ANNOUNCEMENT',
+              missingParameters: ['courseName'],
+              collectedParameters: collectedParameters,
+              nextMessage: `I need to know which specific class you're referring to. Could you please tell me the name of the class? For example: "Grade Islamiat class" or "Math 101".`,
+              actionComplete: false
+            };
+          }
+          
+          newParameters.courseName = extractedCourseName;
           parametersFound = true;
         }
       }
@@ -620,6 +638,20 @@ async function findMatchingCourse(courseName, userToken, req, baseUrl) {
     
     const searchTerm = (courseName || '').toLowerCase();
     console.log('DEBUG: Search term:', searchTerm);
+    
+    // Check for generic terms that should prompt for clarification
+    const genericTerms = [
+      'my class', 'my course', 'the class', 'the course', 'class', 'course',
+      'it', 'this', 'that', 'one', 'some', 'any', 'a class', 'a course'
+    ];
+    
+    if (genericTerms.includes(searchTerm)) {
+      console.log('DEBUG: Generic term detected, asking for clarification');
+      return { 
+        success: false, 
+        message: `I need to know which specific class you're referring to. Could you please tell me the name of the class? For example: "Grade Islamiat class" or "Math 101".` 
+      };
+    }
     
     // Split search term into words for better matching
     const searchWords = searchTerm.split(/\s+/).filter(word => word.length > 0);
