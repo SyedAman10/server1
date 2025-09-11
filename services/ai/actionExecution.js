@@ -37,6 +37,71 @@ function checkForNewActionAttempt(intent, conversationId) {
 }
 
 /**
+ * Use AI to analyze user intent for course naming
+ */
+async function analyzeUserIntentForCourseNaming(userMessage, conversationId) {
+  try {
+    // Create a focused prompt for intent analysis
+    const intentAnalysisPrompt = `Analyze the user's message for course naming intent. Respond with JSON only.
+
+User message: "${userMessage}"
+
+Determine if the user is:
+1. Providing a direct course name (respond with: {"intent": "direct_name", "name": "extracted_name"})
+2. Describing a subject/topic for suggestions (respond with: {"intent": "subject_description", "subject": "extracted_subject"})
+3. Expressing uncertainty or asking for help (respond with: {"intent": "uncertainty", "needs_help": true})
+4. Asking for more suggestions (respond with: {"intent": "more_suggestions", "needs_help": true})
+
+Examples:
+- "Math 101" → {"intent": "direct_name", "name": "Math 101"}
+- "its about mathematics" → {"intent": "subject_description", "subject": "mathematics"}
+- "i dont know" → {"intent": "uncertainty", "needs_help": true}
+- "tell me some options" → {"intent": "more_suggestions", "needs_help": true}
+- "hhaha how would i know" → {"intent": "uncertainty", "needs_help": true}
+
+Respond with JSON only:`;
+
+    // Use the existing AI service to analyze intent
+    const response = await makeApiCall(
+      `${process.env.OPENAI_API_URL || 'https://api.openai.com/v1'}/chat/completions`,
+      'POST',
+      {
+        model: 'gpt-3.5-turbo',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are an AI assistant that analyzes user intent for course naming. Always respond with valid JSON only.'
+          },
+          {
+            role: 'user',
+            content: intentAnalysisPrompt
+          }
+        ],
+        max_tokens: 150,
+        temperature: 0.1
+      },
+      process.env.OPENAI_API_KEY,
+      null
+    );
+
+    if (response.choices && response.choices[0] && response.choices[0].message) {
+      const content = response.choices[0].message.content.trim();
+      try {
+        return JSON.parse(content);
+      } catch (parseError) {
+        console.error('Error parsing AI intent analysis:', parseError);
+        return { intent: 'uncertainty', needs_help: true };
+      }
+    }
+    
+    return { intent: 'uncertainty', needs_help: true };
+  } catch (error) {
+    console.error('Error in AI intent analysis:', error);
+    return { intent: 'uncertainty', needs_help: true };
+  }
+}
+
+/**
  * Generate course name suggestions based on subject
  */
 function generateCourseNameSuggestions(subject) {
@@ -169,7 +234,7 @@ function isValidCourseName(name) {
  * Handle parameter collection for ongoing actions
  * This function processes user input to collect missing parameters
  */
-function handleParameterCollection(intent, parameters, conversationId, originalMessage) {
+async function handleParameterCollection(intent, parameters, conversationId, originalMessage) {
   if (!conversationId) return null;
   
   const context = getOngoingActionContext(conversationId);
@@ -185,163 +250,51 @@ function handleParameterCollection(intent, parameters, conversationId, originalM
     case 'CREATE_COURSE':
       // Check if user provided a course name
       if (missingParameters.includes('name')) {
-        const message = originalMessage.toLowerCase().trim();
+        // Use AI to analyze user intent
+        const intentAnalysis = await analyzeUserIntentForCourseNaming(originalMessage, conversationId);
         
-        // Check for expressions indicating uncertainty or frustration
-        const uncertaintyPatterns = [
-          /i don'?t\s+(know|care|give a shit|give a fuck)/i,
-          /i have no idea/i,
-          /whatever/i,
-          /i don'?t fucking know/i,
-          /fuck if i know/i,
-          /beats me/i,
-          /your choice/i,
-          /you decide/i,
-          /surprise me/i,
-          /anything/i,
-          /random/i
-        ];
-        
-        // Check for requests for more suggestions or help
-        const helpRequestPatterns = [
-          /tell me some/i,
-          /give me some/i,
-          /show me some/i,
-          /what are some/i,
-          /what other/i,
-          /any other/i,
-          /more suggestions/i,
-          /more options/i,
-          /different names/i,
-          /different options/i,
-          /other names/i,
-          /other options/i,
-          /suggest some/i,
-          /recommend some/i,
-          /help me/i,
-          /i need help/i,
-          /can you help/i,
-          /what do you suggest/i,
-          /what would you suggest/i,
-          /what should i/i,
-          /i'm not sure/i,
-          /i'm confused/i,
-          /not sure/i,
-          /confused/i
-        ];
-        
-        const isUncertain = uncertaintyPatterns.some(pattern => pattern.test(message));
-        const isHelpRequest = helpRequestPatterns.some(pattern => pattern.test(message));
-        
-        if (isUncertain || isHelpRequest) {
-          // User is expressing uncertainty or asking for help - provide suggestions instead of using their message
-          return {
-            action: 'CREATE_COURSE',
-            missingParameters: ['name'],
-            collectedParameters: collectedParameters,
-            nextMessage: "I understand you're not sure about the name! Let me help you with some suggestions. What subject or topic will this class cover? For example:\n• Math 101\n• English Literature\n• Computer Science\n• History of Art\n\nOr if you'd prefer, I can suggest a name based on the subject you tell me about.",
-            actionComplete: false
-          };
-        }
-        
-        // Check if user provided a subject instead of a course name
-        const subjectKeywords = ['math', 'english', 'science', 'history', 'computer', 'art', 'music', 'language', 'business', 'psychology', 'biology', 'chemistry', 'physics', 'algebra', 'calculus', 'literature', 'writing', 'programming', 'coding'];
-        const hasSubjectKeyword = subjectKeywords.some(keyword => message.includes(keyword));
-        
-        // Check for subject description patterns
-        const subjectDescriptionPatterns = [
-          /it'?s about (.+)/i,
-          /it'?s for (.+)/i,
-          /it'?s related to (.+)/i,
-          /it'?s on (.+)/i,
-          /it'?s regarding (.+)/i,
-          /the subject is (.+)/i,
-          /the topic is (.+)/i,
-          /we'?ll be studying (.+)/i,
-          /we'?ll be learning (.+)/i,
-          /we'?ll be covering (.+)/i,
-          /about (.+)/i,
-          /for (.+)/i,
-          /on (.+)/i,
-          /regarding (.+)/i,
-          /studying (.+)/i,
-          /learning (.+)/i,
-          /covering (.+)/i
-        ];
-        
-        let extractedSubject = null;
-        for (const pattern of subjectDescriptionPatterns) {
-          const match = originalMessage.match(pattern);
-          if (match && match[1]) {
-            extractedSubject = match[1].trim();
+        switch (intentAnalysis.intent) {
+          case 'direct_name':
+            // User provided a direct course name
+            if (intentAnalysis.name && isValidCourseName(intentAnalysis.name)) {
+              newParameters.name = intentAnalysis.name;
+              parametersFound = true;
+            } else {
+              return {
+                action: 'CREATE_COURSE',
+                missingParameters: ['name'],
+                collectedParameters: collectedParameters,
+                nextMessage: `"${intentAnalysis.name || originalMessage}" doesn't seem like a proper course name. Could you provide a more descriptive name? For example: "Math 101", "English Literature", or "Computer Science Fundamentals".`,
+                actionComplete: false
+              };
+            }
             break;
-          }
-        }
-        
-        // If user is describing a subject or mentioned subject keywords, provide suggestions
-        if ((hasSubjectKeyword || extractedSubject) && !isValidCourseName(originalMessage.trim())) {
-          const subjectToUse = extractedSubject || originalMessage.trim();
-          const suggestions = generateCourseNameSuggestions(subjectToUse);
-          const suggestionList = suggestions.slice(0, 3).map(s => `• ${s}`).join('\n');
-          
-          return {
-            action: 'CREATE_COURSE',
-            missingParameters: ['name'],
-            collectedParameters: collectedParameters,
-            nextMessage: `I see you mentioned "${subjectToUse}" as the subject. Here are some course name suggestions:\n\n${suggestionList}\n\nWhich one would you like to use, or would you prefer a different name?`,
-            actionComplete: false
-          };
-        }
-        
-        // Check if user is asking for more suggestions after already being given some
-        if (isHelpRequest && !hasSubjectKeyword && !extractedSubject) {
-          // User is asking for more suggestions but hasn't specified a subject yet
-          return {
-            action: 'CREATE_COURSE',
-            missingParameters: ['name'],
-            collectedParameters: collectedParameters,
-            nextMessage: "I'd be happy to suggest more course names! What subject or topic will this class cover? For example:\n• Math 101\n• English Literature\n• Computer Science\n• History of Art\n\nOnce you tell me the subject, I can provide specific suggestions for that topic.",
-            actionComplete: false
-          };
-        }
-        
-        // Check for explicit naming patterns
-        const nameMatch = originalMessage.match(/(?:called|named|name is|call it)\s+(.+?)(?:\s|$)/i);
-        if (nameMatch && nameMatch[1]) {
-          const extractedName = nameMatch[1].trim();
-          // Validate the extracted name
-          if (isValidCourseName(extractedName)) {
-            newParameters.name = extractedName;
-            parametersFound = true;
-          } else {
+            
+          case 'subject_description':
+            // User described a subject - provide suggestions
+            const subjectToUse = intentAnalysis.subject || originalMessage.trim();
+            const suggestions = generateCourseNameSuggestions(subjectToUse);
+            const suggestionList = suggestions.slice(0, 3).map(s => `• ${s}`).join('\n');
+            
             return {
               action: 'CREATE_COURSE',
               missingParameters: ['name'],
               collectedParameters: collectedParameters,
-              nextMessage: `"${extractedName}" doesn't seem like a proper course name. Could you provide a more descriptive name? For example: "Math 101", "English Literature", or "Computer Science Fundamentals".`,
+              nextMessage: `I see you mentioned "${subjectToUse}" as the subject. Here are some course name suggestions:\n\n${suggestionList}\n\nWhich one would you like to use, or would you prefer a different name?`,
               actionComplete: false
             };
-          }
-        }
-        // Check if they provided a direct course name (not an action)
-        else if (!originalMessage.toLowerCase().includes('create') && 
-                 !originalMessage.toLowerCase().includes('make') && 
-                 !originalMessage.toLowerCase().includes('new course') &&
-                 !originalMessage.toLowerCase().includes('course')) {
-          const directName = originalMessage.trim();
-          // Validate the direct name
-          if (isValidCourseName(directName)) {
-            newParameters.name = directName;
-            parametersFound = true;
-          } else {
+            
+          case 'uncertainty':
+          case 'more_suggestions':
+          default:
+            // User is uncertain or asking for help - provide guidance
             return {
               action: 'CREATE_COURSE',
               missingParameters: ['name'],
               collectedParameters: collectedParameters,
-              nextMessage: `"${directName}" doesn't seem like a proper course name. Could you provide a more descriptive name? For example: "Math 101", "English Literature", or "Computer Science Fundamentals".`,
+              nextMessage: "I understand you're not sure about the name! Let me help you with some suggestions. What subject or topic will this class cover? For example:\n• Math 101\n• English Literature\n• Computer Science\n• History of Art\n\nOr if you'd prefer, I can suggest a name based on the subject you tell me about.",
               actionComplete: false
             };
-          }
         }
         
         // Handle confirmation for course name
@@ -1031,7 +984,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
     }
 
     // 🔍 CONTEXT CHECK: Check if this message provides parameters for an ongoing action
-    const parameterCollection = handleParameterCollection(intent, parameters, conversationId, originalMessage);
+    const parameterCollection = await handleParameterCollection(intent, parameters, conversationId, originalMessage);
     console.log('🔍 Parameter collection result:', parameterCollection);
     
     if (parameterCollection) {
