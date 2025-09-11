@@ -483,8 +483,56 @@ async function handleParameterCollection(intent, parameters, conversationId, ori
             };
           }
           
+          // Check if the course name is too short or unclear
+          if (extractedCourseName.length < 3) {
+            return {
+              action: 'CREATE_ANNOUNCEMENT',
+              missingParameters: ['courseName'],
+              collectedParameters: collectedParameters,
+              nextMessage: `"${extractedCourseName}" seems too short to be a class name. Could you please provide the full name of the class? For example: "Grade Islamiat class" or "Math 101".`,
+              actionComplete: false
+            };
+          }
+          
           newParameters.courseName = extractedCourseName;
           parametersFound = true;
+        } else {
+          // If no pattern match but we're waiting for course name, treat the whole message as course name
+          // unless it's clearly not a course name
+          const message = originalMessage.trim();
+          const notCourseNamePatterns = [
+            /^(what|how|when|where|why|who)/i,
+            /^(help|assist|support)/i,
+            /^(create|make|post|announce)/i,
+            /^(yes|no|ok|okay|sure)/i
+          ];
+          
+          if (!notCourseNamePatterns.some(pattern => pattern.test(message))) {
+            // Check if it's a generic term
+            if (genericTerms.includes(message.toLowerCase())) {
+              return {
+                action: 'CREATE_ANNOUNCEMENT',
+                missingParameters: ['courseName'],
+                collectedParameters: collectedParameters,
+                nextMessage: `I need to know which specific class you're referring to. Could you please tell me the name of the class? For example: "Grade Islamiat class" or "Math 101".`,
+                actionComplete: false
+              };
+            }
+            
+            // Check if it's too short
+            if (message.length < 3) {
+              return {
+                action: 'CREATE_ANNOUNCEMENT',
+                missingParameters: ['courseName'],
+                collectedParameters: collectedParameters,
+                nextMessage: `"${message}" seems too short to be a class name. Could you please provide the full name of the class? For example: "Grade Islamiat class" or "Math 101".`,
+                actionComplete: false
+              };
+            }
+            
+            newParameters.courseName = message;
+            parametersFound = true;
+          }
         }
       }
       break;
