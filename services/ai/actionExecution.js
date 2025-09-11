@@ -108,6 +108,31 @@ function isValidCourseName(name) {
   const tooGeneric = ['test', 'course', 'class', 'new', 'name', 'title'];
   if (tooGeneric.includes(trimmedName.toLowerCase())) return false;
   
+  // Check for subject description patterns that shouldn't be treated as course names
+  const subjectDescriptionPatterns = [
+    /^it'?s about/i,
+    /^it'?s for/i,
+    /^it'?s related to/i,
+    /^it'?s on/i,
+    /^it'?s regarding/i,
+    /^the subject is/i,
+    /^the topic is/i,
+    /^we'?ll be studying/i,
+    /^we'?ll be learning/i,
+    /^we'?ll be covering/i,
+    /^about/i,
+    /^for/i,
+    /^on/i,
+    /^regarding/i,
+    /^studying/i,
+    /^learning/i,
+    /^covering/i
+  ];
+  
+  if (subjectDescriptionPatterns.some(pattern => pattern.test(trimmedName))) {
+    return false;
+  }
+  
   return true;
 }
 
@@ -165,16 +190,47 @@ function handleParameterCollection(intent, parameters, conversationId, originalM
         const subjectKeywords = ['math', 'english', 'science', 'history', 'computer', 'art', 'music', 'language', 'business', 'psychology', 'biology', 'chemistry', 'physics', 'algebra', 'calculus', 'literature', 'writing', 'programming', 'coding'];
         const hasSubjectKeyword = subjectKeywords.some(keyword => message.includes(keyword));
         
-        if (hasSubjectKeyword && !isValidCourseName(originalMessage.trim())) {
-          // User mentioned a subject but not a proper course name
-          const suggestions = generateCourseNameSuggestions(originalMessage);
+        // Check for subject description patterns
+        const subjectDescriptionPatterns = [
+          /it'?s about (.+)/i,
+          /it'?s for (.+)/i,
+          /it'?s related to (.+)/i,
+          /it'?s on (.+)/i,
+          /it'?s regarding (.+)/i,
+          /the subject is (.+)/i,
+          /the topic is (.+)/i,
+          /we'?ll be studying (.+)/i,
+          /we'?ll be learning (.+)/i,
+          /we'?ll be covering (.+)/i,
+          /about (.+)/i,
+          /for (.+)/i,
+          /on (.+)/i,
+          /regarding (.+)/i,
+          /studying (.+)/i,
+          /learning (.+)/i,
+          /covering (.+)/i
+        ];
+        
+        let extractedSubject = null;
+        for (const pattern of subjectDescriptionPatterns) {
+          const match = originalMessage.match(pattern);
+          if (match && match[1]) {
+            extractedSubject = match[1].trim();
+            break;
+          }
+        }
+        
+        // If user is describing a subject or mentioned subject keywords, provide suggestions
+        if ((hasSubjectKeyword || extractedSubject) && !isValidCourseName(originalMessage.trim())) {
+          const subjectToUse = extractedSubject || originalMessage.trim();
+          const suggestions = generateCourseNameSuggestions(subjectToUse);
           const suggestionList = suggestions.slice(0, 3).map(s => `• ${s}`).join('\n');
           
           return {
             action: 'CREATE_COURSE',
             missingParameters: ['name'],
             collectedParameters: collectedParameters,
-            nextMessage: `I see you mentioned "${originalMessage.trim()}" as the subject. Here are some course name suggestions:\n\n${suggestionList}\n\nWhich one would you like to use, or would you prefer a different name?`,
+            nextMessage: `I see you mentioned "${subjectToUse}" as the subject. Here are some course name suggestions:\n\n${suggestionList}\n\nWhich one would you like to use, or would you prefer a different name?`,
             actionComplete: false
           };
         }
