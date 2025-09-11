@@ -1041,6 +1041,80 @@ async function executeAction(intentData, originalMessage, userToken, req) {
       }
     }
 
+    // 🔍 ADDITIONAL CHECK: Handle confirmation responses for ongoing actions
+    const context = getOngoingActionContext(conversationId);
+    if (context && context.missingParameters && context.missingParameters.includes('confirmed')) {
+      const message = originalMessage.toLowerCase().trim();
+      
+      // Check for positive confirmation
+      const positivePatterns = [
+        /^yes$/i,
+        /^y$/i,
+        /^yeah$/i,
+        /^yep$/i,
+        /^sure$/i,
+        /^ok$/i,
+        /^okay$/i,
+        /^correct$/i,
+        /^right$/i,
+        /^that's right$/i,
+        /^that is correct$/i,
+        /^go ahead$/i,
+        /^proceed$/i,
+        /^create it$/i
+      ];
+      
+      // Check for negative confirmation
+      const negativePatterns = [
+        /^no$/i,
+        /^n$/i,
+        /^nope$/i,
+        /^wrong$/i,
+        /^incorrect$/i,
+        /^change$/i,
+        /^different$/i,
+        /^not right$/i,
+        /^that's not right$/i,
+        /^that is not correct$/i,
+        /^cancel$/i,
+        /^stop$/i
+      ];
+      
+      if (positivePatterns.some(pattern => pattern.test(message))) {
+        // User confirmed - complete the action
+        const confirmedParameters = { ...context.collectedParameters, confirmed: true };
+        intentData.intent = context.action;
+        intentData.parameters = confirmedParameters;
+        intent = context.action;
+        parameters = confirmedParameters;
+        
+        console.log(`✅ User confirmed ${context.action} with parameters:`, confirmedParameters);
+      } else if (negativePatterns.some(pattern => pattern.test(message))) {
+        // User wants to change - reset to name collection
+        startOngoingAction(conversationId, 'CREATE_COURSE', ['name'], {});
+        return {
+          message: "No problem! What would you like to call your new class instead?",
+          conversationId: conversationId,
+          ongoingAction: {
+            action: 'CREATE_COURSE',
+            missingParameters: ['name'],
+            collectedParameters: {}
+          }
+        };
+      } else {
+        // Unclear response - ask for clarification
+        return {
+          message: "I'm not sure if you want to proceed. Please say 'yes' to create the course with this name, or 'no' if you'd like to change it.",
+          conversationId: conversationId,
+          ongoingAction: {
+            action: context.action,
+            collectedParameters: context.collectedParameters,
+            missingParameters: context.missingParameters
+          }
+        };
+      }
+    }
+
     // --- OVERRIDE: If intent is INVITE_STUDENTS but message says 'teacher', treat as INVITE_TEACHERS ---
     if (
       intent === 'INVITE_STUDENTS' &&
