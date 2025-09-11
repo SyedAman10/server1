@@ -39,30 +39,33 @@ function checkForNewActionAttempt(intent, conversationId) {
 /**
  * Use AI to analyze user intent for course naming
  */
-async function analyzeUserIntentForCourseNaming(userMessage, conversationId) {
+async function analyzeUserIntentForCourseNaming(userMessage, conversationId, collectedParameters = {}) {
   try {
     // Create a focused prompt for intent analysis
-    const intentAnalysisPrompt = `Analyze the user's message for course naming intent. Respond with JSON only.
+    const intentAnalysisPrompt = `Analyze the user's message for course naming intent. Consider the conversation context. Respond with JSON only.
 
 User message: "${userMessage}"
+Conversation context: ${JSON.stringify(collectedParameters)}
 
 Determine if the user is:
-1. Providing a direct course name (respond with: {"intent": "direct_name", "name": "extracted_name"})
-2. Describing a subject/topic for suggestions (respond with: {"intent": "subject_description", "subject": "extracted_subject"})
-3. Expressing uncertainty or asking for help (respond with: {"intent": "uncertainty", "needs_help": true})
-4. Asking for more suggestions (respond with: {"intent": "more_suggestions", "needs_help": true})
+1. Selecting a suggested course name (respond with: {"intent": "direct_name", "name": "selected_name"})
+2. Providing a new course name (respond with: {"intent": "direct_name", "name": "provided_name"})
+3. Describing a subject/topic for suggestions (respond with: {"intent": "subject_description", "subject": "extracted_subject"})
+4. Expressing uncertainty or asking for help (respond with: {"intent": "uncertainty", "needs_help": true})
+5. Asking for more suggestions (respond with: {"intent": "more_suggestions", "needs_help": true})
 
 Examples:
 - "Math 101" → {"intent": "direct_name", "name": "Math 101"}
+- "introduction to finance is ok" → {"intent": "direct_name", "name": "Introduction to Finance"}
+- "i'll go with calculus" → {"intent": "direct_name", "name": "Calculus"}
+- "calculus sounds good" → {"intent": "direct_name", "name": "Calculus"}
+- "i choose statistics" → {"intent": "direct_name", "name": "Statistics"}
+- "that one" (when referring to a suggestion) → {"intent": "direct_name", "name": "the suggested name"}
 - "its about mathematics" → {"intent": "subject_description", "subject": "mathematics"}
 - "i dont know" → {"intent": "uncertainty", "needs_help": true}
 - "tell me some options" → {"intent": "more_suggestions", "needs_help": true}
-- "hhaha how would i know" → {"intent": "uncertainty", "needs_help": true}
 - "a different name" → {"intent": "more_suggestions", "needs_help": true}
-- "different name" → {"intent": "more_suggestions", "needs_help": true}
 - "something else" → {"intent": "more_suggestions", "needs_help": true}
-- "other options" → {"intent": "more_suggestions", "needs_help": true}
-- "more suggestions" → {"intent": "more_suggestions", "needs_help": true}
 
 Respond with JSON only:`;
 
@@ -256,7 +259,7 @@ async function handleParameterCollection(intent, parameters, conversationId, ori
       // Check if user provided a course name
       if (missingParameters.includes('name')) {
         // Use AI to analyze user intent
-        const intentAnalysis = await analyzeUserIntentForCourseNaming(originalMessage, conversationId);
+        const intentAnalysis = await analyzeUserIntentForCourseNaming(originalMessage, conversationId, collectedParameters);
         
         switch (intentAnalysis.intent) {
           case 'direct_name':
