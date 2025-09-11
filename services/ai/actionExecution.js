@@ -129,7 +129,36 @@ function isValidCourseName(name) {
     /^covering/i
   ];
   
-  if (subjectDescriptionPatterns.some(pattern => pattern.test(trimmedName))) {
+  // Check for help request patterns that shouldn't be treated as course names
+  const helpRequestPatterns = [
+    /^tell me some/i,
+    /^give me some/i,
+    /^show me some/i,
+    /^what are some/i,
+    /^what other/i,
+    /^any other/i,
+    /^more suggestions/i,
+    /^more options/i,
+    /^different names/i,
+    /^different options/i,
+    /^other names/i,
+    /^other options/i,
+    /^suggest some/i,
+    /^recommend some/i,
+    /^help me/i,
+    /^i need help/i,
+    /^can you help/i,
+    /^what do you suggest/i,
+    /^what would you suggest/i,
+    /^what should i/i,
+    /^i'm not sure/i,
+    /^i'm confused/i,
+    /^not sure/i,
+    /^confused/i
+  ];
+  
+  if (subjectDescriptionPatterns.some(pattern => pattern.test(trimmedName)) ||
+      helpRequestPatterns.some(pattern => pattern.test(trimmedName))) {
     return false;
   }
   
@@ -173,10 +202,39 @@ function handleParameterCollection(intent, parameters, conversationId, originalM
           /random/i
         ];
         
-        const isUncertain = uncertaintyPatterns.some(pattern => pattern.test(message));
+        // Check for requests for more suggestions or help
+        const helpRequestPatterns = [
+          /tell me some/i,
+          /give me some/i,
+          /show me some/i,
+          /what are some/i,
+          /what other/i,
+          /any other/i,
+          /more suggestions/i,
+          /more options/i,
+          /different names/i,
+          /different options/i,
+          /other names/i,
+          /other options/i,
+          /suggest some/i,
+          /recommend some/i,
+          /help me/i,
+          /i need help/i,
+          /can you help/i,
+          /what do you suggest/i,
+          /what would you suggest/i,
+          /what should i/i,
+          /i'm not sure/i,
+          /i'm confused/i,
+          /not sure/i,
+          /confused/i
+        ];
         
-        if (isUncertain) {
-          // User is expressing uncertainty - provide suggestions instead of using their message
+        const isUncertain = uncertaintyPatterns.some(pattern => pattern.test(message));
+        const isHelpRequest = helpRequestPatterns.some(pattern => pattern.test(message));
+        
+        if (isUncertain || isHelpRequest) {
+          // User is expressing uncertainty or asking for help - provide suggestions instead of using their message
           return {
             action: 'CREATE_COURSE',
             missingParameters: ['name'],
@@ -231,6 +289,18 @@ function handleParameterCollection(intent, parameters, conversationId, originalM
             missingParameters: ['name'],
             collectedParameters: collectedParameters,
             nextMessage: `I see you mentioned "${subjectToUse}" as the subject. Here are some course name suggestions:\n\n${suggestionList}\n\nWhich one would you like to use, or would you prefer a different name?`,
+            actionComplete: false
+          };
+        }
+        
+        // Check if user is asking for more suggestions after already being given some
+        if (isHelpRequest && !hasSubjectKeyword && !extractedSubject) {
+          // User is asking for more suggestions but hasn't specified a subject yet
+          return {
+            action: 'CREATE_COURSE',
+            missingParameters: ['name'],
+            collectedParameters: collectedParameters,
+            nextMessage: "I'd be happy to suggest more course names! What subject or topic will this class cover? For example:\n• Math 101\n• English Literature\n• Computer Science\n• History of Art\n\nOnce you tell me the subject, I can provide specific suggestions for that topic.",
             actionComplete: false
           };
         }
