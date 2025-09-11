@@ -528,75 +528,110 @@ async function handleParameterCollection(intent, parameters, conversationId, ori
           };
         }
         
-        // Use AI to analyze user intent for announcement creation
-        const announcementIntent = await analyzeUserIntentForAnnouncement(originalMessage, conversationId, collectedParameters);
-        
-        switch (announcementIntent.intent) {
-          case 'announcement_text':
-            // User provided announcement text
-            if (announcementIntent.text && announcementIntent.text.trim().length > 0) {
-              newParameters.announcementText = announcementIntent.text.trim();
-              parametersFound = true;
-            }
-            break;
-            
-          case 'course_name':
-            // User provided course name
-            const courseName = announcementIntent.courseName || originalMessage.trim();
-            
-            // Check if it's a generic term that needs clarification
-            const genericTerms = [
-              'my class', 'my course', 'the class', 'the course', 'class', 'course',
-              'it', 'this', 'that', 'one', 'some', 'any', 'a class', 'a course'
-            ];
-            
-            if (genericTerms.includes(courseName.toLowerCase())) {
-              return {
-                action: 'CREATE_ANNOUNCEMENT',
-                missingParameters: ['courseName'],
-                collectedParameters: collectedParameters,
-                nextMessage: `I need to know which specific class you're referring to. Could you please tell me the name of the class? For example: "Grade Islamiat class" or "Math 101".`,
-                actionComplete: false
-              };
-            }
-            
-            // Check if the course name is too short or unclear
-            if (courseName.length < 3) {
-              return {
-                action: 'CREATE_ANNOUNCEMENT',
-                missingParameters: ['courseName'],
-                collectedParameters: collectedParameters,
-                nextMessage: `"${courseName}" seems too short to be a class name. Could you please provide the full name of the class? For example: "Grade Islamiat class" or "Math 101".`,
-                actionComplete: false
-              };
-            }
-            
-            newParameters.courseName = courseName;
+        // If we're waiting for a course name, treat the user's response as a course name
+        if (missingParameters.includes('courseName')) {
+          const courseName = originalMessage.trim();
+          
+          // Check if it's a generic term that needs clarification
+          const genericTerms = [
+            'my class', 'my course', 'the class', 'the course', 'class', 'course',
+            'it', 'this', 'that', 'one', 'some', 'any', 'a class', 'a course'
+          ];
+          
+          if (genericTerms.includes(courseName.toLowerCase())) {
+            return {
+              action: 'CREATE_ANNOUNCEMENT',
+              missingParameters: ['courseName'],
+              collectedParameters: collectedParameters,
+              nextMessage: `I need to know which specific class you're referring to. Could you please tell me the name of the class? For example: "Grade Islamiat class" or "Math 101".`,
+              actionComplete: false
+            };
+          }
+          
+          // Accept the course name if it's not generic
+          newParameters.courseName = courseName;
+          parametersFound = true;
+        }
+        // If we're waiting for announcement text, treat the user's response as announcement text
+        else if (missingParameters.includes('announcementText')) {
+          const announcementText = originalMessage.trim();
+          if (announcementText.length > 0) {
+            newParameters.announcementText = announcementText;
             parametersFound = true;
-            break;
-            
-          case 'uncertainty':
-          case 'more_suggestions':
-          default:
-            // User is uncertain or asking for help - provide guidance
-            if (missingParameters.includes('announcementText')) {
-              return {
-                action: 'CREATE_ANNOUNCEMENT',
-                missingParameters: ['announcementText'],
-                collectedParameters: collectedParameters,
-                nextMessage: "I'd be happy to help you create an announcement! What would you like to announce to your students? For example:\n• Homework reminder\n• Class schedule change\n• Important updates\n• Assignment due dates\n\nJust tell me what you want to say.",
-                actionComplete: false
-              };
-            } else if (missingParameters.includes('courseName')) {
-              return {
-                action: 'CREATE_ANNOUNCEMENT',
-                missingParameters: ['courseName'],
-                collectedParameters: collectedParameters,
-                nextMessage: "Which class would you like to post this announcement to? Please tell me the name of the class, for example: 'Grade Islamiat class' or 'Math 101'.",
-                actionComplete: false
-              };
-            }
-            break;
+          }
+        }
+        // If we're not sure what we're waiting for, use AI analysis
+        else {
+          // Use AI to analyze user intent for announcement creation
+          const announcementIntent = await analyzeUserIntentForAnnouncement(originalMessage, conversationId, collectedParameters);
+          
+          switch (announcementIntent.intent) {
+            case 'announcement_text':
+              // User provided announcement text
+              if (announcementIntent.text && announcementIntent.text.trim().length > 0) {
+                newParameters.announcementText = announcementIntent.text.trim();
+                parametersFound = true;
+              }
+              break;
+              
+            case 'course_name':
+              // User provided course name
+              const courseName = announcementIntent.courseName || originalMessage.trim();
+              
+              // Check if it's a generic term that needs clarification
+              const genericTerms = [
+                'my class', 'my course', 'the class', 'the course', 'class', 'course',
+                'it', 'this', 'that', 'one', 'some', 'any', 'a class', 'a course'
+              ];
+              
+              if (genericTerms.includes(courseName.toLowerCase())) {
+                return {
+                  action: 'CREATE_ANNOUNCEMENT',
+                  missingParameters: ['courseName'],
+                  collectedParameters: collectedParameters,
+                  nextMessage: `I need to know which specific class you're referring to. Could you please tell me the name of the class? For example: "Grade Islamiat class" or "Math 101".`,
+                  actionComplete: false
+                };
+              }
+              
+              // Check if the course name is too short or unclear
+              if (courseName.length < 3) {
+                return {
+                  action: 'CREATE_ANNOUNCEMENT',
+                  missingParameters: ['courseName'],
+                  collectedParameters: collectedParameters,
+                  nextMessage: `"${courseName}" seems too short to be a class name. Could you please provide the full name of the class? For example: "Grade Islamiat class" or "Math 101".`,
+                  actionComplete: false
+                };
+              }
+              
+              newParameters.courseName = courseName;
+              parametersFound = true;
+              break;
+              
+            case 'uncertainty':
+            case 'more_suggestions':
+            default:
+              // User is uncertain or asking for help - provide guidance
+              if (missingParameters.includes('announcementText')) {
+                return {
+                  action: 'CREATE_ANNOUNCEMENT',
+                  missingParameters: ['announcementText'],
+                  collectedParameters: collectedParameters,
+                  nextMessage: "I'd be happy to help you create an announcement! What would you like to announce to your students? For example:\n• Homework reminder\n• Class schedule change\n• Important updates\n• Assignment due dates\n\nJust tell me what you want to say.",
+                  actionComplete: false
+                };
+              } else if (missingParameters.includes('courseName')) {
+                return {
+                  action: 'CREATE_ANNOUNCEMENT',
+                  missingParameters: ['courseName'],
+                  collectedParameters: collectedParameters,
+                  nextMessage: "Which class would you like to post this announcement to? Please tell me the name of the class, for example: 'Grade Islamiat class' or 'Math 101'.",
+                  actionComplete: false
+                };
+              }
+              break;
+          }
         }
         break;
       
