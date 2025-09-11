@@ -42,13 +42,10 @@ function checkForNewActionAttempt(intent, conversationId) {
 async function analyzeUserIntentForCourseNaming(userMessage, conversationId, collectedParameters = {}) {
   try {
     // Create a focused prompt for intent analysis
-    const intentAnalysisPrompt = `Analyze the user's message for course naming intent. Consider the conversation context and ongoing action. Respond with JSON only.
+    const intentAnalysisPrompt = `Analyze the user's message for course naming intent. Consider the conversation context. Respond with JSON only.
 
 User message: "${userMessage}"
 Conversation context: ${JSON.stringify(collectedParameters)}
-Ongoing action: CREATE_COURSE
-
-IMPORTANT: This is ONLY for course naming during course creation. If the user is responding to a different ongoing action (like CREATE_ANNOUNCEMENT), this analysis should NOT be used.
 
 Determine if the user is:
 1. Selecting a suggested course name (respond with: {"intent": "direct_name", "name": "selected_name"})
@@ -242,6 +239,73 @@ function isValidCourseName(name) {
 }
 
 /**
+ * Use AI to analyze user intent for announcement creation
+ */
+async function analyzeUserIntentForAnnouncement(userMessage, conversationId, collectedParameters = {}) {
+  try {
+    // Create a focused prompt for intent analysis
+    const intentAnalysisPrompt = `Analyze the user's message for announcement creation intent. Consider the conversation context. Respond with JSON only.
+
+User message: "${userMessage}"
+Conversation context: ${JSON.stringify(collectedParameters)}
+
+Determine if the user is:
+1. Providing announcement text (respond with: {"intent": "announcement_text", "text": "extracted_text"})
+2. Providing a course name (respond with: {"intent": "course_name", "courseName": "extracted_course"})
+3. Expressing uncertainty or asking for help (respond with: {"intent": "uncertainty", "needs_help": true})
+4. Asking for more suggestions (respond with: {"intent": "more_suggestions", "needs_help": true})
+
+Examples:
+- "Homework is due tomorrow" → {"intent": "announcement_text", "text": "Homework is due tomorrow"}
+- "Grade Islamiat class" → {"intent": "course_name", "courseName": "Grade Islamiat class"}
+- "my class" → {"intent": "course_name", "courseName": "my class"}
+- "i dont know" → {"intent": "uncertainty", "needs_help": true}
+- "what should i say" → {"intent": "uncertainty", "needs_help": true}
+- "help me" → {"intent": "uncertainty", "needs_help": true}
+
+Respond with JSON only:`;
+
+    // Use the existing AI service to analyze intent
+    const response = await makeApiCall(
+      `${process.env.OPENAI_API_URL || 'https://api.openai.com/v1'}/chat/completions`,
+      'POST',
+      {
+        model: 'gpt-3.5-turbo',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are an AI assistant that analyzes user intent for announcement creation. Always respond with valid JSON only.'
+          },
+          {
+            role: 'user',
+            content: intentAnalysisPrompt
+          }
+        ],
+        max_tokens: 150,
+        temperature: 0.1
+      },
+      process.env.OPENAI_API_KEY,
+      null
+    );
+
+    if (response.choices && response.choices[0] && response.choices[0].message) {
+      const content = response.choices[0].message.content.trim();
+      try {
+        return JSON.parse(content);
+      } catch (parseError) {
+        console.error('Error parsing AI intent analysis:', parseError);
+        return { intent: 'uncertainty', needs_help: true };
+      }
+    }
+    
+    return { intent: 'uncertainty', needs_help: true };
+  } catch (error) {
+    console.error('Error in AI intent analysis:', error);
+    return { intent: 'uncertainty', needs_help: true };
+  }
+}
+
+/**
  * Handle parameter collection for ongoing actions
  * This function processes user input to collect missing parameters
  */
@@ -261,7 +325,7 @@ async function handleParameterCollection(intent, parameters, conversationId, ori
     case 'CREATE_COURSE':
       // Check if user provided a course name
       if (missingParameters.includes('name')) {
-        // Use AI to analyze user intent (only for course creation)
+        // Use AI to analyze user intent
         const intentAnalysis = await analyzeUserIntentForCourseNaming(originalMessage, conversationId, collectedParameters);
         
         switch (intentAnalysis.intent) {
@@ -452,67 +516,30 @@ async function handleParameterCollection(intent, parameters, conversationId, ori
       }
       break;
       
-    case 'CREATE_ANNOUNCEMENT':
-      // Check if user provided announcement text
-      if (missingParameters.includes('announcementText')) {
-        if (!originalMessage.toLowerCase().includes('announcement') && 
-            !originalMessage.toLowerCase().includes('create') && 
-            !originalMessage.toLowerCase().includes('make') && 
-            !originalMessage.toLowerCase().includes('post')) {
-          newParameters.announcementText = originalMessage.trim();
-          parametersFound = true;
-        }
-      }
-      
-      // Check if user provided course name
-      if (missingParameters.includes('courseName')) {
-        const courseMatch = originalMessage.match(/(?:in|for|to)\s+(.+?)(?:\s|$)/i);
-        if (courseMatch && courseMatch[1]) {
-          const extractedCourseName = courseMatch[1].trim();
-          
-          // Check if it's a generic term that needs clarification
-          const genericTerms = [
-            'my class', 'my course', 'the class', 'the course', 'class', 'course',
-            'it', 'this', 'that', 'one', 'some', 'any', 'a class', 'a course'
-          ];
-          
-          if (genericTerms.includes(extractedCourseName.toLowerCase())) {
-            return {
-              action: 'CREATE_ANNOUNCEMENT',
-              missingParameters: ['courseName'],
-              collectedParameters: collectedParameters,
-              nextMessage: `I need to know which specific class you're referring to. Could you please tell me the name of the class? For example: "Grade Islamiat class" or "Math 101".`,
-              actionComplete: false
-            };
-          }
-          
-          // Check if the course name is too short or unclear
-          if (extractedCourseName.length < 3) {
-            return {
-              action: 'CREATE_ANNOUNCEMENT',
-              missingParameters: ['courseName'],
-              collectedParameters: collectedParameters,
-              nextMessage: `"${extractedCourseName}" seems too short to be a class name. Could you please provide the full name of the class? For example: "Grade Islamiat class" or "Math 101".`,
-              actionComplete: false
-            };
-          }
-          
-          newParameters.courseName = extractedCourseName;
-          parametersFound = true;
-        } else {
-          // If no pattern match but we're waiting for course name, treat the whole message as course name
-          // unless it's clearly not a course name
-          const message = originalMessage.trim();
-          const notCourseNamePatterns = [
-            /^(what|how|when|where|why|who)/i,
-            /^(help|assist|support)/i,
-            /^(create|make|post|announce)/i,
-            /^(yes|no|ok|okay|sure)/i
-          ];
-          
-          if (!notCourseNamePatterns.some(pattern => pattern.test(message))) {
-            // Check if it's a generic term
-            if (genericTerms.includes(message.toLowerCase())) {
+      case 'CREATE_ANNOUNCEMENT':
+        // Use AI to analyze user intent for announcement creation
+        const announcementIntent = await analyzeUserIntentForAnnouncement(originalMessage, conversationId, collectedParameters);
+        
+        switch (announcementIntent.intent) {
+          case 'announcement_text':
+            // User provided announcement text
+            if (announcementIntent.text && announcementIntent.text.trim().length > 0) {
+              newParameters.announcementText = announcementIntent.text.trim();
+              parametersFound = true;
+            }
+            break;
+            
+          case 'course_name':
+            // User provided course name
+            const courseName = announcementIntent.courseName || originalMessage.trim();
+            
+            // Check if it's a generic term that needs clarification
+            const genericTerms = [
+              'my class', 'my course', 'the class', 'the course', 'class', 'course',
+              'it', 'this', 'that', 'one', 'some', 'any', 'a class', 'a course'
+            ];
+            
+            if (genericTerms.includes(courseName.toLowerCase())) {
               return {
                 action: 'CREATE_ANNOUNCEMENT',
                 missingParameters: ['courseName'],
@@ -522,23 +549,45 @@ async function handleParameterCollection(intent, parameters, conversationId, ori
               };
             }
             
-            // Check if it's too short
-            if (message.length < 3) {
+            // Check if the course name is too short or unclear
+            if (courseName.length < 3) {
               return {
                 action: 'CREATE_ANNOUNCEMENT',
                 missingParameters: ['courseName'],
                 collectedParameters: collectedParameters,
-                nextMessage: `"${message}" seems too short to be a class name. Could you please provide the full name of the class? For example: "Grade Islamiat class" or "Math 101".`,
+                nextMessage: `"${courseName}" seems too short to be a class name. Could you please provide the full name of the class? For example: "Grade Islamiat class" or "Math 101".`,
                 actionComplete: false
               };
             }
             
-            newParameters.courseName = message;
+            newParameters.courseName = courseName;
             parametersFound = true;
-          }
+            break;
+            
+          case 'uncertainty':
+          case 'more_suggestions':
+          default:
+            // User is uncertain or asking for help - provide guidance
+            if (missingParameters.includes('announcementText')) {
+              return {
+                action: 'CREATE_ANNOUNCEMENT',
+                missingParameters: ['announcementText'],
+                collectedParameters: collectedParameters,
+                nextMessage: "I'd be happy to help you create an announcement! What would you like to announce to your students? For example:\n• Homework reminder\n• Class schedule change\n• Important updates\n• Assignment due dates\n\nJust tell me what you want to say.",
+                actionComplete: false
+              };
+            } else if (missingParameters.includes('courseName')) {
+              return {
+                action: 'CREATE_ANNOUNCEMENT',
+                missingParameters: ['courseName'],
+                collectedParameters: collectedParameters,
+                nextMessage: "Which class would you like to post this announcement to? Please tell me the name of the class, for example: 'Grade Islamiat class' or 'Math 101'.",
+                actionComplete: false
+              };
+            }
+            break;
         }
-      }
-      break;
+        break;
       
     case 'CREATE_MEETING':
       // Check if user provided meeting title
@@ -1124,63 +1173,8 @@ async function executeAction(intentData, originalMessage, userToken, req) {
       }
     }
 
-    // 🔍 ADDITIONAL CHECK: If there's an ongoing action and no parameter collection happened,
-    // treat the message as a response to the ongoing action
-    const context = getOngoingActionContext(conversationId);
-    if (context && !parameterCollection && (intent === 'UNKNOWN' || intent === 'GREETING')) {
-      console.log('🔍 No parameter collection but ongoing action exists, treating as response to ongoing action');
-      
-      // Only use AI analysis for CREATE_COURSE actions
-      if (context.action === 'CREATE_COURSE') {
-        // Try to handle the message as a response to the ongoing action
-        const ongoingParameterCollection = await handleParameterCollection(context.action, context.collectedParameters || {}, conversationId, originalMessage);
-        if (ongoingParameterCollection) {
-          if (ongoingParameterCollection.actionComplete) {
-            // Action is now complete
-            intentData.intent = ongoingParameterCollection.action;
-            intentData.parameters = ongoingParameterCollection.allParameters;
-            intent = ongoingParameterCollection.action;
-            parameters = ongoingParameterCollection.allParameters;
-          } else {
-            // Still missing parameters
-            return {
-              message: ongoingParameterCollection.nextMessage,
-              conversationId: conversationId,
-              ongoingAction: {
-                action: ongoingParameterCollection.action,
-                collectedParameters: ongoingParameterCollection.collectedParameters,
-                missingParameters: ongoingParameterCollection.missingParameters
-              }
-            };
-          }
-        }
-      } else {
-        // For other actions, use simple pattern matching
-        const ongoingParameterCollection = await handleParameterCollection(context.action, context.collectedParameters || {}, conversationId, originalMessage);
-        if (ongoingParameterCollection) {
-          if (ongoingParameterCollection.actionComplete) {
-            // Action is now complete
-            intentData.intent = ongoingParameterCollection.action;
-            intentData.parameters = ongoingParameterCollection.allParameters;
-            intent = ongoingParameterCollection.action;
-            parameters = ongoingParameterCollection.allParameters;
-          } else {
-            // Still missing parameters
-            return {
-              message: ongoingParameterCollection.nextMessage,
-              conversationId: conversationId,
-              ongoingAction: {
-                action: ongoingParameterCollection.action,
-                collectedParameters: ongoingParameterCollection.collectedParameters,
-                missingParameters: ongoingParameterCollection.missingParameters
-              }
-            };
-          }
-        }
-      }
-    }
-
     // 🔍 ADDITIONAL CHECK: Handle confirmation responses for ongoing actions
+    const context = getOngoingActionContext(conversationId);
     if (context && context.missingParameters && context.missingParameters.includes('confirmed')) {
       const message = originalMessage.toLowerCase().trim();
       
@@ -1559,19 +1553,6 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           return {
             message: 'You are not authorized to create announcements. Only teachers and super admins can create announcements.',
             conversationId: req.body.conversationId
-          };
-        }
-
-        // Check if we need disambiguation for the course name
-        if (parameters.needsDisambiguation || (parameters.courseName && parameters.courseName.toLowerCase() === 'my class')) {
-          return {
-            message: "I need to know which specific class you're referring to. Could you please tell me the name of the class? For example: 'Grade Islamiat class' or 'Math 101'.",
-            conversationId: conversationId,
-            ongoingAction: {
-              action: 'CREATE_ANNOUNCEMENT',
-              missingParameters: ['courseName'],
-              collectedParameters: { announcementText: parameters.announcementText }
-            }
           };
         }
 

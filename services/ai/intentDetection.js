@@ -665,24 +665,6 @@ function detectIntentFallback(message, conversationId) {
 async function detectIntent(message, conversationHistory, conversationId) {
   console.log('🔍 DEBUG: detectIntent called with message:', message);
   try {
-    // Check if there's an ongoing action first
-    if (conversationId) {
-      const { getOngoingActionContext } = require('./conversationManager');
-      const ongoingAction = getOngoingActionContext(conversationId);
-      
-      if (ongoingAction) {
-        console.log('🔍 DEBUG: Ongoing action detected:', ongoingAction);
-        
-        // If there's an ongoing action, treat the message as a response to that action
-        // Don't try to detect a new intent
-        return {
-          intent: 'UNKNOWN',
-          confidence: 0.1,
-          parameters: {}
-        };
-      }
-    }
-
     // Format conversation history for Gemini
     const formattedHistory = conversationHistory
       .filter(entry => typeof entry === 'object' && 'isUser' in entry && 'message' in entry)
