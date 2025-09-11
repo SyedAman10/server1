@@ -517,6 +517,17 @@ async function handleParameterCollection(intent, parameters, conversationId, ori
       break;
       
       case 'CREATE_ANNOUNCEMENT':
+        // Check if this is a disambiguation request first
+        if (collectedParameters.needsDisambiguation) {
+          return {
+            action: 'CREATE_ANNOUNCEMENT',
+            missingParameters: ['courseName'],
+            collectedParameters: {},
+            nextMessage: `I need to know which specific class you're referring to. Could you please tell me the name of the class? For example: "Grade Islamiat class" or "Math 101".`,
+            actionComplete: false
+          };
+        }
+        
         // Use AI to analyze user intent for announcement creation
         const announcementIntent = await analyzeUserIntentForAnnouncement(originalMessage, conversationId, collectedParameters);
         
