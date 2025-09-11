@@ -372,6 +372,23 @@ function detectIntentFallback(message, conversationId) {
       }
     }
 
+    // Check for generic terms that need clarification
+    const genericTerms = [
+      'my class', 'my course', 'the class', 'the course', 'class', 'course',
+      'it', 'this', 'that', 'one', 'some', 'any', 'a class', 'a course'
+    ];
+    
+    if (genericTerms.includes(courseName.toLowerCase())) {
+      return {
+        intent: 'CREATE_ANNOUNCEMENT',
+        confidence: 0.7,
+        parameters: {
+          courseName: courseName,
+          needsDisambiguation: true
+        }
+      };
+    }
+
     return {
       intent: 'CREATE_ANNOUNCEMENT',
       confidence: 0.7,

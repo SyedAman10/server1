@@ -1556,6 +1556,19 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           };
         }
 
+        // Check if we need disambiguation for generic course names
+        if (parameters.needsDisambiguation) {
+          return {
+            message: `I need to know which specific class you're referring to. Could you please tell me the name of the class? For example: "Grade Islamiat class" or "Math 101".`,
+            conversationId: conversationId,
+            ongoingAction: {
+              action: 'CREATE_ANNOUNCEMENT',
+              missingParameters: ['courseName'],
+              collectedParameters: {}
+            }
+          };
+        }
+
         // Check what parameters are missing and start tracking if needed
         const missingParams = [];
         if (!parameters.courseName && !parameters.courseIdentifier) {
