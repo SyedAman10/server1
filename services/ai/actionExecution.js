@@ -37,6 +37,81 @@ function checkForNewActionAttempt(intent, conversationId) {
 }
 
 /**
+ * Generate course name suggestions based on subject
+ */
+function generateCourseNameSuggestions(subject) {
+  const subjectLower = subject.toLowerCase();
+  
+  const suggestions = {
+    math: ['Math 101', 'Algebra I', 'Calculus', 'Statistics', 'Geometry', 'Pre-Calculus'],
+    english: ['English Literature', 'Creative Writing', 'Composition', 'Grammar', 'Literature Survey'],
+    science: ['General Science', 'Biology', 'Chemistry', 'Physics', 'Earth Science', 'Environmental Science'],
+    history: ['World History', 'US History', 'European History', 'Ancient History', 'Modern History'],
+    computer: ['Computer Science', 'Programming Fundamentals', 'Web Development', 'Data Structures', 'Software Engineering'],
+    art: ['Art History', 'Drawing', 'Painting', 'Digital Art', 'Art Appreciation'],
+    music: ['Music Theory', 'Band', 'Choir', 'Music Appreciation', 'Piano'],
+    language: ['Spanish', 'French', 'German', 'Chinese', 'Language Fundamentals'],
+    business: ['Business Fundamentals', 'Entrepreneurship', 'Marketing', 'Economics', 'Accounting'],
+    psychology: ['Psychology 101', 'Social Psychology', 'Developmental Psychology', 'Abnormal Psychology']
+  };
+  
+  // Find matching subject
+  for (const [key, values] of Object.entries(suggestions)) {
+    if (subjectLower.includes(key)) {
+      return values;
+    }
+  }
+  
+  // Default suggestions if no match
+  return ['Course 101', 'Introduction to ' + subject, subject + ' Fundamentals', subject + ' Basics'];
+}
+
+/**
+ * Validate if a course name is appropriate and meaningful
+ */
+function isValidCourseName(name) {
+  if (!name || typeof name !== 'string') return false;
+  
+  const trimmedName = name.trim();
+  
+  // Check minimum length
+  if (trimmedName.length < 2) return false;
+  
+  // Check for inappropriate content
+  const inappropriatePatterns = [
+    /fuck/i,
+    /shit/i,
+    /damn/i,
+    /hell/i,
+    /bitch/i,
+    /ass/i,
+    /i don'?t know/i,
+    /whatever/i,
+    /anything/i,
+    /random/i,
+    /your choice/i,
+    /you decide/i,
+    /surprise me/i,
+    /beats me/i,
+    /fuck if i know/i,
+    /i have no idea/i
+  ];
+  
+  if (inappropriatePatterns.some(pattern => pattern.test(trimmedName))) {
+    return false;
+  }
+  
+  // Check if it's just punctuation or numbers
+  if (/^[^a-zA-Z]*$/.test(trimmedName)) return false;
+  
+  // Check if it's too generic
+  const tooGeneric = ['test', 'course', 'class', 'new', 'name', 'title'];
+  if (tooGeneric.includes(trimmedName.toLowerCase())) return false;
+  
+  return true;
+}
+
+/**
  * Handle parameter collection for ongoing actions
  * This function processes user input to collect missing parameters
  */
@@ -56,19 +131,153 @@ function handleParameterCollection(intent, parameters, conversationId, originalM
     case 'CREATE_COURSE':
       // Check if user provided a course name
       if (missingParameters.includes('name')) {
-        // Extract course name from the message
+        const message = originalMessage.toLowerCase().trim();
+        
+        // Check for expressions indicating uncertainty or frustration
+        const uncertaintyPatterns = [
+          /i don'?t\s+(know|care|give a shit|give a fuck)/i,
+          /i have no idea/i,
+          /whatever/i,
+          /i don'?t fucking know/i,
+          /fuck if i know/i,
+          /beats me/i,
+          /your choice/i,
+          /you decide/i,
+          /surprise me/i,
+          /anything/i,
+          /random/i
+        ];
+        
+        const isUncertain = uncertaintyPatterns.some(pattern => pattern.test(message));
+        
+        if (isUncertain) {
+          // User is expressing uncertainty - provide suggestions instead of using their message
+          return {
+            action: 'CREATE_COURSE',
+            missingParameters: ['name'],
+            collectedParameters: collectedParameters,
+            nextMessage: "I understand you're not sure about the name! Let me help you with some suggestions. What subject or topic will this class cover? For example:\n• Math 101\n• English Literature\n• Computer Science\n• History of Art\n\nOr if you'd prefer, I can suggest a name based on the subject you tell me about.",
+            actionComplete: false
+          };
+        }
+        
+        // Check if user provided a subject instead of a course name
+        const subjectKeywords = ['math', 'english', 'science', 'history', 'computer', 'art', 'music', 'language', 'business', 'psychology', 'biology', 'chemistry', 'physics', 'algebra', 'calculus', 'literature', 'writing', 'programming', 'coding'];
+        const hasSubjectKeyword = subjectKeywords.some(keyword => message.includes(keyword));
+        
+        if (hasSubjectKeyword && !isValidCourseName(originalMessage.trim())) {
+          // User mentioned a subject but not a proper course name
+          const suggestions = generateCourseNameSuggestions(originalMessage);
+          const suggestionList = suggestions.slice(0, 3).map(s => `• ${s}`).join('\n');
+          
+          return {
+            action: 'CREATE_COURSE',
+            missingParameters: ['name'],
+            collectedParameters: collectedParameters,
+            nextMessage: `I see you mentioned "${originalMessage.trim()}" as the subject. Here are some course name suggestions:\n\n${suggestionList}\n\nWhich one would you like to use, or would you prefer a different name?`,
+            actionComplete: false
+          };
+        }
+        
+        // Check for explicit naming patterns
         const nameMatch = originalMessage.match(/(?:called|named|name is|call it)\s+(.+?)(?:\s|$)/i);
         if (nameMatch && nameMatch[1]) {
-          newParameters.name = nameMatch[1].trim();
-          parametersFound = true;
+          const extractedName = nameMatch[1].trim();
+          // Validate the extracted name
+          if (isValidCourseName(extractedName)) {
+            newParameters.name = extractedName;
+            parametersFound = true;
+          } else {
+            return {
+              action: 'CREATE_COURSE',
+              missingParameters: ['name'],
+              collectedParameters: collectedParameters,
+              nextMessage: `"${extractedName}" doesn't seem like a proper course name. Could you provide a more descriptive name? For example: "Math 101", "English Literature", or "Computer Science Fundamentals".`,
+              actionComplete: false
+            };
+          }
         }
-        // Also check if they just said the name directly
+        // Check if they provided a direct course name (not an action)
         else if (!originalMessage.toLowerCase().includes('create') && 
                  !originalMessage.toLowerCase().includes('make') && 
-                 !originalMessage.toLowerCase().includes('new course')) {
-          // If they didn't use action words, treat the whole message as the name
-          newParameters.name = originalMessage.trim();
-          parametersFound = true;
+                 !originalMessage.toLowerCase().includes('new course') &&
+                 !originalMessage.toLowerCase().includes('course')) {
+          const directName = originalMessage.trim();
+          // Validate the direct name
+          if (isValidCourseName(directName)) {
+            newParameters.name = directName;
+            parametersFound = true;
+          } else {
+            return {
+              action: 'CREATE_COURSE',
+              missingParameters: ['name'],
+              collectedParameters: collectedParameters,
+              nextMessage: `"${directName}" doesn't seem like a proper course name. Could you provide a more descriptive name? For example: "Math 101", "English Literature", or "Computer Science Fundamentals".`,
+              actionComplete: false
+            };
+          }
+        }
+        
+        // Handle confirmation for course name
+        if (missingParameters.includes('confirmed')) {
+          const message = originalMessage.toLowerCase().trim();
+          
+          // Check for positive confirmation
+          const positivePatterns = [
+            /^yes$/i,
+            /^y$/i,
+            /^yeah$/i,
+            /^yep$/i,
+            /^sure$/i,
+            /^ok$/i,
+            /^okay$/i,
+            /^correct$/i,
+            /^right$/i,
+            /^that's right$/i,
+            /^that is correct$/i,
+            /^go ahead$/i,
+            /^proceed$/i,
+            /^create it$/i
+          ];
+          
+          // Check for negative confirmation
+          const negativePatterns = [
+            /^no$/i,
+            /^n$/i,
+            /^nope$/i,
+            /^wrong$/i,
+            /^incorrect$/i,
+            /^change$/i,
+            /^different$/i,
+            /^not right$/i,
+            /^that's not right$/i,
+            /^that is not correct$/i,
+            /^cancel$/i,
+            /^stop$/i
+          ];
+          
+          if (positivePatterns.some(pattern => pattern.test(message))) {
+            newParameters.confirmed = true;
+            parametersFound = true;
+          } else if (negativePatterns.some(pattern => pattern.test(message))) {
+            // User wants to change the name - reset to name collection
+            return {
+              action: 'CREATE_COURSE',
+              missingParameters: ['name'],
+              collectedParameters: {},
+              nextMessage: "No problem! What would you like to call your new class instead?",
+              actionComplete: false
+            };
+          } else {
+            // Unclear response - ask for clarification
+            return {
+              action: 'CREATE_COURSE',
+              missingParameters: ['confirmed'],
+              collectedParameters: collectedParameters,
+              nextMessage: "I'm not sure if you want to proceed. Please say 'yes' to create the course with this name, or 'no' if you'd like to change it.",
+              actionComplete: false
+            };
+          }
         }
       }
       break;
@@ -817,12 +1026,28 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           startOngoingAction(conversationId, 'CREATE_COURSE', ['name'], {});
           
           return {
-            message: "What would you like to call your new course?",
+            message: "What would you like to call your new class?",
             conversationId: conversationId,
             ongoingAction: {
               action: 'CREATE_COURSE',
               missingParameters: ['name'],
               collectedParameters: {}
+            }
+          };
+        }
+
+        // Check if we need confirmation for the course name
+        if (parameters.name && !parameters.confirmed) {
+          // 🚀 UPDATE TRACKING: Add confirmation step
+          startOngoingAction(conversationId, 'CREATE_COURSE', ['confirmed'], { name: parameters.name });
+          
+          return {
+            message: `I'll create a course called "${parameters.name}". Is this correct? Please confirm with "yes" or "no", or let me know if you'd like to change the name.`,
+            conversationId: conversationId,
+            ongoingAction: {
+              action: 'CREATE_COURSE',
+              missingParameters: ['confirmed'],
+              collectedParameters: { name: parameters.name }
             }
           };
         }
