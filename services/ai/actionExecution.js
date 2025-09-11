@@ -42,10 +42,13 @@ function checkForNewActionAttempt(intent, conversationId) {
 async function analyzeUserIntentForCourseNaming(userMessage, conversationId, collectedParameters = {}) {
   try {
     // Create a focused prompt for intent analysis
-    const intentAnalysisPrompt = `Analyze the user's message for course naming intent. Consider the conversation context. Respond with JSON only.
+    const intentAnalysisPrompt = `Analyze the user's message for course naming intent. Consider the conversation context and ongoing action. Respond with JSON only.
 
 User message: "${userMessage}"
 Conversation context: ${JSON.stringify(collectedParameters)}
+Ongoing action: CREATE_COURSE
+
+IMPORTANT: This is ONLY for course naming during course creation. If the user is responding to a different ongoing action (like CREATE_ANNOUNCEMENT), this analysis should NOT be used.
 
 Determine if the user is:
 1. Selecting a suggested course name (respond with: {"intent": "direct_name", "name": "selected_name"})
@@ -258,7 +261,7 @@ async function handleParameterCollection(intent, parameters, conversationId, ori
     case 'CREATE_COURSE':
       // Check if user provided a course name
       if (missingParameters.includes('name')) {
-        // Use AI to analyze user intent
+        // Use AI to analyze user intent (only for course creation)
         const intentAnalysis = await analyzeUserIntentForCourseNaming(originalMessage, conversationId, collectedParameters);
         
         switch (intentAnalysis.intent) {
@@ -1127,26 +1130,52 @@ async function executeAction(intentData, originalMessage, userToken, req) {
     if (context && !parameterCollection && (intent === 'UNKNOWN' || intent === 'GREETING')) {
       console.log('🔍 No parameter collection but ongoing action exists, treating as response to ongoing action');
       
-      // Try to handle the message as a response to the ongoing action
-      const ongoingParameterCollection = await handleParameterCollection(context.action, context.collectedParameters || {}, conversationId, originalMessage);
-      if (ongoingParameterCollection) {
-        if (ongoingParameterCollection.actionComplete) {
-          // Action is now complete
-          intentData.intent = ongoingParameterCollection.action;
-          intentData.parameters = ongoingParameterCollection.allParameters;
-          intent = ongoingParameterCollection.action;
-          parameters = ongoingParameterCollection.allParameters;
-        } else {
-          // Still missing parameters
-          return {
-            message: ongoingParameterCollection.nextMessage,
-            conversationId: conversationId,
-            ongoingAction: {
-              action: ongoingParameterCollection.action,
-              collectedParameters: ongoingParameterCollection.collectedParameters,
-              missingParameters: ongoingParameterCollection.missingParameters
-            }
-          };
+      // Only use AI analysis for CREATE_COURSE actions
+      if (context.action === 'CREATE_COURSE') {
+        // Try to handle the message as a response to the ongoing action
+        const ongoingParameterCollection = await handleParameterCollection(context.action, context.collectedParameters || {}, conversationId, originalMessage);
+        if (ongoingParameterCollection) {
+          if (ongoingParameterCollection.actionComplete) {
+            // Action is now complete
+            intentData.intent = ongoingParameterCollection.action;
+            intentData.parameters = ongoingParameterCollection.allParameters;
+            intent = ongoingParameterCollection.action;
+            parameters = ongoingParameterCollection.allParameters;
+          } else {
+            // Still missing parameters
+            return {
+              message: ongoingParameterCollection.nextMessage,
+              conversationId: conversationId,
+              ongoingAction: {
+                action: ongoingParameterCollection.action,
+                collectedParameters: ongoingParameterCollection.collectedParameters,
+                missingParameters: ongoingParameterCollection.missingParameters
+              }
+            };
+          }
+        }
+      } else {
+        // For other actions, use simple pattern matching
+        const ongoingParameterCollection = await handleParameterCollection(context.action, context.collectedParameters || {}, conversationId, originalMessage);
+        if (ongoingParameterCollection) {
+          if (ongoingParameterCollection.actionComplete) {
+            // Action is now complete
+            intentData.intent = ongoingParameterCollection.action;
+            intentData.parameters = ongoingParameterCollection.allParameters;
+            intent = ongoingParameterCollection.action;
+            parameters = ongoingParameterCollection.allParameters;
+          } else {
+            // Still missing parameters
+            return {
+              message: ongoingParameterCollection.nextMessage,
+              conversationId: conversationId,
+              ongoingAction: {
+                action: ongoingParameterCollection.action,
+                collectedParameters: ongoingParameterCollection.collectedParameters,
+                missingParameters: ongoingParameterCollection.missingParameters
+              }
+            };
+          }
         }
       }
     }
