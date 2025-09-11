@@ -1559,6 +1559,9 @@ async function executeAction(intentData, originalMessage, userToken, req) {
       }
         
       case 'CREATE_ANNOUNCEMENT': {
+        console.log('🔍 DEBUG: CREATE_ANNOUNCEMENT case - parameters:', parameters);
+        console.log('🔍 DEBUG: needsDisambiguation flag:', parameters.needsDisambiguation);
+        
         // Only allow teachers and super_admin to create announcements
         if (userRole !== 'teacher' && userRole !== 'super_admin') {
           return {
@@ -1567,8 +1570,9 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           };
         }
 
-        // Check if we need disambiguation for generic course names
+        // Check if we need disambiguation for generic course names - THIS MUST BE FIRST
         if (parameters.needsDisambiguation) {
+          console.log('🔍 DEBUG: Disambiguation needed for generic course name');
           return {
             message: `I need to know which specific class you're referring to. Could you please tell me the name of the class? For example: "Grade Islamiat class" or "Math 101".`,
             conversationId: conversationId,
