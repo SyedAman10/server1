@@ -58,6 +58,11 @@ Examples:
 - "i dont know" → {"intent": "uncertainty", "needs_help": true}
 - "tell me some options" → {"intent": "more_suggestions", "needs_help": true}
 - "hhaha how would i know" → {"intent": "uncertainty", "needs_help": true}
+- "a different name" → {"intent": "more_suggestions", "needs_help": true}
+- "different name" → {"intent": "more_suggestions", "needs_help": true}
+- "something else" → {"intent": "more_suggestions", "needs_help": true}
+- "other options" → {"intent": "more_suggestions", "needs_help": true}
+- "more suggestions" → {"intent": "more_suggestions", "needs_help": true}
 
 Respond with JSON only:`;
 
@@ -276,10 +281,13 @@ async function handleParameterCollection(intent, parameters, conversationId, ori
             const suggestions = generateCourseNameSuggestions(subjectToUse);
             const suggestionList = suggestions.slice(0, 3).map(s => `• ${s}`).join('\n');
             
+            // Store the subject in collected parameters for future reference
+            const updatedParameters = { ...collectedParameters, subject: subjectToUse };
+            
             return {
               action: 'CREATE_COURSE',
               missingParameters: ['name'],
-              collectedParameters: collectedParameters,
+              collectedParameters: updatedParameters,
               nextMessage: `I see you mentioned "${subjectToUse}" as the subject. Here are some course name suggestions:\n\n${suggestionList}\n\nWhich one would you like to use, or would you prefer a different name?`,
               actionComplete: false
             };
@@ -288,13 +296,27 @@ async function handleParameterCollection(intent, parameters, conversationId, ori
           case 'more_suggestions':
           default:
             // User is uncertain or asking for help - provide guidance
-            return {
-              action: 'CREATE_COURSE',
-              missingParameters: ['name'],
-              collectedParameters: collectedParameters,
-              nextMessage: "I understand you're not sure about the name! Let me help you with some suggestions. What subject or topic will this class cover? For example:\n• Math 101\n• English Literature\n• Computer Science\n• History of Art\n\nOr if you'd prefer, I can suggest a name based on the subject you tell me about.",
-              actionComplete: false
-            };
+            // Check if we already have a subject from previous context
+            if (collectedParameters.subject) {
+              const suggestions = generateCourseNameSuggestions(collectedParameters.subject);
+              const suggestionList = suggestions.slice(0, 5).map(s => `• ${s}`).join('\n');
+              
+              return {
+                action: 'CREATE_COURSE',
+                missingParameters: ['name'],
+                collectedParameters: collectedParameters,
+                nextMessage: `Here are more course name suggestions for ${collectedParameters.subject}:\n\n${suggestionList}\n\nWhich one would you like to use, or would you prefer a different name?`,
+                actionComplete: false
+              };
+            } else {
+              return {
+                action: 'CREATE_COURSE',
+                missingParameters: ['name'],
+                collectedParameters: collectedParameters,
+                nextMessage: "I understand you're not sure about the name! Let me help you with some suggestions. What subject or topic will this class cover? For example:\n• Math 101\n• English Literature\n• Computer Science\n• History of Art\n\nOr if you'd prefer, I can suggest a name based on the subject you tell me about.",
+                actionComplete: false
+              };
+            }
         }
         
         // Handle confirmation for course name
