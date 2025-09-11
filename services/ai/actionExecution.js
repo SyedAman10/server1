@@ -1121,8 +1121,37 @@ async function executeAction(intentData, originalMessage, userToken, req) {
       }
     }
 
-    // 🔍 ADDITIONAL CHECK: Handle confirmation responses for ongoing actions
+    // 🔍 ADDITIONAL CHECK: If there's an ongoing action and no parameter collection happened,
+    // treat the message as a response to the ongoing action
     const context = getOngoingActionContext(conversationId);
+    if (context && !parameterCollection && (intent === 'UNKNOWN' || intent === 'GREETING')) {
+      console.log('🔍 No parameter collection but ongoing action exists, treating as response to ongoing action');
+      
+      // Try to handle the message as a response to the ongoing action
+      const ongoingParameterCollection = await handleParameterCollection(context.action, context.collectedParameters || {}, conversationId, originalMessage);
+      if (ongoingParameterCollection) {
+        if (ongoingParameterCollection.actionComplete) {
+          // Action is now complete
+          intentData.intent = ongoingParameterCollection.action;
+          intentData.parameters = ongoingParameterCollection.allParameters;
+          intent = ongoingParameterCollection.action;
+          parameters = ongoingParameterCollection.allParameters;
+        } else {
+          // Still missing parameters
+          return {
+            message: ongoingParameterCollection.nextMessage,
+            conversationId: conversationId,
+            ongoingAction: {
+              action: ongoingParameterCollection.action,
+              collectedParameters: ongoingParameterCollection.collectedParameters,
+              missingParameters: ongoingParameterCollection.missingParameters
+            }
+          };
+        }
+      }
+    }
+
+    // 🔍 ADDITIONAL CHECK: Handle confirmation responses for ongoing actions
     if (context && context.missingParameters && context.missingParameters.includes('confirmed')) {
       const message = originalMessage.toLowerCase().trim();
       
