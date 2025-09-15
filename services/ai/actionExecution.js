@@ -694,12 +694,17 @@ async function handleParameterCollection(intent, parameters, conversationId, ori
       break;
       
     case 'INVITE_STUDENTS':
+      console.log('🔍 DEBUG: INVITE_STUDENTS parameter collection - missingParameters:', missingParameters);
+      console.log('🔍 DEBUG: INVITE_STUDENTS originalMessage:', originalMessage);
+      
       // Check if user provided course name
       if (missingParameters.includes('courseName')) {
+        console.log('🔍 DEBUG: Looking for course name in message');
         const courseMatch = originalMessage.match(/(?:to|in)\s+(.+?)(?:\s|$)/i);
         if (courseMatch && courseMatch[1]) {
           newParameters.courseName = courseMatch[1].trim();
           parametersFound = true;
+          console.log('🔍 DEBUG: Found course name from pattern:', newParameters.courseName);
         }
         
         // Also check for "add student to class" pattern
@@ -707,18 +712,35 @@ async function handleParameterCollection(intent, parameters, conversationId, ori
         if (addToClassMatch && addToClassMatch[1]) {
           newParameters.courseName = addToClassMatch[1].trim();
           parametersFound = true;
+          console.log('🔍 DEBUG: Found course name from add pattern:', newParameters.courseName);
+        }
+        
+        // Check if user just provided a course name without "to" or "in"
+        if (!parametersFound && originalMessage.length < 50 && !originalMessage.includes('@')) {
+          // Likely just a course name
+          newParameters.courseName = originalMessage.trim();
+          parametersFound = true;
+          console.log('🔍 DEBUG: Treating message as course name:', newParameters.courseName);
         }
       }
       
       // Check if user provided student emails
       if (missingParameters.includes('studentEmails')) {
+        console.log('🔍 DEBUG: Looking for student emails in message');
         const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
         const emails = originalMessage.match(emailRegex) || [];
         if (emails.length > 0) {
           newParameters.studentEmails = emails;
           parametersFound = true;
+          console.log('🔍 DEBUG: Found student emails:', emails);
         }
       }
+      
+      console.log('🔍 DEBUG: INVITE_STUDENTS parameter collection result:', {
+        parametersFound,
+        newParameters,
+        missingParameters
+      });
       break;
   }
   
@@ -2041,8 +2063,13 @@ async function executeAction(intentData, originalMessage, userToken, req) {
       }
         
       case 'INVITE_STUDENTS':
+        console.log('🔍 DEBUG: INVITE_STUDENTS case started');
+        console.log('🔍 DEBUG: Parameters received:', JSON.stringify(parameters, null, 2));
+        console.log('🔍 DEBUG: User role:', userRole);
+        
         // Only allow teachers and super_admin to invite students
         if (userRole !== 'teacher' && userRole !== 'super_admin') {
+          console.log('🔍 DEBUG: User not authorized to invite students');
           return {
             message: 'You are not authorized to invite students. Only teachers and super admins can invite students.',
             conversationId: req.body.conversationId
@@ -2050,6 +2077,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
         }
         
         if (!parameters.courseName) {
+          console.log('🔍 DEBUG: Missing course name, asking for it');
           return {
             message: 'I need to know which course you want to invite students to. Please provide a course name.',
             conversationId: req.body.conversationId
@@ -2057,7 +2085,9 @@ async function executeAction(intentData, originalMessage, userToken, req) {
         }
         
         const studentEmails = parameters.studentEmails || parameters.emails;
+        console.log('🔍 DEBUG: Student emails extracted:', studentEmails);
         if (!studentEmails || studentEmails.length === 0) {
+          console.log('🔍 DEBUG: Missing student emails, asking for them');
           return {
             message: 'I need to know which students to invite. Please provide their email addresses.',
             conversationId: req.body.conversationId
