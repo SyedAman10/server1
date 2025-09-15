@@ -1222,6 +1222,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
 
     // 🔍 PRIORITY CHECK: If there's an ongoing action, force parameter collection first
     const context = getOngoingActionContext(conversationId);
+    console.log('🔍 DEBUG: Checking for ongoing action context:', context);
     if (context) {
       console.log('🔍 DEBUG: Found ongoing action, forcing parameter collection');
       console.log('🔍 DEBUG: Ongoing action context:', context);
@@ -2124,21 +2125,57 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           return null; // Let the parameter collection handler deal with it
         }
         
+        // Check if both course name and student emails are missing
+        if (!parameters.courseName && (!parameters.studentEmails || parameters.studentEmails.length === 0)) {
+          console.log('🔍 DEBUG: Both course name and student emails missing, starting ongoing action');
+          // Start ongoing action for parameter collection
+          if (conversationId) {
+            startOngoingAction(conversationId, 'INVITE_STUDENTS', ['courseName', 'studentEmails'], {});
+          }
+          return {
+            message: 'I need to know which course you want to invite students to and which students to invite. Please provide a course name first.',
+            conversationId: req.body.conversationId,
+            ongoingAction: {
+              action: 'INVITE_STUDENTS',
+              missingParameters: ['courseName', 'studentEmails'],
+              collectedParameters: {}
+            }
+          };
+        }
+        
         if (!parameters.courseName) {
-          console.log('🔍 DEBUG: Missing course name, asking for it');
+          console.log('🔍 DEBUG: Missing course name, starting ongoing action and asking for it');
+          // Start ongoing action for parameter collection
+          if (conversationId) {
+            startOngoingAction(conversationId, 'INVITE_STUDENTS', ['courseName'], {});
+          }
           return {
             message: 'I need to know which course you want to invite students to. Please provide a course name.',
-            conversationId: req.body.conversationId
+            conversationId: req.body.conversationId,
+            ongoingAction: {
+              action: 'INVITE_STUDENTS',
+              missingParameters: ['courseName'],
+              collectedParameters: {}
+            }
           };
         }
         
         const studentEmails = parameters.studentEmails || parameters.emails;
         console.log('🔍 DEBUG: Student emails extracted:', studentEmails);
         if (!studentEmails || studentEmails.length === 0) {
-          console.log('🔍 DEBUG: Missing student emails, asking for them');
+          console.log('🔍 DEBUG: Missing student emails, starting ongoing action and asking for them');
+          // Start ongoing action for parameter collection
+          if (conversationId) {
+            startOngoingAction(conversationId, 'INVITE_STUDENTS', ['studentEmails'], { courseName: parameters.courseName });
+          }
           return {
             message: 'I need to know which students to invite. Please provide their email addresses.',
-            conversationId: req.body.conversationId
+            conversationId: req.body.conversationId,
+            ongoingAction: {
+              action: 'INVITE_STUDENTS',
+              missingParameters: ['studentEmails'],
+              collectedParameters: { courseName: parameters.courseName }
+            }
           };
         }
         
