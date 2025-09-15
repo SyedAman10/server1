@@ -317,6 +317,14 @@ async function handleParameterCollection(intent, parameters, conversationId, ori
   
   const { action, missingParameters, collectedParameters } = context;
   
+  console.log('🔍 DEBUG: handleParameterCollection called with:', {
+    intent,
+    action,
+    missingParameters,
+    originalMessage,
+    conversationId
+  });
+  
   // Check if this message provides any of the missing parameters
   let newParameters = {};
   let parametersFound = false;
@@ -721,6 +729,13 @@ async function handleParameterCollection(intent, parameters, conversationId, ori
           newParameters.courseName = originalMessage.trim();
           parametersFound = true;
           console.log('🔍 DEBUG: Treating message as course name:', newParameters.courseName);
+        }
+        
+        // If we still haven't found a course name, check if this is a simple course name
+        if (!parametersFound && originalMessage.length < 30 && !originalMessage.includes('@') && !originalMessage.includes(' ')) {
+          newParameters.courseName = originalMessage.trim();
+          parametersFound = true;
+          console.log('🔍 DEBUG: Treating short message as course name:', newParameters.courseName);
         }
       }
       
