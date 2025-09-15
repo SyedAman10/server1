@@ -34,6 +34,26 @@ function detectIntentFallback(message, conversationId) {
     };
   }
   
+  // Proactive suggestions for joining/inviting students
+  if (
+    lowerMessage.includes('join') || 
+    lowerMessage.includes('invite') || 
+    lowerMessage.includes('add student') ||
+    lowerMessage.includes('enroll') ||
+    lowerMessage.includes('student wants to join') ||
+    lowerMessage.includes('how to join') ||
+    lowerMessage.includes('join class') ||
+    lowerMessage.includes('join course')
+  ) {
+    return {
+      intent: 'STUDENT_JOIN_SUGGESTION',
+      confidence: 0.8,
+      parameters: {
+        originalMessage: message
+      }
+    };
+  }
+  
   // Course listing
   if (lowerMessage.includes('list') || lowerMessage.includes('show') || lowerMessage.includes('get all')) {
     if (lowerMessage.includes('course')) {
@@ -737,6 +757,7 @@ async function detectIntent(message, conversationHistory, conversationId) {
       - SEND_EMAIL: User wants to send an email to someone (extract recipientEmail, subject, message, attachments if specified)
       - CANCEL_ACTION: User wants to cancel, stop, or abort an ongoing action (e.g., user says "cancel", "stop", "never mind", "forget it", "that's all", "done", "quit", "exit", "abort")
       - PROCEED_WITH_AVAILABLE_INFO: User wants to skip providing more information and proceed with available data (e.g., user says "no", "skip", "that's all", "proceed", etc.)
+      - STUDENT_JOIN_SUGGESTION: User is asking about joining a class, inviting students, or how students can join (provide helpful suggestions and prompts)
       - GREETING: User is saying hello, hi, hey, good morning/afternoon/evening, how are you, what's up, thanks, or engaging in casual conversation (no action needed)
         Examples: "hi", "hello", "hey there", "good morning", "how are you doing?", "thanks", "thank you"
       - HELP: User needs help or instructions

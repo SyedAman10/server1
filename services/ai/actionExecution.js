@@ -2286,6 +2286,63 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           };
         }
 
+      case 'STUDENT_JOIN_SUGGESTION':
+        // Extract potential course names and emails from the message
+        const originalMessage = req.body.message || '';
+        const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+        const emails = originalMessage.match(emailRegex) || [];
+        
+        // Try to extract course names from common patterns
+        const coursePatterns = [
+          /(?:class|course)\s+([a-zA-Z0-9\s-]+)/i,
+          /(?:to|in)\s+([a-zA-Z0-9\s-]+?)(?:\s|$)/i,
+          /([a-zA-Z0-9\s-]+?)\s+(?:class|course)/i
+        ];
+        
+        let extractedCourse = '';
+        for (const pattern of coursePatterns) {
+          const match = originalMessage.match(pattern);
+          if (match && match[1]) {
+            extractedCourse = match[1].trim();
+            break;
+          }
+        }
+        
+        // Build dynamic suggestions based on what we found
+        let suggestions = [];
+        let specificHelp = '';
+        
+        if (emails.length > 0 && extractedCourse) {
+          // We found both email and course - provide specific invitation command
+          suggestions.push(`invite student ${emails[0]} to class ${extractedCourse}`);
+          specificHelp = `\n**🎯 I found a student email and course name in your message!**\nTry: "invite student ${emails[0]} to class ${extractedCourse}"`;
+        } else if (emails.length > 0) {
+          // We found email but no course
+          suggestions.push(`invite student ${emails[0]} to class [course name]`);
+          specificHelp = `\n**📧 I found a student email: ${emails[0]}**\nJust tell me which class to invite them to!`;
+        } else if (extractedCourse) {
+          // We found course but no email
+          suggestions.push(`invite student [email] to class ${extractedCourse}`);
+          specificHelp = `\n**🏫 I found a course: ${extractedCourse}**\nJust tell me which student to invite!`;
+        }
+        
+        // Add general suggestions
+        suggestions.push(
+          "invite student [email] to class [course name]",
+          "show students in [course name]",
+          "list courses"
+        );
+        
+        return {
+          message: `🎓 **Student Joining & Invitation Help**${specificHelp}\n\nI can help you with student invitations and joining! Here are your options:\n\n**📧 To Invite Students:**\n• Say: "invite student [email] to class [course name]"\n• Example: "invite student aman@erptechnicals.com to class ai"\n\n**🔗 For Students to Join:**\n• Share the enrollment code with students\n• Students can join using the course link\n• Or they can search for the course code in Google Classroom\n\n**💡 Quick Actions:**\n• "invite student [email] to class [name]" - Send invitation\n• "show students in [class]" - See enrolled students\n• "list courses" - See all your courses\n\n**Need help with a specific course?** Just tell me the course name and I'll help you invite students!`,
+          conversationId: req.body.conversationId,
+          suggestions: suggestions,
+          extractedData: {
+            emails: emails,
+            courseName: extractedCourse
+          }
+        };
+
       case 'INVITE_TEACHERS':
         // Only allow super_admin to invite teachers
         if (userRole !== 'super_admin') {
