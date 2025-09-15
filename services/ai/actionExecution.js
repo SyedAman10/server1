@@ -1220,52 +1220,78 @@ async function executeAction(intentData, originalMessage, userToken, req) {
       }
     }
 
-    // 🔍 CONTEXT CHECK: Check if user is trying to start a new action while one is in progress
-    const newActionCheck = checkForNewActionAttempt(intent, conversationId);
-    if (newActionCheck && newActionCheck.shouldBlock) {
-      return {
-        message: newActionCheck.message,
-        conversationId: conversationId,
-        ongoingAction: newActionCheck.ongoingAction
-      };
-    }
-
-    // 🔍 CONTEXT CHECK: Check if this message provides parameters for an ongoing action
-    const parameterCollection = await handleParameterCollection(intent, parameters, conversationId, originalMessage);
-    console.log('🔍 Parameter collection result:', parameterCollection);
-    
-    if (parameterCollection) {
-      if (parameterCollection.actionComplete) {
-        // Action is now complete, execute it with all collected parameters
-        console.log(`🎯 Action ${parameterCollection.action} is now complete with parameters:`, parameterCollection.allParameters);
-        
-        // Update the intent data with the complete parameters
-        intentData.intent = parameterCollection.action;  // Change the intent!
-        intentData.parameters = parameterCollection.allParameters;
-        intent = parameterCollection.action;  // Update the local intent variable
-        parameters = parameterCollection.allParameters;
-        
-        console.log(`🔄 Updated intent to ${parameterCollection.action}`);
-        
-        // Continue with normal execution below
+    // 🔍 PRIORITY CHECK: If there's an ongoing action, force parameter collection first
+    const context = getOngoingActionContext(conversationId);
+    if (context) {
+      console.log('🔍 DEBUG: Found ongoing action, forcing parameter collection');
+      console.log('🔍 DEBUG: Ongoing action context:', context);
+      
+      // Check if this message provides parameters for the ongoing action
+      const parameterCollection = await handleParameterCollection(intent, parameters, conversationId, originalMessage);
+      console.log('🔍 Parameter collection result:', parameterCollection);
+      
+      if (parameterCollection) {
+        if (parameterCollection.actionComplete) {
+          // Action is now complete, execute it with all collected parameters
+          console.log(`🎯 Action ${parameterCollection.action} is now complete with parameters:`, parameterCollection.allParameters);
+          
+          // Update the intent data with the complete parameters
+          intentData.intent = parameterCollection.action;  // Change the intent!
+          intentData.parameters = parameterCollection.allParameters;
+          intent = parameterCollection.action;  // Update the local intent variable
+          parameters = parameterCollection.allParameters;
+          
+          console.log(`🔄 Updated intent to ${parameterCollection.action}`);
+          
+          // Continue with normal execution below
+        } else {
+          // Still missing parameters, ask for the next one
+          console.log('🔍 Still missing parameters:', parameterCollection.missingParameters);
+          return {
+            message: parameterCollection.nextMessage,
+            conversationId: conversationId,
+            ongoingAction: {
+              action: parameterCollection.action,
+              collectedParameters: parameterCollection.collectedParameters,
+              missingParameters: parameterCollection.missingParameters
+            }
+          };
+        }
       } else {
-        // Still missing parameters, ask for the next one
-        console.log('🔍 Still missing parameters:', parameterCollection.missingParameters);
+        // No parameters found in this message, but we have an ongoing action
+        // Check if this is a new action attempt
+        const newActionCheck = checkForNewActionAttempt(intent, conversationId);
+        if (newActionCheck && newActionCheck.shouldBlock) {
+          return {
+            message: newActionCheck.message,
+            conversationId: conversationId,
+            ongoingAction: newActionCheck.ongoingAction
+          };
+        }
+        
+        // If it's not a new action attempt, ask for the missing parameters
+        const contextMessage = getContextAwareMessage(conversationId);
         return {
-          message: parameterCollection.nextMessage,
+          message: `I'm still waiting for information to complete the current action. ${contextMessage}`,
           conversationId: conversationId,
-          ongoingAction: {
-            action: parameterCollection.action,
-            collectedParameters: parameterCollection.collectedParameters,
-            missingParameters: parameterCollection.missingParameters
-          }
+          ongoingAction: context
+        };
+      }
+    } else {
+      // No ongoing action, check if this is a new action attempt (shouldn't happen, but safety check)
+      const newActionCheck = checkForNewActionAttempt(intent, conversationId);
+      if (newActionCheck && newActionCheck.shouldBlock) {
+        return {
+          message: newActionCheck.message,
+          conversationId: conversationId,
+          ongoingAction: newActionCheck.ongoingAction
         };
       }
     }
 
     // 🔍 ADDITIONAL CHECK: Handle confirmation responses for ongoing actions
-    const context = getOngoingActionContext(conversationId);
-    if (context && context.missingParameters && context.missingParameters.includes('confirmed')) {
+    const context2 = getOngoingActionContext(conversationId);
+    if (context2 && context2.missingParameters && context2.missingParameters.includes('confirmed')) {
       const message = originalMessage.toLowerCase().trim();
       
       // Check for positive confirmation
@@ -2308,13 +2334,23 @@ async function executeAction(intentData, originalMessage, userToken, req) {
               throw error; // Re-throw other errors
             }
             
+            // ✅ COMPLETE ACTION: Mark the ongoing action as completed
+            if (conversationId) {
+              completeOngoingAction(conversationId);
+            }
+            
             return {
-              message: `🎉 **Successfully invited ${studentEmails.length} student${studentEmails.length === 1 ? '' : 's'} to ${selectedCourse.name}!**\n\n📧 **Invited Students:**\n${studentEmails.map(email => `• ${email}`).join('\n')}\n\n✅ Invitation emails have been sent. Students can join using the enrollment code or by accepting the invitation.\n\n💡 **Next steps:**\n• Create your first announcement\n• Add course materials\n• Create your first assignment`,
+              message: `🎉 **Successfully invited ${studentEmails.length} student${studentEmails.length === 1 ? '' : 's'} to ${selectedCourse.name}!**\n\n📧 **Invited Students:**\n${studentEmails.map(email => `• ${email}`).join('\n')}\n\n✅ Invitation emails have been sent. Students can join using the enrollment code or by accepting the invitation.\n\n💡 **Next steps:**\n• Create your first announcement\n• Add course materials\n• Create your first assignment\n\n**Is there anything else you'd like to do?** You can:\n• Invite more students to this or other courses\n• Create announcements or assignments\n• View your course details\n\nJust let me know what you'd like to do next!`,
               course: selectedCourse,
               invitedEmails: studentEmails,
               conversationId: req.body.conversationId
             };
           } catch (error) {
+            // ✅ COMPLETE ACTION: Mark the ongoing action as completed even on error
+            if (conversationId) {
+              completeOngoingAction(conversationId);
+            }
+            
             if (error.message.includes('Missing required OAuth2 tokens')) {
               return {
                 message: "I couldn't invite the students because your Google account isn't properly connected. Please reconnect your Google account.",
@@ -2326,6 +2362,11 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           }
         } catch (error) {
           console.error('Error in INVITE_STUDENTS:', error);
+          
+          // ✅ COMPLETE ACTION: Mark the ongoing action as completed even on error
+          if (conversationId) {
+            completeOngoingAction(conversationId);
+          }
           
           // Check if it's a domain restriction issue
           if (error.message.includes('The caller does not have permission') || 
