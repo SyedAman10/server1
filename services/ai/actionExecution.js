@@ -2191,8 +2191,10 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             // Only allow if user is owner, teacher of the course, or has super_admin role
             if (!isOwner && !isTeacher && !isCourseTeacher && userRole !== 'super_admin') {
               return {
-                message: `❌ **Permission Denied**\n\nYou don't have permission to invite students to the course "${selectedCourse.name}".\n\n**To invite students, you must be:**\n• The owner of the course, OR\n• A teacher of this specific course\n\n**Current status:**\n• Course owner: ${ownerEmail || courseDetails.ownerId}\n• Your email: ${userEmail}\n• Course teacher: ${isCourseTeacher ? 'Yes' : 'No'}\n\n**To fix this:**\n1. Ask the course owner to add you as a teacher, OR\n2. Create your own course and invite students there`,
-                conversationId: req.body.conversationId
+                message: `❌ **Permission Denied**\n\nYou don't have permission to invite students to the course "${selectedCourse.name}".\n\n**To invite students, you must be:**\n• The owner of the course, OR\n• A teacher of this specific course\n\n**Current status:**\n• Course owner: ${ownerEmail || courseDetails.ownerId}\n• Your email: ${userEmail}\n• Course teacher: ${isCourseTeacher ? 'Yes' : 'No'}\n\n**To fix this:**\n1. Ask the course owner to add you as a teacher, OR\n2. Create your own course and invite students there\n\n**Alternative - Share Enrollment Code:**\nStudents can join using code: **${selectedCourse.enrollmentCode}**\n**Course Link:** ${selectedCourse.alternateLink}`,
+                conversationId: req.body.conversationId,
+                enrollmentCode: selectedCourse.enrollmentCode,
+                courseLink: selectedCourse.alternateLink
               };
             }
             
@@ -2246,6 +2248,18 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           }
         } catch (error) {
           console.error('Error in INVITE_STUDENTS:', error);
+          
+          // Check if it's a domain restriction issue
+          if (error.message.includes('The caller does not have permission') || 
+              error.message.includes('PERMISSION_DENIED')) {
+            return {
+              message: `❌ **Unable to Invite Students**\n\nI couldn't invite the students due to Google Classroom restrictions. This is likely because:\n\n**🔒 Domain Restrictions:**\n• Google Classroom may have domain restrictions enabled\n• Cross-domain invitations might be blocked\n• The student's email domain may not be allowed\n\n**📧 Student Email:** ${studentEmails.join(', ')}\n**🏫 Course:** ${selectedCourse.name}\n\n**💡 Solutions:**\n1. **Share the enrollment code:** ${selectedCourse.enrollmentCode}\n2. **Ask students to join manually:** They can use the code above\n3. **Check domain policies:** Contact your Google Workspace admin\n4. **Try with same-domain emails:** Use emails from your organization\n\n**🔗 Course Link:** ${selectedCourse.alternateLink}`,
+              conversationId: req.body.conversationId,
+              enrollmentCode: selectedCourse.enrollmentCode,
+              courseLink: selectedCourse.alternateLink
+            };
+          }
+          
           return {
             message: "Sorry, I encountered an error while inviting students. Please try again.",
             error: error.message,
