@@ -73,21 +73,25 @@ async function inviteStudent(tokens, courseId, studentEmail) {
 
 // ✅ List teachers of a course
 async function listTeachers(tokens, courseId) {
+  console.log('DEBUG: listTeachers called with courseId:', courseId);
   const classroom = await getClassroomClient(tokens);
 
   const res = await classroom.courses.teachers.list({
     courseId: courseId
   });
+  console.log('DEBUG: listTeachers response:', JSON.stringify(res.data, null, 2));
   return res.data.teachers || [];
 }
 
 // ✅ Get owner profile by user ID
 async function getOwnerProfile(tokens, userId) {
+  console.log('DEBUG: getOwnerProfile called with userId:', userId);
   const classroom = await getClassroomClient(tokens);
 
   const res = await classroom.userProfiles.get({
     userId: userId
   });
+  console.log('DEBUG: getOwnerProfile response:', JSON.stringify(res.data, null, 2));
   return res.data;
 }
 

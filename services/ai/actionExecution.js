@@ -2124,6 +2124,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             try {
               // Get the owner's profile to get their email
               const { getOwnerProfile } = require('../classroomService');
+              console.log('DEBUG: Attempting to get owner profile for ID:', courseDetails.ownerId);
               const ownerProfile = await getOwnerProfile(
                 {
                   access_token: user.access_token,
@@ -2131,11 +2132,13 @@ async function executeAction(intentData, originalMessage, userToken, req) {
                 },
                 courseDetails.ownerId
               );
+              console.log('DEBUG: Owner profile response:', JSON.stringify(ownerProfile, null, 2));
               ownerEmail = ownerProfile.emailAddress;
               isOwner = ownerEmail === userEmail;
               console.log('DEBUG: Owner email:', ownerEmail, 'User email:', userEmail, 'Is owner?', isOwner);
             } catch (ownerError) {
               console.log('DEBUG: Could not get owner profile:', ownerError.message);
+              console.log('DEBUG: Owner error details:', JSON.stringify(ownerError, null, 2));
               // Fallback: check if ownerId matches user's Google ID (less reliable)
               isOwner = courseDetails.ownerId === userEmail;
             }
@@ -2155,6 +2158,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             let isCourseTeacher = false;
             try {
               const { listTeachers } = require('../classroomService');
+              console.log('DEBUG: Attempting to get teachers list for course:', courseId);
               const teachers = await listTeachers(
                 {
                   access_token: user.access_token,
@@ -2162,10 +2166,12 @@ async function executeAction(intentData, originalMessage, userToken, req) {
                 },
                 courseId
               );
+              console.log('DEBUG: Teachers response:', JSON.stringify(teachers, null, 2));
               isCourseTeacher = teachers.some(teacher => teacher.profile.emailAddress === userEmail);
               console.log('DEBUG: Is course teacher?', isCourseTeacher, 'Teachers:', teachers.map(t => t.profile.emailAddress));
             } catch (teacherError) {
               console.log('DEBUG: Could not check teachers list:', teacherError.message);
+              console.log('DEBUG: Teacher error details:', JSON.stringify(teacherError, null, 2));
             }
             
             // Only allow if user is owner, teacher of the course, or has super_admin role
