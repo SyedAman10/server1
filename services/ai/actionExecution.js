@@ -2224,11 +2224,30 @@ async function executeAction(intentData, originalMessage, userToken, req) {
                 return result;
               } catch (error) {
                 console.log(`DEBUG: Failed to invite ${email}:`, error.message);
+                
+                // Check if it's a permission issue and provide helpful message
+                if (error.message.includes('The caller does not have permission') || 
+                    error.message.includes('PERMISSION_DENIED')) {
+                  throw new Error(`PERMISSION_DENIED: ${email}`);
+                }
                 throw error;
               }
             });
 
-            await Promise.all(invitationPromises);
+            try {
+              await Promise.all(invitationPromises);
+            } catch (error) {
+              // Handle permission denied errors with helpful message
+              if (error.message.includes('PERMISSION_DENIED')) {
+                return {
+                  message: `❌ **Unable to Invite Students**\n\nI couldn't invite the students due to Google Classroom restrictions. This is likely because:\n\n**🔒 Domain Restrictions:**\n• Google Classroom may have domain restrictions enabled\n• Cross-domain invitations might be blocked\n• The student's email domain may not be allowed\n\n**📧 Student Email:** ${studentEmails.join(', ')}\n**🏫 Course:** ${selectedCourse.name}\n\n**💡 Solutions:**\n1. **Share the enrollment code:** ${selectedCourse.enrollmentCode}\n2. **Ask students to join manually:** They can use the code above\n3. **Check domain policies:** Contact your Google Workspace admin\n4. **Try with same-domain emails:** Use emails from your organization\n\n**🔗 Course Link:** ${selectedCourse.alternateLink}`,
+                  conversationId: req.body.conversationId,
+                  enrollmentCode: selectedCourse.enrollmentCode,
+                  courseLink: selectedCourse.alternateLink
+                };
+              }
+              throw error; // Re-throw other errors
+            }
             
             return {
               message: `🎉 **Successfully invited ${studentEmails.length} student${studentEmails.length === 1 ? '' : 's'} to ${selectedCourse.name}!**\n\n📧 **Invited Students:**\n${studentEmails.map(email => `• ${email}`).join('\n')}\n\n✅ Invitation emails have been sent. Students can join using the enrollment code or by accepting the invitation.\n\n💡 **Next steps:**\n• Create your first announcement\n• Add course materials\n• Create your first assignment`,

@@ -45,7 +45,7 @@ async function getCourse(tokens, courseId) {
   return res.data;
 }
 
-// ✅ Invite a student to a course
+// ✅ Invite a student to a course using invitations.create
 async function inviteStudent(tokens, courseId, studentEmail) {
   console.log('DEBUG: inviteStudent called with courseId:', courseId, 'studentEmail:', studentEmail);
   
@@ -81,17 +81,18 @@ async function inviteStudent(tokens, courseId, studentEmail) {
   const classroom = google.classroom({ version: 'v1', auth });
 
   try {
-    console.log('DEBUG: Attempting to create student enrollment...');
-    const res = await classroom.courses.students.create({
-      courseId,
+    console.log('DEBUG: Attempting to create student invitation...');
+    const res = await classroom.invitations.create({
       requestBody: {
-        userId: studentEmail
+        courseId: courseId,
+        userId: studentEmail,
+        role: 'STUDENT'
       }
     });
-    console.log('DEBUG: Student enrollment successful:', res.data);
+    console.log('DEBUG: Student invitation successful:', res.data);
     return res.data;
   } catch (error) {
-    console.log('DEBUG: Student enrollment failed:', error.message);
+    console.log('DEBUG: Student invitation failed:', error.message);
     console.log('DEBUG: Error details:', JSON.stringify(error, null, 2));
     throw error;
   }
