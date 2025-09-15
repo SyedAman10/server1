@@ -738,6 +738,52 @@ function detectIntentFallback(message, conversationId) {
  */
 async function detectIntent(message, conversationHistory, conversationId) {
   console.log('🔍 DEBUG: detectIntent called with message:', message);
+  
+  // First check if there's an ongoing action that needs parameter collection
+  if (conversationId) {
+    const { getOngoingActionContext } = require('./conversationManager');
+    const context = getOngoingActionContext(conversationId);
+    if (context) {
+      console.log('🔍 DEBUG: Found ongoing action context, checking if message provides parameters');
+      
+      // Check if this message provides parameters for the ongoing action
+      const { action, missingParameters } = context;
+      
+      // If we're waiting for student emails and this looks like an email
+      if (action === 'INVITE_STUDENTS' && missingParameters.includes('studentEmails')) {
+        const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+        const emails = message.match(emailRegex) || [];
+        if (emails.length > 0) {
+          console.log('🔍 DEBUG: Message contains email for ongoing INVITE_STUDENTS action');
+          return {
+            intent: 'INVITE_STUDENTS',
+            confidence: 0.95,
+            parameters: {
+              studentEmails: emails,
+              isParameterCollection: true
+            }
+          };
+        }
+      }
+      
+      // If we're waiting for course name and this looks like a course name
+      if (action === 'INVITE_STUDENTS' && missingParameters.includes('courseName')) {
+        // Check if it's a simple course name (no email, short message)
+        if (!message.includes('@') && message.length < 50) {
+          console.log('🔍 DEBUG: Message looks like course name for ongoing INVITE_STUDENTS action');
+          return {
+            intent: 'INVITE_STUDENTS',
+            confidence: 0.9,
+            parameters: {
+              courseName: message.trim(),
+              isParameterCollection: true
+            }
+          };
+        }
+      }
+    }
+  }
+  
   try {
     // Format conversation history for Gemini
     const formattedHistory = conversationHistory

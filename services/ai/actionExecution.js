@@ -2081,6 +2081,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
         console.log('🔍 DEBUG: INVITE_STUDENTS case started');
         console.log('🔍 DEBUG: Parameters received:', JSON.stringify(parameters, null, 2));
         console.log('🔍 DEBUG: User role:', userRole);
+        console.log('🔍 DEBUG: Is parameter collection:', parameters.isParameterCollection);
         
         // Only allow teachers and super_admin to invite students
         if (userRole !== 'teacher' && userRole !== 'super_admin') {
@@ -2089,6 +2090,12 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             message: 'You are not authorized to invite students. Only teachers and super admins can invite students.',
             conversationId: req.body.conversationId
           };
+        }
+        
+        // If this is parameter collection, handle it through the parameter collection flow
+        if (parameters.isParameterCollection) {
+          console.log('🔍 DEBUG: This is parameter collection, delegating to parameter collection handler');
+          return null; // Let the parameter collection handler deal with it
         }
         
         if (!parameters.courseName) {
