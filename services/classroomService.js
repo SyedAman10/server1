@@ -81,10 +81,21 @@ async function listTeachers(tokens, courseId) {
   return res.data.teachers || [];
 }
 
+// ✅ Get owner profile by user ID
+async function getOwnerProfile(tokens, userId) {
+  const classroom = await getClassroomClient(tokens);
+
+  const res = await classroom.userProfiles.get({
+    userId: userId
+  });
+  return res.data;
+}
+
 module.exports = {
   createCourse,
   listCourses,
   getCourse,
   inviteStudent,
-  listTeachers
+  listTeachers,
+  getOwnerProfile
 };

@@ -2118,9 +2118,28 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             console.log('DEBUG: Checking course permissions for user:', userEmail);
             console.log('DEBUG: Course details:', JSON.stringify(courseDetails, null, 2));
             
-            // Check if user is the owner
-            const isOwner = courseDetails.ownerId === userEmail;
-            console.log('DEBUG: Is owner?', isOwner, 'Owner ID:', courseDetails.ownerId);
+            // Check if user is the owner - need to get owner's email from the ownerId
+            let isOwner = false;
+            let ownerEmail = null;
+            try {
+              // Get the owner's profile to get their email
+              const { getOwnerProfile } = require('../classroomService');
+              const ownerProfile = await getOwnerProfile(
+                {
+                  access_token: user.access_token,
+                  refresh_token: user.refresh_token
+                },
+                courseDetails.ownerId
+              );
+              ownerEmail = ownerProfile.emailAddress;
+              isOwner = ownerEmail === userEmail;
+              console.log('DEBUG: Owner email:', ownerEmail, 'User email:', userEmail, 'Is owner?', isOwner);
+            } catch (ownerError) {
+              console.log('DEBUG: Could not get owner profile:', ownerError.message);
+              // Fallback: check if ownerId matches user's Google ID (less reliable)
+              isOwner = courseDetails.ownerId === userEmail;
+            }
+            console.log('DEBUG: Is owner?', isOwner, 'Owner ID:', courseDetails.ownerId, 'Owner email:', ownerEmail);
             
             // Check if user is a teacher (teacherGroupEmail might contain the user's email)
             const isTeacher = courseDetails.teacherGroupEmail && 
@@ -2152,7 +2171,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             // Only allow if user is owner, teacher of the course, or has super_admin role
             if (!isOwner && !isTeacher && !isCourseTeacher && userRole !== 'super_admin') {
               return {
-                message: `❌ **Permission Denied**\n\nYou don't have permission to invite students to the course "${selectedCourse.name}".\n\n**To invite students, you must be:**\n• The owner of the course, OR\n• A teacher of this specific course\n\n**Current status:**\n• Course owner: ${courseDetails.ownerId}\n• Your email: ${userEmail}\n• Course teacher: ${isCourseTeacher ? 'Yes' : 'No'}\n\n**To fix this:**\n1. Ask the course owner to add you as a teacher, OR\n2. Create your own course and invite students there`,
+                message: `❌ **Permission Denied**\n\nYou don't have permission to invite students to the course "${selectedCourse.name}".\n\n**To invite students, you must be:**\n• The owner of the course, OR\n• A teacher of this specific course\n\n**Current status:**\n• Course owner: ${ownerEmail || courseDetails.ownerId}\n• Your email: ${userEmail}\n• Course teacher: ${isCourseTeacher ? 'Yes' : 'No'}\n\n**To fix this:**\n1. Ask the course owner to add you as a teacher, OR\n2. Create your own course and invite students there`,
                 conversationId: req.body.conversationId
               };
             }
