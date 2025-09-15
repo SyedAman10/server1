@@ -43,13 +43,50 @@ function detectIntentFallback(message, conversationId) {
     lowerMessage.includes('student wants to join') ||
     lowerMessage.includes('how to join') ||
     lowerMessage.includes('join class') ||
-    lowerMessage.includes('join course')
+    lowerMessage.includes('join course') ||
+    lowerMessage.includes('add student to class') ||
+    lowerMessage.includes('add student to course')
   ) {
+    // Check if this is a direct invitation request with email
+    const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+    const emails = message.match(emailRegex) || [];
+    
+    // Try to extract course name
+    let courseName = '';
+    const coursePatterns = [
+      /(?:class|course)\s+([a-zA-Z0-9\s-]+)/i,
+      /(?:to|in)\s+([a-zA-Z0-9\s-]+?)(?:\s|$)/i,
+      /([a-zA-Z0-9\s-]+?)\s+(?:class|course)/i
+    ];
+    
+    for (const pattern of coursePatterns) {
+      const match = message.match(pattern);
+      if (match && match[1]) {
+        courseName = match[1].trim();
+        break;
+      }
+    }
+    
+    // If we have both email and course, treat as direct invitation
+    if (emails.length > 0 && courseName) {
+      return {
+        intent: 'INVITE_STUDENTS',
+        confidence: 0.9,
+        parameters: {
+          studentEmails: emails,
+          courseName: courseName
+        }
+      };
+    }
+    
+    // Otherwise, provide suggestions
     return {
       intent: 'STUDENT_JOIN_SUGGESTION',
       confidence: 0.8,
       parameters: {
-        originalMessage: message
+        originalMessage: message,
+        extractedEmails: emails,
+        extractedCourse: courseName
       }
     };
   }

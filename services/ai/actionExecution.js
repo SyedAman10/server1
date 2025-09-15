@@ -701,6 +701,13 @@ async function handleParameterCollection(intent, parameters, conversationId, ori
           newParameters.courseName = courseMatch[1].trim();
           parametersFound = true;
         }
+        
+        // Also check for "add student to class" pattern
+        const addToClassMatch = originalMessage.match(/add\s+student\s+to\s+(.+)/i);
+        if (addToClassMatch && addToClassMatch[1]) {
+          newParameters.courseName = addToClassMatch[1].trim();
+          parametersFound = true;
+        }
       }
       
       // Check if user provided student emails
@@ -2296,7 +2303,8 @@ async function executeAction(intentData, originalMessage, userToken, req) {
         const coursePatterns = [
           /(?:class|course)\s+([a-zA-Z0-9\s-]+)/i,
           /(?:to|in)\s+([a-zA-Z0-9\s-]+?)(?:\s|$)/i,
-          /([a-zA-Z0-9\s-]+?)\s+(?:class|course)/i
+          /([a-zA-Z0-9\s-]+?)\s+(?:class|course)/i,
+          /add\s+student\s+to\s+(.+)/i
         ];
         
         let extractedCourse = '';
@@ -2308,15 +2316,23 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           }
         }
         
+        // Check if this should be treated as a direct invitation
+        if (emails.length > 0 && extractedCourse) {
+          // Redirect to INVITE_STUDENTS with the extracted parameters
+          return await executeAction({
+            ...req,
+            body: {
+              ...req.body,
+              message: `invite student ${emails[0]} to class ${extractedCourse}`
+            }
+          }, userRole, userToken, baseUrl);
+        }
+        
         // Build dynamic suggestions based on what we found
         let suggestions = [];
         let specificHelp = '';
         
-        if (emails.length > 0 && extractedCourse) {
-          // We found both email and course - provide specific invitation command
-          suggestions.push(`invite student ${emails[0]} to class ${extractedCourse}`);
-          specificHelp = `\n**🎯 I found a student email and course name in your message!**\nTry: "invite student ${emails[0]} to class ${extractedCourse}"`;
-        } else if (emails.length > 0) {
+        if (emails.length > 0) {
           // We found email but no course
           suggestions.push(`invite student ${emails[0]} to class [course name]`);
           specificHelp = `\n**📧 I found a student email: ${emails[0]}**\nJust tell me which class to invite them to!`;
