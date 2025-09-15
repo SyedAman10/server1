@@ -2118,11 +2118,11 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             console.log('DEBUG: Checking course permissions for user:', userEmail);
             console.log('DEBUG: Course details:', JSON.stringify(courseDetails, null, 2));
             
-            // Check if user is the owner - need to get owner's email from the ownerId
+            // Check if user is the owner - compare user IDs since email is not available
             let isOwner = false;
             let ownerEmail = null;
             try {
-              // Get the owner's profile to get their email
+              // Get the owner's profile to get their ID
               const { getOwnerProfile } = require('../classroomService');
               console.log('DEBUG: Attempting to get owner profile for ID:', courseDetails.ownerId);
               const ownerProfile = await getOwnerProfile(
@@ -2133,14 +2133,22 @@ async function executeAction(intentData, originalMessage, userToken, req) {
                 courseDetails.ownerId
               );
               console.log('DEBUG: Owner profile response:', JSON.stringify(ownerProfile, null, 2));
-              ownerEmail = ownerProfile.emailAddress;
-              isOwner = ownerEmail === userEmail;
-              console.log('DEBUG: Owner email:', ownerEmail, 'User email:', userEmail, 'Is owner?', isOwner);
+              
+              // Get current user's Google ID from JWT token
+              const currentUserGoogleId = decoded.sub; // This is the Google user ID from JWT
+              console.log('DEBUG: Current user Google ID:', currentUserGoogleId);
+              console.log('DEBUG: Owner Google ID:', ownerProfile.id);
+              
+              // Compare Google user IDs instead of emails
+              isOwner = ownerProfile.id === currentUserGoogleId;
+              ownerEmail = ownerProfile.emailAddress || 'Email not available';
+              console.log('DEBUG: Is owner?', isOwner, 'Owner ID:', courseDetails.ownerId, 'Current user ID:', currentUserGoogleId);
             } catch (ownerError) {
               console.log('DEBUG: Could not get owner profile:', ownerError.message);
               console.log('DEBUG: Owner error details:', JSON.stringify(ownerError, null, 2));
-              // Fallback: check if ownerId matches user's Google ID (less reliable)
-              isOwner = courseDetails.ownerId === userEmail;
+              // Fallback: check if ownerId matches user's Google ID from JWT
+              const currentUserGoogleId = decoded.sub;
+              isOwner = courseDetails.ownerId === currentUserGoogleId;
             }
             console.log('DEBUG: Is owner?', isOwner, 'Owner ID:', courseDetails.ownerId, 'Owner email:', ownerEmail);
             
@@ -2167,8 +2175,14 @@ async function executeAction(intentData, originalMessage, userToken, req) {
                 courseId
               );
               console.log('DEBUG: Teachers response:', JSON.stringify(teachers, null, 2));
-              isCourseTeacher = teachers.some(teacher => teacher.profile.emailAddress === userEmail);
-              console.log('DEBUG: Is course teacher?', isCourseTeacher, 'Teachers:', teachers.map(t => t.profile.emailAddress));
+              
+              // Get current user's Google ID from JWT token
+              const currentUserGoogleId = decoded.sub;
+              console.log('DEBUG: Current user Google ID for teacher check:', currentUserGoogleId);
+              
+              // Compare Google user IDs instead of emails
+              isCourseTeacher = teachers.some(teacher => teacher.profile.id === currentUserGoogleId);
+              console.log('DEBUG: Is course teacher?', isCourseTeacher, 'Teachers IDs:', teachers.map(t => t.profile.id));
             } catch (teacherError) {
               console.log('DEBUG: Could not check teachers list:', teacherError.message);
               console.log('DEBUG: Teacher error details:', JSON.stringify(teacherError, null, 2));
