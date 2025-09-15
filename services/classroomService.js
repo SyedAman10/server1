@@ -71,9 +71,20 @@ async function inviteStudent(tokens, courseId, studentEmail) {
   return res.data;
 }
 
+// ✅ List teachers of a course
+async function listTeachers(tokens, courseId) {
+  const classroom = await getClassroomClient(tokens);
+
+  const res = await classroom.courses.teachers.list({
+    courseId: courseId
+  });
+  return res.data.teachers || [];
+}
+
 module.exports = {
   createCourse,
   listCourses,
   getCourse,
-  inviteStudent
+  inviteStudent,
+  listTeachers
 };

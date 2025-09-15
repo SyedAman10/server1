@@ -2132,11 +2132,29 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             const hasTeacherRole = userRole === 'teacher' || userRole === 'super_admin';
             console.log('DEBUG: Has teacher role in system?', hasTeacherRole, 'User role:', userRole);
             
-            // Allow if user is owner, teacher of the course, or has teacher role in our system
-            if (!isOwner && !isTeacher && !hasTeacherRole) {
-              console.log('DEBUG: Permission check failed, but proceeding anyway to let Google API handle permissions');
-              // Don't block here - let the Google Classroom API handle the permission check
-              // This way we get a more accurate error message from Google if there are permission issues
+            // Check if user is actually a teacher of this specific course by checking the teachers list
+            let isCourseTeacher = false;
+            try {
+              const { listTeachers } = require('../classroomService');
+              const teachers = await listTeachers(
+                {
+                  access_token: user.access_token,
+                  refresh_token: user.refresh_token
+                },
+                courseId
+              );
+              isCourseTeacher = teachers.some(teacher => teacher.profile.emailAddress === userEmail);
+              console.log('DEBUG: Is course teacher?', isCourseTeacher, 'Teachers:', teachers.map(t => t.profile.emailAddress));
+            } catch (teacherError) {
+              console.log('DEBUG: Could not check teachers list:', teacherError.message);
+            }
+            
+            // Only allow if user is owner, teacher of the course, or has super_admin role
+            if (!isOwner && !isTeacher && !isCourseTeacher && userRole !== 'super_admin') {
+              return {
+                message: `❌ **Permission Denied**\n\nYou don't have permission to invite students to the course "${selectedCourse.name}".\n\n**To invite students, you must be:**\n• The owner of the course, OR\n• A teacher of this specific course\n\n**Current status:**\n• Course owner: ${courseDetails.ownerId}\n• Your email: ${userEmail}\n• Course teacher: ${isCourseTeacher ? 'Yes' : 'No'}\n\n**To fix this:**\n1. Ask the course owner to add you as a teacher, OR\n2. Create your own course and invite students there`,
+                conversationId: req.body.conversationId
+              };
             }
             
             // Use internal service function instead of external API call
