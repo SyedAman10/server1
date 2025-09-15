@@ -47,6 +47,8 @@ async function getCourse(tokens, courseId) {
 
 // ✅ Invite a student to a course
 async function inviteStudent(tokens, courseId, studentEmail) {
+  console.log('DEBUG: inviteStudent called with courseId:', courseId, 'studentEmail:', studentEmail);
+  
   // Create OAuth2 client with proper configuration
   const auth = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
@@ -54,21 +56,45 @@ async function inviteStudent(tokens, courseId, studentEmail) {
     process.env.GOOGLE_REDIRECT_URI
   );
   
+  // Set the required scopes for student management
+  auth.scope = [
+    'https://www.googleapis.com/auth/classroom.courses',
+    'https://www.googleapis.com/auth/classroom.rosters'
+  ];
+  
   // Set the credentials with the provided tokens
   auth.setCredentials({
     access_token: tokens.access_token,
     refresh_token: tokens.refresh_token
   });
   
+  // Add automatic token refresh
+  auth.on('tokens', (newTokens) => {
+    console.log('DEBUG: Tokens refreshed:', !!newTokens.access_token);
+    // You might want to save the new tokens to the database here
+  });
+  
+  console.log('DEBUG: OAuth2 client configured with scopes:', auth.scope);
+  console.log('DEBUG: Access token present:', !!tokens.access_token);
+  console.log('DEBUG: Refresh token present:', !!tokens.refresh_token);
+  
   const classroom = google.classroom({ version: 'v1', auth });
 
-  const res = await classroom.courses.students.create({
-    courseId,
-    requestBody: {
-      userId: studentEmail
-    }
-  });
-  return res.data;
+  try {
+    console.log('DEBUG: Attempting to create student enrollment...');
+    const res = await classroom.courses.students.create({
+      courseId,
+      requestBody: {
+        userId: studentEmail
+      }
+    });
+    console.log('DEBUG: Student enrollment successful:', res.data);
+    return res.data;
+  } catch (error) {
+    console.log('DEBUG: Student enrollment failed:', error.message);
+    console.log('DEBUG: Error details:', JSON.stringify(error, null, 2));
+    throw error;
+  }
 }
 
 // ✅ List teachers of a course

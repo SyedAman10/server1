@@ -2199,16 +2199,32 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             // Use internal service function instead of external API call
             const { inviteStudent } = require('../classroomService');
             
-            const invitationPromises = studentEmails.map(email =>
-              inviteStudent(
-                {
-                  access_token: user.access_token,
-                  refresh_token: user.refresh_token
-                },
-                courseId,
-                email
-              )
-            );
+            // Check if student emails are valid before attempting invitation
+            console.log('DEBUG: About to invite students:', studentEmails);
+            console.log('DEBUG: Course ID:', courseId);
+            console.log('DEBUG: User tokens present:', {
+              access_token: !!user.access_token,
+              refresh_token: !!user.refresh_token
+            });
+            
+            const invitationPromises = studentEmails.map(async (email) => {
+              try {
+                console.log(`DEBUG: Inviting student: ${email}`);
+                const result = await inviteStudent(
+                  {
+                    access_token: user.access_token,
+                    refresh_token: user.refresh_token
+                  },
+                  courseId,
+                  email
+                );
+                console.log(`DEBUG: Successfully invited ${email}:`, result);
+                return result;
+              } catch (error) {
+                console.log(`DEBUG: Failed to invite ${email}:`, error.message);
+                throw error;
+              }
+            });
 
             await Promise.all(invitationPromises);
             
