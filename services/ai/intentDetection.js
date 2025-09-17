@@ -977,6 +977,12 @@ async function detectIntent(message, conversationHistory, conversationId) {
       - "add student to this class" → STUDENT_JOIN_SUGGESTION (not INVITE_STUDENTS)
       - "invite student john@email.com to Computer Science" → INVITE_STUDENTS (specific course name)
       
+      For course name extraction, when you see patterns like "my class [COURSE_NAME]", "the class [COURSE_NAME]", "this class [COURSE_NAME]", extract only the specific course name part:
+      - "post announcement to my class ai" → courseName: "ai" (not "my class ai")
+      - "create assignment in my class Computer Science" → courseName: "Computer Science" (not "my class Computer Science")
+      - "show students in the class Math 101" → courseName: "Math 101" (not "the class Math 101")
+      - "announcement for this class Physics" → courseName: "Physics" (not "this class Physics")
+      
       Respond in JSON format only with the following structure:
       {
         "intent": "INTENT_NAME",
