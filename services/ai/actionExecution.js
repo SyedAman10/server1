@@ -465,8 +465,8 @@ async function handleParameterCollection(intent, parameters, conversationId, ori
       if (missingParameters.includes('title')) {
         // Try different patterns for title extraction
         const titlePatterns = [
-          /(?:called|titled|title is|call it|the title should be|the title is)\s+(.+?)(?:\s|$)/i,
-          /(?:title:?|name:?)\s+(.+?)(?:\s|$)/i
+          /(?:called|titled|title is|call it|the title should be|the title is)\s+(.+)$/i,
+          /(?:title:?|name:?)\s+(.+)$/i
         ];
         
         let titleExtracted = false;
@@ -480,7 +480,58 @@ async function handleParameterCollection(intent, parameters, conversationId, ori
           }
         }
         
-        // If no pattern matched, check if they just said the title directly
+        // If no pattern matched, try AI-based extraction
+        if (!titleExtracted) {
+          try {
+            const aiExtractionPrompt = `Extract the assignment title from this user message. Return only the title, nothing else.
+
+User message: "${originalMessage}"
+
+Examples:
+- "The title should be Intro to CS" → "Intro to CS"
+- "Call it Math Homework" → "Math Homework" 
+- "Title: Final Project" → "Final Project"
+- "Intro to CS" → "Intro to CS"
+- "Homework 1" → "Homework 1"
+
+Extracted title:`;
+
+            const aiResponse = await makeApiCall(
+              'https://api.openai.com/v1/chat/completions',
+              'POST',
+              {
+                model: 'gpt-3.5-turbo',
+                messages: [
+                  {
+                    role: 'system',
+                    content: 'You are an AI assistant that extracts assignment titles from user messages. Always respond with just the title, nothing else.'
+                  },
+                  {
+                    role: 'user',
+                    content: aiExtractionPrompt
+                  }
+                ],
+                max_tokens: 50,
+                temperature: 0.1
+              },
+              userToken,
+              req
+            );
+
+            if (aiResponse && aiResponse.choices && aiResponse.choices[0] && aiResponse.choices[0].message) {
+              const extractedTitle = aiResponse.choices[0].message.content.trim();
+              if (extractedTitle && extractedTitle.length > 0 && extractedTitle.length < 200) {
+                newParameters.title = extractedTitle;
+                parametersFound = true;
+                titleExtracted = true;
+              }
+            }
+          } catch (error) {
+            console.error('Error in AI title extraction:', error);
+          }
+        }
+
+        // If still no title extracted, check if they just said the title directly
         if (!titleExtracted) {
           // Only treat as direct title if it's a short, reasonable title and doesn't contain common words
           const commonWords = ['assignment', 'create', 'make', 'should', 'be', 'the', 'title', 'for', 'in', 'class', 'course'];
