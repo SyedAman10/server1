@@ -612,11 +612,20 @@ function detectIntentFallback(message, conversationId) {
     lowerMessage.includes('check') && lowerMessage.includes('assignment') ||
     lowerMessage.includes('assignment submissions') ||
     lowerMessage.includes('who submitted') ||
-    lowerMessage.includes('submissions for')
+    lowerMessage.includes('submissions for') ||
+    lowerMessage.includes('submission status') ||
+    lowerMessage.includes('today\'s assignment') ||
+    lowerMessage.includes('todays assignment')
   ) {
     // Try to extract assignment title and course name
     let assignmentTitle = '';
     let courseName = '';
+    let isTodaysAssignment = false;
+    
+    // Check if user is asking for today's assignment
+    if (lowerMessage.includes('today\'s assignment') || lowerMessage.includes('todays assignment')) {
+      isTodaysAssignment = true;
+    }
     
     // e.g. "who has submitted assignment test 2 in sql"
     const assignmentMatch = message.match(/assignment\s+([\w\s-]+)/i);
@@ -635,7 +644,8 @@ function detectIntentFallback(message, conversationId) {
       confidence: 0.8,
       parameters: {
         ...(courseName ? { courseName } : {}),
-        ...(assignmentTitle ? { assignmentTitle } : {})
+        ...(assignmentTitle ? { assignmentTitle } : {}),
+        ...(isTodaysAssignment ? { isTodaysAssignment: true } : {})
       }
     };
   }

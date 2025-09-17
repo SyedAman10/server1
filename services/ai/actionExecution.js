@@ -2673,12 +2673,22 @@ async function executeAction(intentData, originalMessage, userToken, req) {
               assignmentData
             );
 
+            // ✅ COMPLETE ACTION: Mark the ongoing action as completed
+            if (conversationId) {
+              completeOngoingAction(conversationId);
+            }
+
             return {
-              message: `🎉 **Assignment "${parameters.title}" created successfully in ${selectedCourse.name}!**\n\n📝 **Assignment Details:**\n• Title: ${parameters.title}${parameters.description ? `\n• Description: ${parameters.description}` : ''}${parameters.dueDate ? `\n• Due Date: ${parameters.dueDate.year}-${parameters.dueDate.month}-${parameters.dueDate.day}` : ''}${parameters.dueTime ? `\n• Due Time: ${parameters.dueTime.hours}:${parameters.dueTime.minutes.toString().padStart(2, '0')}` : ''}${parameters.maxPoints ? `\n• Max Points: ${parameters.maxPoints}` : ''}\n\n✅ Your assignment is now live in Google Classroom and students can start working on it.\n\n💡 **Next steps:**\n• Review student submissions\n• Grade completed assignments\n• Provide feedback to students`,
+              message: `Great! I've successfully created your assignment "${parameters.title}" in ${selectedCourse.name}. 😊\n\nAssignment Details:\n• Title: ${parameters.title}${parameters.description ? `\n• Description: ${parameters.description}` : ''}${parameters.dueDate ? `\n• Due Date: ${parameters.dueDate.year}-${parameters.dueDate.month}-${parameters.dueDate.day}` : ''}${parameters.dueTime ? `\n• Due Time: ${parameters.dueTime.hours}:${parameters.dueTime.minutes.toString().padStart(2, '0')}` : ''}${parameters.maxPoints ? `\n• Max Points: ${parameters.maxPoints}` : ''}\n\nYour assignment is now live in Google Classroom and students can start working on it.\n\nNext steps:\n• Review student submissions\n• Grade completed assignments\n• Provide feedback to students`,
               assignment: response,
               conversationId: req.body.conversationId || generateConversationId()
             };
           } catch (error) {
+            // ✅ COMPLETE ACTION: Mark the ongoing action as completed even on error
+            if (conversationId) {
+              completeOngoingAction(conversationId);
+            }
+            
             // Handle specific error cases
             if (error.message.includes('Due date must be in the future')) {
               return {
@@ -2702,6 +2712,11 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             throw error; // Re-throw other errors
           }
         } catch (error) {
+          // ✅ COMPLETE ACTION: Mark the ongoing action as completed even on error
+          if (conversationId) {
+            completeOngoingAction(conversationId);
+          }
+          
           console.error('Error in CREATE_ASSIGNMENT:', error);
           return {
             message: "Sorry, I encountered an error while trying to create the assignment. Please try again.",
@@ -3480,7 +3495,12 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             conversationId: req.body.conversationId
           };
         }
-        if (!parameters.assignmentTitle) {
+        
+        // Handle "today's assignment" case
+        if (parameters.isTodaysAssignment && !parameters.assignmentTitle) {
+          // We'll find assignments due today instead of requiring a specific title
+          console.log('🔍 DEBUG: Looking for today\'s assignments');
+        } else if (!parameters.assignmentTitle) {
           return {
             message: "Please specify the assignment title to check submissions.",
             conversationId: req.body.conversationId
@@ -3536,20 +3556,62 @@ async function executeAction(intentData, originalMessage, userToken, req) {
               conversationId: req.body.conversationId
             };
           }
-          const assignmentTitleTerm = parameters.assignmentTitle.toLowerCase();
-          const matchingAssignments = assignments.filter(a => a.title && a.title.toLowerCase().includes(assignmentTitleTerm));
-          if (matchingAssignments.length === 0) {
-            return {
-              message: `I couldn't find any assignments matching "${parameters.assignmentTitle}" in ${selectedCourse.name}.`,
-              conversationId: req.body.conversationId
-            };
-          } else if (matchingAssignments.length > 1) {
-            return {
-              message: `I found multiple assignments matching "${parameters.assignmentTitle}". Which one do you mean?`,
-              options: matchingAssignments.map(a => ({ id: a.id, title: a.title })),
-              conversationId: req.body.conversationId
-            };
+          let matchingAssignments = [];
+          
+          if (parameters.isTodaysAssignment) {
+            // Find assignments due today
+            const today = new Date();
+            const todayStr = today.toISOString().split('T')[0]; // YYYY-MM-DD format
+            
+            console.log('🔍 DEBUG: Looking for assignments due today:', todayStr);
+            
+            matchingAssignments = assignments.filter(a => {
+              if (!a.dueDate) return false;
+              
+              // Parse the due date (assuming it's in YYYY-MM-DD format or similar)
+              const dueDate = new Date(a.dueDate);
+              const dueDateStr = dueDate.toISOString().split('T')[0];
+              
+              console.log('🔍 DEBUG: Assignment due date:', a.title, dueDateStr, 'matches today:', dueDateStr === todayStr);
+              
+              return dueDateStr === todayStr;
+            });
+            
+            if (matchingAssignments.length === 0) {
+              return {
+                message: `I couldn't find any assignments due today in ${selectedCourse.name}.`,
+                conversationId: req.body.conversationId
+              };
+            } else if (matchingAssignments.length > 1) {
+              return {
+                message: `I found ${matchingAssignments.length} assignments due today in ${selectedCourse.name}. Which one would you like to check?`,
+                options: matchingAssignments.map(a => ({ 
+                  id: a.id, 
+                  title: a.title,
+                  dueDate: a.dueDate ? new Date(a.dueDate).toLocaleDateString() : 'No due date'
+                })),
+                conversationId: req.body.conversationId
+              };
+            }
+          } else {
+            // Find assignments by title (original logic)
+            const assignmentTitleTerm = parameters.assignmentTitle.toLowerCase();
+            matchingAssignments = assignments.filter(a => a.title && a.title.toLowerCase().includes(assignmentTitleTerm));
+            
+            if (matchingAssignments.length === 0) {
+              return {
+                message: `I couldn't find any assignments matching "${parameters.assignmentTitle}" in ${selectedCourse.name}.`,
+                conversationId: req.body.conversationId
+              };
+            } else if (matchingAssignments.length > 1) {
+              return {
+                message: `I found multiple assignments matching "${parameters.assignmentTitle}". Which one do you mean?`,
+                options: matchingAssignments.map(a => ({ id: a.id, title: a.title })),
+                conversationId: req.body.conversationId
+              };
+            }
           }
+          
           const assignmentId = matchingAssignments[0].id;
           // 3. Get submissions
           const submissions = await makeApiCall(`${baseUrl}/api/courses/${courseId}/assignments/${assignmentId}/submissions`, 'GET', null, userToken, req);
@@ -3603,7 +3665,12 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             }
           }
           
-          let message = `Submissions for "${matchingAssignments[0].title}" in ${selectedCourse.name}:\n`;
+          let message = '';
+          if (parameters.isTodaysAssignment) {
+            message = `Today's assignment submissions for "${matchingAssignments[0].title}" in ${selectedCourse.name}:\n`;
+          } else {
+            message = `Submissions for "${matchingAssignments[0].title}" in ${selectedCourse.name}:\n`;
+          }
           message += `\nSubmitted (${turnedIn.length}):\n`;
           
           if (turnedIn.length > 0) {
