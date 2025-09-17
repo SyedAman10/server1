@@ -866,7 +866,7 @@ async function detectIntent(message, conversationHistory, conversationId) {
       - UPDATE_COURSE: User wants to update a course (extract courseId and details)
       - DELETE_COURSE: User wants to delete a course (extract courseId)
       - ARCHIVE_COURSE: User wants to archive a course (extract courseId)
-      - INVITE_STUDENTS: User wants to invite students to a course (extract courseId and student emails)
+      - INVITE_STUDENTS: User wants to invite students to a course (extract courseId and student emails) - ONLY if the course name is specific (not generic terms like "my class", "the class", "this class")
       - CREATE_ANNOUNCEMENT: User wants to create an announcement in a course (extract courseId and announcement text)
       - GET_ANNOUNCEMENTS: User wants to view/list announcements for a course (extract courseId/courseName)
       - CREATE_ASSIGNMENT: User wants to create an assignment in a course (extract courseId, title, description, due date, and materials)
@@ -882,7 +882,7 @@ async function detectIntent(message, conversationHistory, conversationId) {
       - SEND_EMAIL: User wants to send an email to someone (extract recipientEmail, subject, message, attachments if specified)
       - CANCEL_ACTION: User wants to cancel, stop, or abort an ongoing action (e.g., user says "cancel", "stop", "never mind", "forget it", "that's all", "done", "quit", "exit", "abort")
       - PROCEED_WITH_AVAILABLE_INFO: User wants to skip providing more information and proceed with available data (e.g., user says "no", "skip", "that's all", "proceed", etc.)
-      - STUDENT_JOIN_SUGGESTION: User is asking about joining a class, inviting students, or how students can join (provide helpful suggestions and prompts)
+      - STUDENT_JOIN_SUGGESTION: User is asking about joining a class, inviting students, or how students can join (provide helpful suggestions and prompts) - USE THIS for generic terms like "my class", "the class", "this class", "class", "course"
       - GREETING: User is saying hello, hi, hey, good morning/afternoon/evening, how are you, what's up, thanks, or engaging in casual conversation (no action needed)
         Examples: "hi", "hello", "hey there", "good morning", "how are you doing?", "thanks", "thank you"
       - HELP: User needs help or instructions
@@ -969,6 +969,13 @@ async function detectIntent(message, conversationHistory, conversationId) {
       1. Extract the name or identifying phrase they used
       2. Include it in the parameters as "courseName" or "courseIdentifier"
       3. Set a flag "needsDisambiguation": true if you think the system will need to ask the user which specific course they mean
+      
+      IMPORTANT: For generic terms like "my class", "the class", "this class", "class", "course", use STUDENT_JOIN_SUGGESTION intent instead of INVITE_STUDENTS.
+      Examples:
+      - "add a student to my class" → STUDENT_JOIN_SUGGESTION (not INVITE_STUDENTS)
+      - "invite student to the class" → STUDENT_JOIN_SUGGESTION (not INVITE_STUDENTS)
+      - "add student to this class" → STUDENT_JOIN_SUGGESTION (not INVITE_STUDENTS)
+      - "invite student john@email.com to Computer Science" → INVITE_STUDENTS (specific course name)
       
       Respond in JSON format only with the following structure:
       {
