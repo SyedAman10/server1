@@ -1060,11 +1060,19 @@ Extracted title:`;
       
       // Handle assignment selection when multiple assignments are found
       if (missingParameters.includes('assignmentSelection')) {
+        console.log('🔍 DEBUG: Processing assignmentSelection parameter');
+        console.log('🔍 DEBUG: Original message:', originalMessage);
+        console.log('🔍 DEBUG: Available assignments:', collectedParameters.availableAssignments);
+        
         const selection = originalMessage.trim().toLowerCase();
         const availableAssignments = collectedParameters.availableAssignments || [];
         
+        console.log('🔍 DEBUG: Selection:', selection);
+        console.log('🔍 DEBUG: Available assignments count:', availableAssignments.length);
+        
         if (selection === 'all') {
           // User wants to check all assignments
+          console.log('🔍 DEBUG: User selected "all"');
           newParameters.selectedAssignments = availableAssignments;
           newParameters.assignmentTitle = 'all assignments created today';
           parametersFound = true;
@@ -1076,21 +1084,26 @@ Extracted title:`;
           const numberMatch = selection.match(/^(\d+)$/);
           if (numberMatch) {
             const index = parseInt(numberMatch[1]) - 1;
+            console.log('🔍 DEBUG: Number match, index:', index);
             if (index >= 0 && index < availableAssignments.length) {
               selectedAssignment = availableAssignments[index];
+              console.log('🔍 DEBUG: Selected assignment by number:', selectedAssignment.title);
             }
           } else {
             // Try to match by title
             selectedAssignment = availableAssignments.find(a => 
               a.title.toLowerCase().includes(selection)
             );
+            console.log('🔍 DEBUG: Title match result:', selectedAssignment ? selectedAssignment.title : 'No match');
           }
           
           if (selectedAssignment) {
             newParameters.selectedAssignments = [selectedAssignment];
             newParameters.assignmentTitle = selectedAssignment.title;
             parametersFound = true;
+            console.log('🔍 DEBUG: Assignment selection successful');
           } else {
+            console.log('🔍 DEBUG: No assignment found for selection:', selection);
             return {
               action: 'CHECK_ASSIGNMENT_SUBMISSIONS',
               missingParameters: ['assignmentSelection'],
@@ -1577,9 +1590,11 @@ async function executeAction(intentData, originalMessage, userToken, req) {
     if (context) {
       console.log('🔍 DEBUG: Found ongoing action, forcing parameter collection');
       console.log('🔍 DEBUG: Ongoing action context:', context);
+      console.log('🔍 DEBUG: Missing parameters:', context.missingParameters);
+      console.log('🔍 DEBUG: Collected parameters:', context.collectedParameters);
       
       // Check if this message provides parameters for the ongoing action
-      const parameterCollection = await handleParameterCollection(intent, parameters, conversationId, originalMessage, userToken, req, baseUrl);
+      const parameterCollection = await handleParameterCollection(context.action, context.collectedParameters, conversationId, originalMessage, userToken, req, baseUrl);
       console.log('🔍 Parameter collection result:', parameterCollection);
       
       if (parameterCollection) {
