@@ -867,7 +867,7 @@ async function detectIntent(message, conversationHistory, conversationId) {
       - DELETE_COURSE: User wants to delete a course (extract courseId)
       - ARCHIVE_COURSE: User wants to archive a course (extract courseId)
       - INVITE_STUDENTS: User wants to invite students to a course (extract courseId and student emails) - ONLY if the course name is specific (not generic terms like "my class", "the class", "this class")
-      - CREATE_ANNOUNCEMENT: User wants to create an announcement in a course (extract courseId and announcement text)
+      - CREATE_ANNOUNCEMENT: User wants to create an announcement in a course (extract courseId and announcement text) - ONLY if there is actual announcement content, not just the command
       - GET_ANNOUNCEMENTS: User wants to view/list announcements for a course (extract courseId/courseName)
       - CREATE_ASSIGNMENT: User wants to create an assignment in a course (extract courseId, title, description, due date, and materials)
       - CHECK_ASSIGNMENT_SUBMISSIONS: User wants to check who has submitted an assignment (extract courseName and assignmentTitle)
@@ -982,6 +982,12 @@ async function detectIntent(message, conversationHistory, conversationId) {
       - "create assignment in my class Computer Science" → courseName: "Computer Science" (not "my class Computer Science")
       - "show students in the class Math 101" → courseName: "Math 101" (not "the class Math 101")
       - "announcement for this class Physics" → courseName: "Physics" (not "this class Physics")
+      
+      For announcement content extraction, distinguish between commands and actual content:
+      - "post announcement to my class ai" → CREATE_ANNOUNCEMENT with courseName: "ai", announcementText: null (no content provided)
+      - "post 'Homework is due tomorrow' to my class ai" → CREATE_ANNOUNCEMENT with courseName: "ai", announcementText: "Homework is due tomorrow"
+      - "announce 'Class cancelled today' in Computer Science" → CREATE_ANNOUNCEMENT with courseName: "Computer Science", announcementText: "Class cancelled today"
+      - "create announcement for Math 101" → CREATE_ANNOUNCEMENT with courseName: "Math 101", announcementText: null (no content provided)
       
       Respond in JSON format only with the following structure:
       {
