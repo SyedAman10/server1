@@ -2512,7 +2512,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
         );
         
         return {
-          message: `🎓 **Student Joining & Invitation Help**${specificHelp}\n\nI can help you with student invitations and joining! Here are your options:\n\n**📧 To Invite Students:**\n• Say: "invite student [email] to class [course name]"\n• Example: "invite student aman@erptechnicals.com to class ai"\n\n**🔗 For Students to Join:**\n• Share the enrollment code with students\n• Students can join using the course link\n• Or they can search for the course code in Google Classroom\n\n**💡 Quick Actions:**\n• "invite student [email] to class [name]" - Send invitation\n• "show students in [class]" - See enrolled students\n• "list courses" - See all your courses\n\n**Need help with a specific course?** Just tell me the course name and I'll help you invite students!`,
+          message: `I'd be happy to help you with student invitations! 😊\n\nInstead of sharing join links, it's better to invite students directly by adding their email addresses. This way, they'll receive a proper invitation and can join your class easily.\n\n**Here's how to invite a student:**\nJust say: "invite student [email] to class [course name]"\n\n**For example:**\n"invite student john@gmail.com to class AI"${specificHelp}\n\nWould you like me to help you invite a specific student? Just tell me their email and which class they should join!`,
           conversationId: req.body.conversationId,
           suggestions: suggestions,
           extractedData: {
