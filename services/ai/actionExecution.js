@@ -2497,11 +2497,11 @@ async function executeAction(intentData, originalMessage, userToken, req) {
         if (emails.length > 0) {
           // We found email but no course
           suggestions.push(`invite student ${emails[0]} to class [course name]`);
-          specificHelp = `\n**📧 I found a student email: ${emails[0]}**\nJust tell me which class to invite them to!`;
+          specificHelp = `\n\nI found a student email: ${emails[0]}\nJust tell me which class to invite them to!`;
         } else if (extractedCourse) {
           // We found course but no email
           suggestions.push(`invite student [email] to class ${extractedCourse}`);
-          specificHelp = `\n**🏫 I found a course: ${extractedCourse}**\nJust tell me which student to invite!`;
+          specificHelp = `\n\nI found a course: ${extractedCourse}\nJust tell me which student to invite!`;
         }
         
         // Add general suggestions
@@ -2512,7 +2512,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
         );
         
         return {
-          message: `I'd be happy to help you with student invitations! 😊\n\nInstead of sharing join links, it's better to invite students directly by adding their email addresses. This way, they'll receive a proper invitation and can join your class easily.\n\n**Here's how to invite a student:**\nJust say: "invite student [email] to class [course name]"\n\n**For example:**\n"invite student john@gmail.com to class AI"${specificHelp}\n\nWould you like me to help you invite a specific student? Just tell me their email and which class they should join!`,
+          message: `I'd be happy to help you with student invitations! 😊\n\nInstead of sharing join links, it's better to invite students directly by adding their email addresses. This way, they'll receive a proper invitation and can join your class easily.\n\nHere's how to invite a student:\nJust say: "invite student [email] to class [course name]"\n\nFor example:\n"invite student john@gmail.com to class AI"${specificHelp}\n\nWould you like me to help you invite a specific student? Just tell me their email and which class they should join!`,
           conversationId: req.body.conversationId,
           suggestions: suggestions,
           extractedData: {
