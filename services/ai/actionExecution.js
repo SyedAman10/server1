@@ -1043,6 +1043,21 @@ Extracted title:`;
         }
       }
       
+      // Handle assignment title collection for submission status check
+      if (missingParameters.includes('assignmentTitle')) {
+        const assignmentTitle = originalMessage.trim();
+        
+        // For "today's assignment", we don't need a specific title
+        if (collectedParameters.isTodaysAssignment) {
+          newParameters.assignmentTitle = 'today\'s assignment';
+          parametersFound = true;
+        } else {
+          // User provided a specific assignment title
+          newParameters.assignmentTitle = assignmentTitle;
+          parametersFound = true;
+        }
+      }
+      
       console.log('🔍 DEBUG: CHECK_ASSIGNMENT_SUBMISSIONS parameter collection result:', {
         parametersFound,
         newParameters,
@@ -3586,27 +3601,121 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           };
         }
 
-        // 1. Find the course by name
-        if (!parameters.courseName) {
-          return {
-            message: "Please specify the course name to check assignment submissions.",
-            conversationId: req.body.conversationId
-          };
+        // Check what parameters are missing and start tracking if needed
+        const missingParams = [];
+        if (!parameters.courseName && !parameters.courseIdentifier) {
+          missingParams.push('courseName');
         }
-        
-        // Handle "today's assignment" case
-        if (parameters.isTodaysAssignment && !parameters.assignmentTitle) {
-          // We'll find assignments due today instead of requiring a specific title
-          console.log('🔍 DEBUG: Looking for today\'s assignments');
-        } else if (!parameters.assignmentTitle) {
-          return {
-            message: "Please specify the assignment title to check submissions.",
-            conversationId: req.body.conversationId
-          };
+        if (!parameters.isTodaysAssignment && !parameters.assignmentTitle) {
+          missingParams.push('assignmentTitle');
+        }
+
+        if (missingParams.length > 0) {
+          // If course name is missing, ask for it first and validate it
+          if (missingParams.includes('courseName')) {
+            // 🚀 START TRACKING: Start tracking this action for parameter collection
+            startOngoingAction(conversationId, 'CHECK_ASSIGNMENT_SUBMISSIONS', ['courseName'], parameters);
+            
+            return {
+              message: "I need to know which course you want to check submission status for. Please provide a course name.",
+              conversationId: conversationId,
+              ongoingAction: {
+                action: 'CHECK_ASSIGNMENT_SUBMISSIONS',
+                missingParameters: ['courseName'],
+                collectedParameters: parameters
+              }
+            };
+          } else if (missingParams.includes('assignmentTitle')) {
+            // Course name is provided, but assignment title is missing
+            try {
+              // Validate the course name first before asking for assignment title
+              const courseMatch = await findMatchingCourse(
+                parameters.courseName || parameters.courseIdentifier,
+                userToken,
+                req,
+                baseUrl
+              );
+              
+              if (!courseMatch.success) {
+                startOngoingAction(conversationId, 'CHECK_ASSIGNMENT_SUBMISSIONS', ['courseName'], {});
+                return {
+                  message: courseMatch.message,
+                  conversationId: conversationId,
+                  ongoingAction: {
+                    action: 'CHECK_ASSIGNMENT_SUBMISSIONS',
+                    missingParameters: ['courseName'],
+                    collectedParameters: {}
+                  }
+                };
+              }
+              
+              // Handle multiple course matches
+              if (courseMatch.allMatches && courseMatch.allMatches.length > 1 && !courseMatch.isExactMatch) {
+                const courseOptions = courseMatch.allMatches.map(course => `• ${course.name}${course.section ? ` (${course.section})` : ''}`).join('\n');
+                startOngoingAction(conversationId, 'CHECK_ASSIGNMENT_SUBMISSIONS', ['courseName'], {});
+                return {
+                  message: `I found multiple courses matching "${parameters.courseName}". Which one do you mean?\n\n${courseOptions}`,
+                  conversationId: conversationId,
+                  ongoingAction: {
+                    action: 'CHECK_ASSIGNMENT_SUBMISSIONS',
+                    missingParameters: ['courseName'],
+                    collectedParameters: {}
+                  }
+                };
+              }
+              
+              // Course found and validated - ask for assignment title
+              startOngoingAction(conversationId, 'CHECK_ASSIGNMENT_SUBMISSIONS', ['assignmentTitle'], { 
+                courseName: courseMatch.course.name,
+                isTodaysAssignment: parameters.isTodaysAssignment
+              });
+              
+              if (parameters.isTodaysAssignment) {
+                return {
+                  message: `Great! I found the course "${courseMatch.course.name}". Now I'll look for assignments due today.`,
+                  conversationId: conversationId,
+                  ongoingAction: {
+                    action: 'CHECK_ASSIGNMENT_SUBMISSIONS',
+                    missingParameters: ['assignmentTitle'],
+                    collectedParameters: { 
+                      courseName: courseMatch.course.name,
+                      isTodaysAssignment: true
+                    }
+                  }
+                };
+              } else {
+                return {
+                  message: `Great! I found the course "${courseMatch.course.name}". Which assignment would you like to check submission status for?`,
+                  conversationId: conversationId,
+                  ongoingAction: {
+                    action: 'CHECK_ASSIGNMENT_SUBMISSIONS',
+                    missingParameters: ['assignmentTitle'],
+                    collectedParameters: { 
+                      courseName: courseMatch.course.name,
+                      isTodaysAssignment: false
+                    }
+                  }
+                };
+              }
+            } catch (error) {
+              console.error('Error validating course for submission status:', error);
+              startOngoingAction(conversationId, 'CHECK_ASSIGNMENT_SUBMISSIONS', ['courseName'], {});
+              return {
+                message: "I encountered an error while looking up the course. Please try again.",
+                conversationId: conversationId,
+                ongoingAction: {
+                  action: 'CHECK_ASSIGNMENT_SUBMISSIONS',
+                  missingParameters: ['courseName'],
+                  collectedParameters: {}
+                }
+              };
+            }
+          }
         }
         
         try {
-          // Use the reusable course matching function
+          // At this point, all parameters should be collected and validated
+          // Find the course (should already be validated above)
           const courseMatch = await findMatchingCourse(
             parameters.courseName, 
             userToken, 
@@ -3615,44 +3724,10 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           );
           
           if (!courseMatch.success) {
-            // Start ongoing action to maintain context for course name correction
-            if (conversationId) {
-              startOngoingAction(conversationId, 'CHECK_ASSIGNMENT_SUBMISSIONS', ['courseName'], {
-                isTodaysAssignment: parameters.isTodaysAssignment,
-                assignmentTitle: parameters.assignmentTitle
-              });
-            }
-            return {
-              message: courseMatch.message,
-              conversationId: req.body.conversationId,
-              ongoingAction: {
-                action: 'CHECK_ASSIGNMENT_SUBMISSIONS',
-                missingParameters: ['courseName'],
-                collectedParameters: {
-                  isTodaysAssignment: parameters.isTodaysAssignment,
-                  assignmentTitle: parameters.assignmentTitle
-                }
-              }
-            };
+            throw new Error(`Course not found: ${courseMatch.message}`);
           }
           
           const selectedCourse = courseMatch.course;
-          
-          if (courseMatch.allMatches && courseMatch.allMatches.length > 1 && !courseMatch.isExactMatch) {
-            // Multiple matches - ask for clarification
-            return {
-              message: `I found multiple courses matching "${parameters.courseName}". Which one do you mean?`,
-              options: courseMatch.allMatches.map(course => ({
-                id: course.id,
-                name: course.name,
-                section: course.section || "No section"
-              })),
-              assignmentTitle: parameters.assignmentTitle,
-              conversationId: req.body.conversationId
-            };
-          }
-          
-          // Exact match - proceed with assignment search
           const courseId = selectedCourse.id;
           // 2. Find the assignment by title
           const assignmentsResponse = await makeApiCall(`${baseUrl}/api/courses/${courseId}/assignments`, 'GET', null, userToken, req);
