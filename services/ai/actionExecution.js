@@ -1823,20 +1823,74 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           };
         }
 
-        // Start AI-assisted announcement creation process
-        if (conversationId) {
-          startOngoingAction(conversationId, 'AI_ASSISTED_ANNOUNCEMENT', ['courseName'], {});
-        }
-        
-        return {
-          message: `I'd be happy to help you create an announcement! 😊\n\nLet me guide you through this step by step:\n\n1. First, which course would you like to post the announcement in?\n2. Then I'll help you craft the perfect announcement\n3. Finally, I'll show you a preview before posting\n\nWhich course should we start with?`,
-          conversationId: conversationId,
-          ongoingAction: {
-            action: 'AI_ASSISTED_ANNOUNCEMENT',
-            missingParameters: ['courseName'],
-            collectedParameters: {}
+        // Check if course name is already provided
+        if (parameters.courseName) {
+          // Validate the course name first
+          try {
+            const courseMatch = await findMatchingCourse(
+              parameters.courseName, 
+              userToken, 
+              req, 
+              baseUrl
+            );
+            
+            if (!courseMatch.success) {
+              return {
+                message: `I couldn't find any courses matching "${parameters.courseName}". Could you please check the course name and try again? You can also say "list courses" to see all available courses.`,
+                conversationId: conversationId
+              };
+            }
+            
+            if (courseMatch.allMatches && courseMatch.allMatches.length > 1 && !courseMatch.isExactMatch) {
+              // Multiple matches - ask for clarification
+              return {
+                message: `I found multiple courses matching "${parameters.courseName}". Which one would you like to create an announcement for?`,
+                options: courseMatch.allMatches.map(course => ({
+                  id: course.id,
+                  name: course.name,
+                  section: course.section || "No section"
+                })),
+                conversationId: conversationId
+              };
+            }
+            
+            // Course found and validated, now ask for announcement content
+            if (conversationId) {
+              startOngoingAction(conversationId, 'AI_ASSISTED_ANNOUNCEMENT', ['announcementText'], { courseName: parameters.courseName });
+            }
+            
+            return {
+              message: `Great! I found your course "${parameters.courseName}". What would you like to announce to your students?`,
+              conversationId: conversationId,
+              ongoingAction: {
+                action: 'AI_ASSISTED_ANNOUNCEMENT',
+                missingParameters: ['announcementText'],
+                collectedParameters: { courseName: parameters.courseName }
+              }
+            };
+          } catch (error) {
+            console.error('Error validating course name:', error);
+            return {
+              message: `I encountered an error while looking for the course. Could you please try again?`,
+              conversationId: conversationId
+            };
           }
-        };
+        } else {
+          // No course name provided, start from the beginning
+          if (conversationId) {
+            startOngoingAction(conversationId, 'AI_ASSISTED_ANNOUNCEMENT', ['courseName'], {});
+          }
+          
+          return {
+            message: `I'd be happy to help you create an announcement! 😊\n\nLet me guide you through this step by step:\n\n1. First, which course would you like to post the announcement in?\n2. Then I'll help you craft the perfect announcement\n3. Finally, I'll show you a preview before posting\n\nWhich course should we start with?`,
+            conversationId: conversationId,
+            ongoingAction: {
+              action: 'AI_ASSISTED_ANNOUNCEMENT',
+              missingParameters: ['courseName'],
+              collectedParameters: {}
+            }
+          };
+        }
       }
 
       case 'CREATE_ANNOUNCEMENT': {

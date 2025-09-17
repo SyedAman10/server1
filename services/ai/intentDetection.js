@@ -467,6 +467,18 @@ function detectIntentFallback(message, conversationId) {
       };
     }
 
+    // If no announcement text provided, treat as AI-assisted announcement
+    if (!announcementText || announcementText.trim() === '') {
+      return {
+        intent: 'AI_ASSISTED_ANNOUNCEMENT',
+        confidence: 0.8,
+        parameters: {
+          courseName: courseName.replace(/course$/i, '').trim(), // Remove trailing "course" word
+          announcementText: null
+        }
+      };
+    }
+
     return {
       intent: 'CREATE_ANNOUNCEMENT',
       confidence: 0.7,
