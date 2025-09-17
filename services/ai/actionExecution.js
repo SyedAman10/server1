@@ -10,7 +10,8 @@ const {
   getOngoingActionContext, 
   completeOngoingAction, 
   isNewActionAttempt, 
-  getContextAwareMessage 
+  getContextAwareMessage,
+  getConversation
 } = require('./conversationManager');
 const { createAssignment, listAssignments } = require('../assignmentService');
 const { createMeeting, findMeetingByDateTime, updateMeeting, deleteMeeting, listUpcomingMeetings } = require('../meetingService');
@@ -1126,6 +1127,18 @@ Extracted title:`;
   if (parametersFound) {
     // Update the ongoing action with new parameters
     updateOngoingActionParameters(conversationId, newParameters);
+    
+    // Special handling for assignmentSelection - once processed, remove it from required parameters
+    if (newParameters.selectedAssignments && newParameters.assignmentTitle) {
+      // Remove assignmentSelection from required parameters since we've processed it
+      const conversation = getConversation(conversationId);
+      if (conversation && conversation.context.ongoingAction === 'CHECK_ASSIGNMENT_SUBMISSIONS') {
+        conversation.context.requiredParameters = conversation.context.requiredParameters.filter(
+          param => param !== 'assignmentSelection'
+        );
+        console.log('🔍 Removed assignmentSelection from required parameters');
+      }
+    }
     
     // Check if the action is now complete
     if (isActionComplete(conversationId)) {
