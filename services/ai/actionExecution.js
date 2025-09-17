@@ -1737,6 +1737,16 @@ async function executeAction(intentData, originalMessage, userToken, req) {
     }
 
     switch (intent) {
+      case 'PARAMETER_COLLECTION': {
+        // This is a dummy intent used when there's an ongoing action
+        // The actual parameter collection is handled above in the ongoing action check
+        // This case should never be reached, but adding it for safety
+        return {
+          message: "I'm still working on something else. Please provide the information I asked for.",
+          conversationId: conversationId
+        };
+      }
+      
       case 'CANCEL_ACTION': {
         // Handle user wanting to cancel or stop an ongoing action
         if (conversationId) {

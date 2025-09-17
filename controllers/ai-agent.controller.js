@@ -468,8 +468,23 @@ async function handleMessage(req, res) {
     // Get conversation history
     const history = getFormattedHistory(conversation.id);
 
-    // Detect intent
-    const intentData = await detectIntent(message, history);
+    // Check if there's an ongoing action first
+    const { getOngoingActionContext } = require('../services/ai/conversationManager');
+    const ongoingAction = getOngoingActionContext(conversation.id);
+    
+    let intentData;
+    if (ongoingAction) {
+      // If there's an ongoing action, create a dummy intent for parameter collection
+      console.log('🔍 DEBUG: Ongoing action detected, skipping intent detection');
+      intentData = {
+        intent: 'PARAMETER_COLLECTION',
+        confidence: 1.0,
+        parameters: {}
+      };
+    } else {
+      // Detect intent only if no ongoing action
+      intentData = await detectIntent(message, history);
+    }
 
     // Execute action based on intent
     const result = await executeAction(intentData, message, userToken, req);
