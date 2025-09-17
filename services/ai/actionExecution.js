@@ -2478,8 +2478,34 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           }
         }
         
+        // Check if this needs disambiguation (generic terms like "my class")
+        const needsDisambiguation = parameters.needsDisambiguation || false;
+        const genericTerms = ['my class', 'my course', 'the class', 'the course', 'this class', 'this course', 'class', 'course'];
+        const isGenericTerm = genericTerms.some(term => 
+          extractedCourse.toLowerCase().includes(term.toLowerCase()) || 
+          extractedCourse.toLowerCase() === term.toLowerCase()
+        );
+        
+        // If this is a generic term or needs disambiguation, ask for specific course
+        if (needsDisambiguation || isGenericTerm) {
+          return {
+            message: `I'd be happy to help you invite students! 😊\n\nI need to know which specific course you're referring to. Could you please tell me the name of the class? For example: "Computer Science", "Math 101", or "AI".\n\nOnce you tell me the course name, I can help you invite students to it!`,
+            conversationId: req.body.conversationId,
+            suggestions: [
+              "invite student [email] to class [course name]",
+              "list courses",
+              "show students in [course name]"
+            ],
+            extractedData: {
+              emails: emails,
+              courseName: extractedCourse,
+              needsDisambiguation: true
+            }
+          };
+        }
+        
         // Check if this should be treated as a direct invitation
-        if (emails.length > 0 && extractedCourse) {
+        if (emails.length > 0 && extractedCourse && !isGenericTerm) {
           // Redirect to INVITE_STUDENTS with the extracted parameters
           return await executeAction({
             ...req,
@@ -2498,7 +2524,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           // We found email but no course
           suggestions.push(`invite student ${emails[0]} to class [course name]`);
           specificHelp = `\n\nI found a student email: ${emails[0]}\nJust tell me which class to invite them to!`;
-        } else if (extractedCourse) {
+        } else if (extractedCourse && !isGenericTerm) {
           // We found course but no email
           suggestions.push(`invite student [email] to class ${extractedCourse}`);
           specificHelp = `\n\nI found a course: ${extractedCourse}\nJust tell me which student to invite!`;
