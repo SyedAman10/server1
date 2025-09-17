@@ -584,9 +584,54 @@ async function handleParameterCollection(intent, parameters, conversationId, ori
             };
           }
           
-          // Accept the course name if it's not generic
-          newParameters.courseName = courseName;
-          parametersFound = true;
+          // Validate the course name immediately
+          try {
+            const courseMatch = await findMatchingCourse(
+              courseName, 
+              userToken, 
+              req, 
+              baseUrl
+            );
+            
+            if (!courseMatch.success) {
+              return {
+                action: 'CREATE_ANNOUNCEMENT',
+                missingParameters: ['courseName'],
+                collectedParameters: collectedParameters,
+                nextMessage: `I couldn't find any courses matching "${courseName}". Could you please check the course name and try again? You can also say "list courses" to see all available courses.`,
+                actionComplete: false
+              };
+            }
+            
+            if (courseMatch.allMatches && courseMatch.allMatches.length > 1 && !courseMatch.isExactMatch) {
+              // Multiple matches - ask for clarification
+              return {
+                action: 'CREATE_ANNOUNCEMENT',
+                missingParameters: ['courseName'],
+                collectedParameters: collectedParameters,
+                nextMessage: `I found multiple courses matching "${courseName}". Which one would you like to create an announcement for?`,
+                options: courseMatch.allMatches.map(course => ({
+                  id: course.id,
+                  name: course.name,
+                  section: course.section || "No section"
+                })),
+                actionComplete: false
+              };
+            }
+            
+            // Course found and validated
+            newParameters.courseName = courseName;
+            parametersFound = true;
+          } catch (error) {
+            console.error('Error validating course name:', error);
+            return {
+              action: 'CREATE_ANNOUNCEMENT',
+              missingParameters: ['courseName'],
+              collectedParameters: collectedParameters,
+              nextMessage: `I encountered an error while looking for the course. Could you please try again?`,
+              actionComplete: false
+            };
+          }
         }
         // If we're waiting for announcement text, treat the user's response as announcement text
         else if (missingParameters.includes('announcementText')) {
