@@ -619,8 +619,8 @@ async function handleParameterCollection(intent, parameters, conversationId, ori
               };
             }
             
-            // Course found and validated
-            newParameters.courseName = courseName;
+            // Course found and validated - use the matched course name, not the user input
+            newParameters.courseName = courseMatch.course.name;
             parametersFound = true;
           } catch (error) {
             console.error('Error validating course name:', error);
