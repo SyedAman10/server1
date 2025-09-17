@@ -523,6 +523,35 @@ async function handleParameterCollection(intent, parameters, conversationId, ori
       }
       break;
       
+      case 'AI_ASSISTED_ANNOUNCEMENT':
+        // Handle AI-assisted announcement parameter collection
+        if (missingParameters.includes('courseName')) {
+          // User provided course name
+          newParameters.courseName = originalMessage.trim();
+          parametersFound = true;
+        } else if (missingParameters.includes('announcementText')) {
+          // User provided announcement text
+          newParameters.announcementText = originalMessage.trim();
+          parametersFound = true;
+        } else if (missingParameters.includes('confirmation')) {
+          // User confirmed the announcement
+          const message = originalMessage.toLowerCase().trim();
+          if (message.includes('yes') || message.includes('y') || message.includes('ok') || message.includes('sure') || message.includes('post')) {
+            newParameters.confirmed = true;
+            parametersFound = true;
+          } else if (message.includes('no') || message.includes('n') || message.includes('change') || message.includes('edit')) {
+            // User wants to change the announcement
+            return {
+              action: 'AI_ASSISTED_ANNOUNCEMENT',
+              missingParameters: ['announcementText'],
+              collectedParameters: { ...collectedParameters, courseName: collectedParameters.courseName },
+              nextMessage: "No problem! What would you like the announcement to say instead?",
+              actionComplete: false
+            };
+          }
+        }
+        break;
+
       case 'CREATE_ANNOUNCEMENT':
         // Check if this is a disambiguation request first
         if (collectedParameters.needsDisambiguation) {
@@ -1278,6 +1307,48 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             conversationId: conversationId
           };
         }
+
+        // Special handling for AI_ASSISTED_ANNOUNCEMENT flow
+        if (context.action === 'AI_ASSISTED_ANNOUNCEMENT') {
+          console.log('🔍 DEBUG: Handling AI_ASSISTED_ANNOUNCEMENT parameter collection');
+          
+          // Check if we have course name but need announcement text
+          if (context.collectedParameters.courseName && context.missingParameters.includes('announcementText')) {
+            // Generate AI-assisted announcement suggestions
+            const suggestions = [
+              "Welcome to class! Today we'll be covering [topic]. Please bring your [materials].",
+              "Reminder: [assignment] is due [date]. Don't forget to submit it on time!",
+              "Great work everyone! I'm proud of your progress in [subject].",
+              "Class update: [information]. Let me know if you have any questions.",
+              "Exciting news: [announcement]. Looking forward to sharing more details soon!"
+            ];
+            
+            const randomSuggestion = suggestions[Math.floor(Math.random() * suggestions.length)];
+            
+            return {
+              message: `Perfect! Now let's create your announcement for "${context.collectedParameters.courseName}".\n\nI can help you craft a professional announcement. Here's a suggestion:\n\n"${randomSuggestion}"\n\nWould you like to use this, modify it, or write your own?`,
+              conversationId: conversationId,
+              ongoingAction: {
+                action: 'AI_ASSISTED_ANNOUNCEMENT',
+                missingParameters: ['announcementText'],
+                collectedParameters: context.collectedParameters
+              }
+            };
+          }
+          
+          // Check if we have both course name and announcement text, need confirmation
+          if (context.collectedParameters.courseName && context.collectedParameters.announcementText && context.missingParameters.includes('confirmation')) {
+            return {
+              message: `Here's your announcement preview:\n\n**Course:** ${context.collectedParameters.courseName}\n**Announcement:** "${context.collectedParameters.announcementText}"\n\nDoes this look good? Say "yes" to post it, or "no" to make changes.`,
+              conversationId: conversationId,
+              ongoingAction: {
+                action: 'AI_ASSISTED_ANNOUNCEMENT',
+                missingParameters: ['confirmation'],
+                collectedParameters: context.collectedParameters
+              }
+            };
+          }
+        }
         
         // If it's not a new action attempt, check if the action is actually complete
         if (context.missingParameters && context.missingParameters.length === 0) {
@@ -1696,6 +1767,33 @@ async function executeAction(intentData, originalMessage, userToken, req) {
         }
       }
         
+      case 'AI_ASSISTED_ANNOUNCEMENT': {
+        console.log('🔍 DEBUG: AI_ASSISTED_ANNOUNCEMENT case - parameters:', parameters);
+        
+        // Only allow teachers and super_admin to create announcements
+        if (userRole !== 'teacher' && userRole !== 'super_admin') {
+          return {
+            message: 'You are not authorized to create announcements. Only teachers and super admins can create announcements.',
+            conversationId: req.body.conversationId
+          };
+        }
+
+        // Start AI-assisted announcement creation process
+        if (conversationId) {
+          startOngoingAction(conversationId, 'AI_ASSISTED_ANNOUNCEMENT', ['courseName'], {});
+        }
+        
+        return {
+          message: `I'd be happy to help you create an announcement! 😊\n\nLet me guide you through this step by step:\n\n1. First, which course would you like to post the announcement in?\n2. Then I'll help you craft the perfect announcement\n3. Finally, I'll show you a preview before posting\n\nWhich course should we start with?`,
+          conversationId: conversationId,
+          ongoingAction: {
+            action: 'AI_ASSISTED_ANNOUNCEMENT',
+            missingParameters: ['courseName'],
+            collectedParameters: {}
+          }
+        };
+      }
+
       case 'CREATE_ANNOUNCEMENT': {
         console.log('🔍 DEBUG: CREATE_ANNOUNCEMENT case - parameters:', parameters);
         console.log('🔍 DEBUG: needsDisambiguation flag:', parameters.needsDisambiguation);
@@ -1822,6 +1920,101 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           };
         } catch (error) {
           console.error('Error in CREATE_ANNOUNCEMENT:', error);
+          
+          // ✅ COMPLETE ACTION: Mark the ongoing action as completed even on error
+          if (conversationId) {
+            completeOngoingAction(conversationId);
+          }
+          
+          return {
+            message: "I'm sorry, but I couldn't create the announcement right now. Please try again in a moment.",
+            error: error.message,
+            conversationId: conversationId
+          };
+        }
+      }
+
+      case 'AI_ASSISTED_ANNOUNCEMENT': {
+        console.log('🔍 DEBUG: AI_ASSISTED_ANNOUNCEMENT execution - parameters:', parameters);
+        
+        // Only allow teachers and super_admin to create announcements
+        if (userRole !== 'teacher' && userRole !== 'super_admin') {
+          return {
+            message: 'You are not authorized to create announcements. Only teachers and super admins can create announcements.',
+            conversationId: req.body.conversationId
+          };
+        }
+
+        // Check if we have all required parameters
+        if (!parameters.courseName || !parameters.announcementText || !parameters.confirmed) {
+          return {
+            message: 'I need more information to create the announcement. Please try again.',
+            conversationId: conversationId
+          };
+        }
+
+        try {
+          // Use the reusable course matching function
+          const courseMatch = await findMatchingCourse(
+            parameters.courseName, 
+            userToken, 
+            req, 
+            baseUrl
+          );
+          
+          if (!courseMatch.success) {
+            return {
+              message: courseMatch.message,
+              conversationId: req.body.conversationId
+            };
+          }
+          
+          const selectedCourse = courseMatch.course;
+          
+          if (courseMatch.allMatches && courseMatch.allMatches.length > 1 && !courseMatch.isExactMatch) {
+            // Multiple matches - ask for clarification
+            return {
+              message: `I found multiple courses matching "${parameters.courseName}". Which one would you like to create an announcement for?`,
+              options: courseMatch.allMatches.map(course => ({
+                id: course.id,
+                name: course.name,
+                section: course.section || "No section"
+              })),
+              conversationId: req.body.conversationId
+            };
+          }
+          
+          // Create the announcement using internal service
+          const response = await createAnnouncement(
+            selectedCourse.id,
+            {
+              text: parameters.announcementText,
+              materials: [],
+              state: 'PUBLISHED'
+            },
+            userToken,
+            req
+          );
+          
+          if (!response || response.error) {
+            return {
+              message: `Sorry, I couldn't create the announcement. ${response?.error || 'Please try again.'}`,
+              conversationId: req.body.conversationId
+            };
+          }
+          
+          // ✅ COMPLETE ACTION: Mark the ongoing action as completed
+          if (conversationId) {
+            completeOngoingAction(conversationId);
+          }
+
+          return {
+            message: `Perfect! I've posted your announcement "${parameters.announcementText}" in ${selectedCourse.name}. Your students will now see this announcement in their Google Classroom.`,
+            announcement: response.announcement,
+            conversationId: conversationId
+          };
+        } catch (error) {
+          console.error('Error in AI_ASSISTED_ANNOUNCEMENT:', error);
           
           // ✅ COMPLETE ACTION: Mark the ongoing action as completed even on error
           if (conversationId) {

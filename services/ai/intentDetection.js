@@ -868,6 +868,7 @@ async function detectIntent(message, conversationHistory, conversationId) {
       - ARCHIVE_COURSE: User wants to archive a course (extract courseId)
       - INVITE_STUDENTS: User wants to invite students to a course (extract courseId and student emails) - ONLY if the course name is specific (not generic terms like "my class", "the class", "this class")
       - CREATE_ANNOUNCEMENT: User wants to create an announcement in a course (extract courseId and announcement text) - ONLY if there is actual announcement content, not just the command
+      - AI_ASSISTED_ANNOUNCEMENT: User wants AI help to create an announcement (e.g., "can you help me announce", "help me make an announcement", "I need help with an announcement")
       - GET_ANNOUNCEMENTS: User wants to view/list announcements for a course (extract courseId/courseName)
       - CREATE_ASSIGNMENT: User wants to create an assignment in a course (extract courseId, title, description, due date, and materials)
       - CHECK_ASSIGNMENT_SUBMISSIONS: User wants to check who has submitted an assignment (extract courseName and assignmentTitle)
@@ -988,6 +989,13 @@ async function detectIntent(message, conversationHistory, conversationId) {
       - "post 'Homework is due tomorrow' to my class ai" → CREATE_ANNOUNCEMENT with courseName: "ai", announcementText: "Homework is due tomorrow"
       - "announce 'Class cancelled today' in Computer Science" → CREATE_ANNOUNCEMENT with courseName: "Computer Science", announcementText: "Class cancelled today"
       - "create announcement for Math 101" → CREATE_ANNOUNCEMENT with courseName: "Math 101", announcementText: null (no content provided)
+      
+      For AI-assisted announcement requests:
+      - "can you help me announce" → AI_ASSISTED_ANNOUNCEMENT
+      - "help me make an announcement" → AI_ASSISTED_ANNOUNCEMENT
+      - "I need help with an announcement" → AI_ASSISTED_ANNOUNCEMENT
+      - "assist me in creating an announcement" → AI_ASSISTED_ANNOUNCEMENT
+      - "guide me through making an announcement" → AI_ASSISTED_ANNOUNCEMENT
       
       Respond in JSON format only with the following structure:
       {
