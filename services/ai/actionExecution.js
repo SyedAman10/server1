@@ -479,10 +479,71 @@ async function handleParameterCollection(intent, parameters, conversationId, ori
       
       // Check if user provided course name
       if (missingParameters.includes('courseName')) {
-        const courseMatch = originalMessage.match(/(?:in|for)\s+(.+?)(?:\s|$)/i);
-        if (courseMatch && courseMatch[1]) {
-          newParameters.courseName = courseMatch[1].trim();
+        const courseName = originalMessage.trim();
+        
+        // Check if it's a generic term that needs clarification
+        const genericTerms = [
+          'my class', 'my course', 'the class', 'the course', 'class', 'course',
+          'it', 'this', 'that', 'one', 'some', 'any', 'a class', 'a course'
+        ];
+        
+        if (genericTerms.includes(courseName.toLowerCase())) {
+          return {
+            action: 'CREATE_ASSIGNMENT',
+            missingParameters: ['courseName'],
+            collectedParameters: collectedParameters,
+            nextMessage: `I need to know which specific class you're referring to. Could you please tell me the name of the class? For example: "Grade Islamiat class" or "Math 101".`,
+            actionComplete: false
+          };
+        }
+        
+        // Validate the course name immediately
+        try {
+          const courseMatch = await findMatchingCourse(
+            courseName, 
+            userToken, 
+            req, 
+            baseUrl
+          );
+          
+          if (!courseMatch.success) {
+            return {
+              action: 'CREATE_ASSIGNMENT',
+              missingParameters: ['courseName'],
+              collectedParameters: collectedParameters,
+              nextMessage: `I couldn't find any courses matching "${courseName}". Could you please check the course name and try again?`,
+              actionComplete: false
+            };
+          }
+          
+          if (courseMatch.allMatches && courseMatch.allMatches.length > 1 && !courseMatch.isExactMatch) {
+            // Multiple matches - ask for clarification
+            return {
+              action: 'CREATE_ASSIGNMENT',
+              missingParameters: ['courseName'],
+              collectedParameters: collectedParameters,
+              nextMessage: `I found multiple courses matching "${courseName}". Which one would you like to create an assignment for?`,
+              options: courseMatch.allMatches.map(course => ({
+                id: course.id,
+                name: course.name,
+                section: course.section || "No section"
+              })),
+              actionComplete: false
+            };
+          }
+          
+          // Course found and validated - use the matched course name, not the user input
+          newParameters.courseName = courseMatch.course.name;
           parametersFound = true;
+        } catch (error) {
+          console.error('Error validating course name:', error);
+          return {
+            action: 'CREATE_ASSIGNMENT',
+            missingParameters: ['courseName'],
+            collectedParameters: collectedParameters,
+            nextMessage: `I encountered an error while looking for the course. Could you please try again?`,
+            actionComplete: false
+          };
         }
       }
       
@@ -2355,18 +2416,104 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           };
         }
 
+        // Check what parameters are missing and start tracking if needed
+        const missingParams = [];
         if (!parameters.courseName && !parameters.courseIdentifier) {
-          return {
-            message: "I need to know which course you want to create an assignment for. Please provide a course name.",
-            conversationId: req.body.conversationId || generateConversationId()
-          };
+          missingParams.push('courseName');
+        }
+        if (!parameters.title) {
+          missingParams.push('title');
         }
 
-        if (!parameters.title) {
-          return {
-            message: "Please provide a title for your assignment.",
-            conversationId: req.body.conversationId || generateConversationId()
-          };
+        if (missingParams.length > 0) {
+          // If course name is missing, ask for it first and validate it
+          if (missingParams.includes('courseName')) {
+            // 🚀 START TRACKING: Start tracking this action for parameter collection
+            startOngoingAction(conversationId, 'CREATE_ASSIGNMENT', ['courseName'], parameters);
+            
+            return {
+              message: "I need to know which course you want to create an assignment for. Please provide a course name.",
+              conversationId: conversationId,
+              ongoingAction: {
+                action: 'CREATE_ASSIGNMENT',
+                missingParameters: ['courseName'],
+                collectedParameters: parameters
+              }
+            };
+          }
+          // If only title is missing, validate course name first
+          else if (missingParams.includes('title')) {
+            // Validate the course name first before asking for title
+            try {
+              const courseMatch = await findMatchingCourse(
+                parameters.courseName || parameters.courseIdentifier, 
+                userToken, 
+                req, 
+                baseUrl
+              );
+              
+              if (!courseMatch.success) {
+                // Start ongoing action to allow user to correct course name
+                startOngoingAction(conversationId, 'CREATE_ASSIGNMENT', ['courseName'], {});
+                
+                return {
+                  message: `I couldn't find any courses matching "${parameters.courseName}". Could you please check the course name and try again?`,
+                  conversationId: conversationId,
+                  ongoingAction: {
+                    action: 'CREATE_ASSIGNMENT',
+                    missingParameters: ['courseName'],
+                    collectedParameters: {}
+                  }
+                };
+              }
+              
+              if (courseMatch.allMatches && courseMatch.allMatches.length > 1 && !courseMatch.isExactMatch) {
+                // Multiple matches - ask for clarification
+                startOngoingAction(conversationId, 'CREATE_ASSIGNMENT', ['courseName'], {});
+                
+                return {
+                  message: `I found multiple courses matching "${parameters.courseName}". Which one would you like to create an assignment for?`,
+                  options: courseMatch.allMatches.map(course => ({
+                    id: course.id,
+                    name: course.name,
+                    section: course.section || "No section"
+                  })),
+                  conversationId: conversationId,
+                  ongoingAction: {
+                    action: 'CREATE_ASSIGNMENT',
+                    missingParameters: ['courseName'],
+                    collectedParameters: {}
+                  }
+                };
+              }
+              
+              // Course validated successfully, now ask for assignment title
+              startOngoingAction(conversationId, 'CREATE_ASSIGNMENT', ['title'], { courseName: courseMatch.course.name });
+              
+              return {
+                message: `Great! I found your course "${courseMatch.course.name}". Please provide a title for your assignment.`,
+                conversationId: conversationId,
+                ongoingAction: {
+                  action: 'CREATE_ASSIGNMENT',
+                  missingParameters: ['title'],
+                  collectedParameters: { courseName: courseMatch.course.name }
+                }
+              };
+            } catch (error) {
+              console.error('Error validating course name:', error);
+              startOngoingAction(conversationId, 'CREATE_ASSIGNMENT', ['courseName'], {});
+              
+              return {
+                message: `I encountered an error while looking for the course. Could you please try again?`,
+                conversationId: conversationId,
+                ongoingAction: {
+                  action: 'CREATE_ASSIGNMENT',
+                  missingParameters: ['courseName'],
+                  collectedParameters: {}
+                }
+              };
+            }
+          }
         }
 
         // Calculate due date from expression if provided
