@@ -3673,7 +3673,13 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           };
         }
 
-        // Check what parameters are missing and start tracking if needed
+        // Check if this action was completed through parameter collection
+        // If so, skip parameter validation and go directly to execution
+        if (parameters.selectedAssignments && parameters.assignmentTitle) {
+          console.log('🔍 DEBUG: Action completed through parameter collection, proceeding to execution');
+          // Skip parameter validation and go directly to execution
+        } else {
+          // Check what parameters are missing and start tracking if needed
         const missingParams = [];
         if (!parameters.courseName && !parameters.courseIdentifier) {
           missingParams.push('courseName');
@@ -3783,6 +3789,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
               };
             }
           }
+        }
         }
         
         try {
