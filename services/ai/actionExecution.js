@@ -3747,36 +3747,36 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           let matchingAssignments = [];
           
           if (parameters.isTodaysAssignment) {
-            // Find assignments due today
+            // Find assignments created today
             const today = new Date();
             const todayStr = today.toISOString().split('T')[0]; // YYYY-MM-DD format
             
-            console.log('🔍 DEBUG: Looking for assignments due today:', todayStr);
+            console.log('🔍 DEBUG: Looking for assignments created today:', todayStr);
             
             matchingAssignments = assignments.filter(a => {
-              if (!a.dueDate) return false;
+              if (!a.creationTime) return false;
               
-              // Parse the due date (assuming it's in YYYY-MM-DD format or similar)
-              const dueDate = new Date(a.dueDate);
-              const dueDateStr = dueDate.toISOString().split('T')[0];
+              // Parse the creation date
+              const creationDate = new Date(a.creationTime);
+              const creationDateStr = creationDate.toISOString().split('T')[0];
               
-              console.log('🔍 DEBUG: Assignment due date:', a.title, dueDateStr, 'matches today:', dueDateStr === todayStr);
+              console.log('🔍 DEBUG: Assignment creation date:', a.title, creationDateStr, 'matches today:', creationDateStr === todayStr);
               
-              return dueDateStr === todayStr;
+              return creationDateStr === todayStr;
             });
             
             if (matchingAssignments.length === 0) {
               return {
-                message: `I couldn't find any assignments due today in ${selectedCourse.name}.`,
+                message: `I couldn't find any assignments created today in ${selectedCourse.name}.`,
                 conversationId: req.body.conversationId
               };
             } else if (matchingAssignments.length > 1) {
               return {
-                message: `I found ${matchingAssignments.length} assignments due today in ${selectedCourse.name}. Which one would you like to check?`,
+                message: `I found ${matchingAssignments.length} assignments created today in ${selectedCourse.name}. Which one would you like to check?`,
                 options: matchingAssignments.map(a => ({ 
                   id: a.id, 
                   title: a.title,
-                  dueDate: a.dueDate ? new Date(a.dueDate).toLocaleDateString() : 'No due date'
+                  creationTime: a.creationTime ? new Date(a.creationTime).toLocaleDateString() : 'Unknown creation date'
                 })),
                 conversationId: req.body.conversationId
               };
@@ -3855,7 +3855,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           
           let message = '';
           if (parameters.isTodaysAssignment) {
-            message = `Today's assignment submissions for "${matchingAssignments[0].title}" in ${selectedCourse.name}:\n`;
+            message = `Assignment submissions for "${matchingAssignments[0].title}" (created today) in ${selectedCourse.name}:\n`;
           } else {
             message = `Submissions for "${matchingAssignments[0].title}" in ${selectedCourse.name}:\n`;
           }
