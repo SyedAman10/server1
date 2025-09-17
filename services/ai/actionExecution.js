@@ -496,6 +496,8 @@ Examples:
 
 Extracted title:`;
 
+            // Use the correct OpenAI API key instead of user token
+            const openaiApiKey = process.env.OPENAI_API_KEY;
             const aiResponse = await makeApiCall(
               'https://api.openai.com/v1/chat/completions',
               'POST',
@@ -514,7 +516,7 @@ Extracted title:`;
                 max_tokens: 50,
                 temperature: 0.1
               },
-              userToken,
+              openaiApiKey,
               req
             );
 
