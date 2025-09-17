@@ -463,17 +463,34 @@ async function handleParameterCollection(intent, parameters, conversationId, ori
     case 'CREATE_ASSIGNMENT':
       // Check if user provided assignment title
       if (missingParameters.includes('title')) {
-        const titleMatch = originalMessage.match(/(?:called|titled|title is|call it)\s+(.+?)(?:\s|$)/i);
-        if (titleMatch && titleMatch[1]) {
-          newParameters.title = titleMatch[1].trim();
-          parametersFound = true;
+        // Try different patterns for title extraction
+        const titlePatterns = [
+          /(?:called|titled|title is|call it|the title should be|the title is)\s+(.+?)(?:\s|$)/i,
+          /(?:title:?|name:?)\s+(.+?)(?:\s|$)/i
+        ];
+        
+        let titleExtracted = false;
+        for (const pattern of titlePatterns) {
+          const titleMatch = originalMessage.match(pattern);
+          if (titleMatch && titleMatch[1]) {
+            newParameters.title = titleMatch[1].trim();
+            parametersFound = true;
+            titleExtracted = true;
+            break;
+          }
         }
-        // Also check if they just said the title directly
-        else if (!originalMessage.toLowerCase().includes('assignment') && 
-                 !originalMessage.toLowerCase().includes('create') && 
-                 !originalMessage.toLowerCase().includes('make')) {
-          newParameters.title = originalMessage.trim();
-          parametersFound = true;
+        
+        // If no pattern matched, check if they just said the title directly
+        if (!titleExtracted) {
+          // Only treat as direct title if it's a short, reasonable title and doesn't contain common words
+          const commonWords = ['assignment', 'create', 'make', 'should', 'be', 'the', 'title', 'for', 'in', 'class', 'course'];
+          const words = originalMessage.toLowerCase().split(/\s+/);
+          const hasCommonWords = words.some(word => commonWords.includes(word));
+          
+          if (!hasCommonWords && originalMessage.length < 100) {
+            newParameters.title = originalMessage.trim();
+            parametersFound = true;
+          }
         }
       }
       
