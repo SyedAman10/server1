@@ -331,8 +331,69 @@ async function handleParameterCollection(intent, parameters, conversationId, ori
   
   switch (action) {
     case 'CREATE_COURSE':
+      // Handle confirmation for course name first
+      if (missingParameters.includes('confirmed')) {
+        const message = originalMessage.toLowerCase().trim();
+        
+        // Check for positive confirmation
+        const positivePatterns = [
+          /^yes$/i,
+          /^y$/i,
+          /^yeah$/i,
+          /^yep$/i,
+          /^sure$/i,
+          /^ok$/i,
+          /^okay$/i,
+          /^correct$/i,
+          /^right$/i,
+          /^that's right$/i,
+          /^that is correct$/i,
+          /^go ahead$/i,
+          /^proceed$/i,
+          /^create it$/i
+        ];
+        
+        // Check for negative confirmation
+        const negativePatterns = [
+          /^no$/i,
+          /^n$/i,
+          /^nope$/i,
+          /^wrong$/i,
+          /^incorrect$/i,
+          /^change$/i,
+          /^different$/i,
+          /^not right$/i,
+          /^that's not right$/i,
+          /^that is not correct$/i,
+          /^cancel$/i,
+          /^stop$/i
+        ];
+        
+        if (positivePatterns.some(pattern => pattern.test(message))) {
+          newParameters.confirmed = true;
+          parametersFound = true;
+        } else if (negativePatterns.some(pattern => pattern.test(message))) {
+          // User wants to change the name - reset to name collection
+          return {
+            action: 'CREATE_COURSE',
+            missingParameters: ['name'],
+            collectedParameters: {},
+            nextMessage: "No problem! What would you like to call your new class instead?",
+            actionComplete: false
+          };
+        } else {
+          // Unclear response - ask for clarification
+          return {
+            action: 'CREATE_COURSE',
+            missingParameters: ['confirmed'],
+            collectedParameters: collectedParameters,
+            nextMessage: "I'm not sure if you want to proceed. Please say 'yes' to create the course with this name, or 'no' if you'd like to change it.",
+            actionComplete: false
+          };
+        }
+      }
       // Check if user provided a course name
-      if (missingParameters.includes('name')) {
+      else if (missingParameters.includes('name')) {
         // Use AI to analyze user intent
         const intentAnalysis = await analyzeUserIntentForCourseNaming(originalMessage, conversationId, collectedParameters);
         
@@ -395,68 +456,6 @@ async function handleParameterCollection(intent, parameters, conversationId, ori
                 actionComplete: false
               };
             }
-        }
-        
-        // Handle confirmation for course name
-        if (missingParameters.includes('confirmed')) {
-          const message = originalMessage.toLowerCase().trim();
-          
-          // Check for positive confirmation
-          const positivePatterns = [
-            /^yes$/i,
-            /^y$/i,
-            /^yeah$/i,
-            /^yep$/i,
-            /^sure$/i,
-            /^ok$/i,
-            /^okay$/i,
-            /^correct$/i,
-            /^right$/i,
-            /^that's right$/i,
-            /^that is correct$/i,
-            /^go ahead$/i,
-            /^proceed$/i,
-            /^create it$/i
-          ];
-          
-          // Check for negative confirmation
-          const negativePatterns = [
-            /^no$/i,
-            /^n$/i,
-            /^nope$/i,
-            /^wrong$/i,
-            /^incorrect$/i,
-            /^change$/i,
-            /^different$/i,
-            /^not right$/i,
-            /^that's not right$/i,
-            /^that is not correct$/i,
-            /^cancel$/i,
-            /^stop$/i
-          ];
-          
-          if (positivePatterns.some(pattern => pattern.test(message))) {
-            newParameters.confirmed = true;
-            parametersFound = true;
-          } else if (negativePatterns.some(pattern => pattern.test(message))) {
-            // User wants to change the name - reset to name collection
-            return {
-              action: 'CREATE_COURSE',
-              missingParameters: ['name'],
-              collectedParameters: {},
-              nextMessage: "No problem! What would you like to call your new class instead?",
-              actionComplete: false
-            };
-          } else {
-            // Unclear response - ask for clarification
-            return {
-              action: 'CREATE_COURSE',
-              missingParameters: ['confirmed'],
-              collectedParameters: collectedParameters,
-              nextMessage: "I'm not sure if you want to proceed. Please say 'yes' to create the course with this name, or 'no' if you'd like to change it.",
-              actionComplete: false
-            };
-          }
         }
       }
       break;
