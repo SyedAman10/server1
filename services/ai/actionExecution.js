@@ -309,7 +309,7 @@ Respond with JSON only:`;
  * Handle parameter collection for ongoing actions
  * This function processes user input to collect missing parameters
  */
-async function handleParameterCollection(intent, parameters, conversationId, originalMessage) {
+async function handleParameterCollection(intent, parameters, conversationId, originalMessage, userToken, req, baseUrl) {
   if (!conversationId) return null;
   
   const context = getOngoingActionContext(conversationId);
@@ -1301,7 +1301,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
       console.log('🔍 DEBUG: Ongoing action context:', context);
       
       // Check if this message provides parameters for the ongoing action
-      const parameterCollection = await handleParameterCollection(intent, parameters, conversationId, originalMessage);
+      const parameterCollection = await handleParameterCollection(intent, parameters, conversationId, originalMessage, userToken, req, baseUrl);
       console.log('🔍 Parameter collection result:', parameterCollection);
       
       if (parameterCollection) {
