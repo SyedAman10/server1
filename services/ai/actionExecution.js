@@ -1875,28 +1875,36 @@ async function executeAction(intentData, originalMessage, userToken, req) {
         }
 
         if (missingParams.length > 0) {
-          // 🚀 START TRACKING: Start tracking this action for parameter collection
-          startOngoingAction(conversationId, 'CREATE_ANNOUNCEMENT', missingParams, parameters);
-          
-          // Generate appropriate message based on what's missing
-          let message;
-          if (missingParams.includes('courseName') && missingParams.includes('announcementText')) {
-            message = "What would you like to announce and which course should I post it in?";
-          } else if (missingParams.includes('courseName')) {
-            message = "Which course should I post this announcement in?";
-          } else if (missingParams.includes('announcementText')) {
-            message = "What would you like to announce?";
+          // If course name is missing, ask for it first and validate it
+          if (missingParams.includes('courseName')) {
+            // 🚀 START TRACKING: Start tracking this action for parameter collection
+            startOngoingAction(conversationId, 'CREATE_ANNOUNCEMENT', ['courseName'], parameters);
+            
+            return {
+              message: "Which course should I post this announcement in?",
+              conversationId: conversationId,
+              ongoingAction: {
+                action: 'CREATE_ANNOUNCEMENT',
+                missingParameters: ['courseName'],
+                collectedParameters: parameters
+              }
+            };
           }
-          
-          return {
-            message: message,
-            conversationId: conversationId,
-            ongoingAction: {
-              action: 'CREATE_ANNOUNCEMENT',
-              missingParameters: missingParams,
-              collectedParameters: parameters
-            }
-          };
+          // If only announcement text is missing, ask for it
+          else if (missingParams.includes('announcementText')) {
+            // 🚀 START TRACKING: Start tracking this action for parameter collection
+            startOngoingAction(conversationId, 'CREATE_ANNOUNCEMENT', ['announcementText'], parameters);
+            
+            return {
+              message: "What would you like to announce?",
+              conversationId: conversationId,
+              ongoingAction: {
+                action: 'CREATE_ANNOUNCEMENT',
+                missingParameters: ['announcementText'],
+                collectedParameters: parameters
+              }
+            };
+          }
         }
 
         try {
