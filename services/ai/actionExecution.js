@@ -1960,7 +1960,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
                 startOngoingAction(conversationId, 'CREATE_ANNOUNCEMENT', ['courseName'], {});
                 
                 return {
-                  message: `I couldn't find any courses matching "${parameters.courseName}". Could you please check the course name and try again? You can also say "list courses" to see all available courses.`,
+                  message: `I couldn't find any courses matching "${parameters.courseName}". Could you please check the course name and try again?`,
                   conversationId: conversationId,
                   ongoingAction: {
                     action: 'CREATE_ANNOUNCEMENT',
