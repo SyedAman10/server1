@@ -1956,14 +1956,24 @@ async function executeAction(intentData, originalMessage, userToken, req) {
               );
               
               if (!courseMatch.success) {
+                // Start ongoing action to allow user to correct course name
+                startOngoingAction(conversationId, 'CREATE_ANNOUNCEMENT', ['courseName'], {});
+                
                 return {
                   message: `I couldn't find any courses matching "${parameters.courseName}". Could you please check the course name and try again? You can also say "list courses" to see all available courses.`,
-                  conversationId: conversationId
+                  conversationId: conversationId,
+                  ongoingAction: {
+                    action: 'CREATE_ANNOUNCEMENT',
+                    missingParameters: ['courseName'],
+                    collectedParameters: {}
+                  }
                 };
               }
               
               if (courseMatch.allMatches && courseMatch.allMatches.length > 1 && !courseMatch.isExactMatch) {
                 // Multiple matches - ask for clarification
+                startOngoingAction(conversationId, 'CREATE_ANNOUNCEMENT', ['courseName'], {});
+                
                 return {
                   message: `I found multiple courses matching "${parameters.courseName}". Which one would you like to create an announcement for?`,
                   options: courseMatch.allMatches.map(course => ({
@@ -1971,7 +1981,12 @@ async function executeAction(intentData, originalMessage, userToken, req) {
                     name: course.name,
                     section: course.section || "No section"
                   })),
-                  conversationId: conversationId
+                  conversationId: conversationId,
+                  ongoingAction: {
+                    action: 'CREATE_ANNOUNCEMENT',
+                    missingParameters: ['courseName'],
+                    collectedParameters: {}
+                  }
                 };
               }
               
@@ -1989,9 +2004,16 @@ async function executeAction(intentData, originalMessage, userToken, req) {
               };
             } catch (error) {
               console.error('Error validating course name:', error);
+              startOngoingAction(conversationId, 'CREATE_ANNOUNCEMENT', ['courseName'], {});
+              
               return {
                 message: `I encountered an error while looking for the course. Could you please try again?`,
-                conversationId: conversationId
+                conversationId: conversationId,
+                ongoingAction: {
+                  action: 'CREATE_ANNOUNCEMENT',
+                  missingParameters: ['courseName'],
+                  collectedParameters: {}
+                }
               };
             }
           }
