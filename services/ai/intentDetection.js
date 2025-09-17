@@ -552,6 +552,27 @@ function detectIntentFallback(message, conversationId) {
       }
     }
 
+    // Check for generic terms that should trigger clarification
+    const genericTerms = ['my class', 'my course', 'the class', 'the course', 'this class', 'this course', 'class', 'course'];
+    const isGenericTerm = genericTerms.some(term => 
+      courseName.toLowerCase().includes(term.toLowerCase()) || 
+      courseName.toLowerCase() === term.toLowerCase()
+    );
+
+    // If it's a generic term, treat as suggestion request
+    if (isGenericTerm) {
+      return {
+        intent: 'STUDENT_JOIN_SUGGESTION',
+        confidence: 0.9,
+        parameters: {
+          originalMessage: message,
+          extractedEmails: emails,
+          extractedCourse: courseName,
+          needsDisambiguation: true
+        }
+      };
+    }
+
     return {
       intent: isTeacherInvite ? 'INVITE_TEACHERS' : 'INVITE_STUDENTS',
       confidence: 0.8,
