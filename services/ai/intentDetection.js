@@ -628,9 +628,12 @@ function detectIntentFallback(message, conversationId) {
     }
     
     // e.g. "who has submitted assignment test 2 in sql"
-    const assignmentMatch = message.match(/assignment\s+([\w\s-]+)/i);
-    if (assignmentMatch && assignmentMatch[1]) {
-      assignmentTitle = assignmentMatch[1].trim();
+    // But don't extract title if it's "today's assignment" - that's a special case
+    if (!isTodaysAssignment) {
+      const assignmentMatch = message.match(/assignment\s+([\w\s-]+)/i);
+      if (assignmentMatch && assignmentMatch[1]) {
+        assignmentTitle = assignmentMatch[1].trim();
+      }
     }
     
     // Extract course name from 'in course X', 'for course X', or 'in X'
@@ -893,7 +896,7 @@ async function detectIntent(message, conversationHistory, conversationId) {
       - AI_ASSISTED_ANNOUNCEMENT: User wants AI help to create an announcement (e.g., "can you help me announce", "help me make an announcement", "I need help with an announcement")
       - GET_ANNOUNCEMENTS: User wants to view/list announcements for a course (extract courseId/courseName)
       - CREATE_ASSIGNMENT: User wants to create an assignment in a course (extract courseId, title, description, due date, and materials)
-      - CHECK_ASSIGNMENT_SUBMISSIONS: User wants to check who has submitted an assignment (extract courseName and assignmentTitle)
+      - CHECK_ASSIGNMENT_SUBMISSIONS: User wants to check who has submitted an assignment (extract courseName and assignmentTitle) - For "today's assignment" or "todays assignment", set isTodaysAssignment: true and don't extract assignmentTitle
       - GRADE_ASSIGNMENT: User wants to grade a student's assignment (extract courseName, assignmentTitle, studentEmail, assignedGrade, draftGrade)
       - LIST_ASSIGNMENTS: User wants to see all assignments in a course (extract courseName or courseId)
       - SHOW_ENROLLED_STUDENTS: User wants to see the list of enrolled students in a course (extract courseName)
@@ -935,6 +938,16 @@ async function detectIntent(message, conversationHistory, conversationId) {
       For listing assignments, extract these fields if provided:
       - courseId/courseName: The course ID or name to list assignments from
 
+      For checking assignment submissions, extract these fields if provided:
+      - courseName: The course name
+      - assignmentTitle: The assignment title (only if not "today's assignment")
+      - isTodaysAssignment: Set to true if user asks for "today's assignment" or "todays assignment"
+      
+      Examples for submission status:
+      - "check submissions for test 1 in computer science" → CHECK_ASSIGNMENT_SUBMISSIONS with courseName: "computer science", assignmentTitle: "test 1"
+      - "show submission status for today's assignment" → CHECK_ASSIGNMENT_SUBMISSIONS with isTodaysAssignment: true
+      - "who submitted today's assignment in physics" → CHECK_ASSIGNMENT_SUBMISSIONS with courseName: "physics", isTodaysAssignment: true
+      
       For grading assignments, extract these fields if provided:
       - courseName: The course name
       - assignmentTitle: The assignment title
