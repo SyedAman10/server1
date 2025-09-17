@@ -1270,13 +1270,40 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           };
         }
         
-        // If it's not a new action attempt, ask for the missing parameters
-        const contextMessage = getContextAwareMessage(conversationId);
-        return {
-          message: `I'm still waiting for information to complete the current action. ${contextMessage}`,
-          conversationId: conversationId,
-          ongoingAction: context
-        };
+        // Check if user wants to cancel the ongoing action
+        if (intent === 'CANCEL_ACTION' || originalMessage.toLowerCase().trim() === 'stop' || originalMessage.toLowerCase().trim() === 'cancel') {
+          console.log('🔍 DEBUG: User wants to cancel ongoing action');
+          completeOngoingAction(conversationId);
+          return {
+            message: `Got it! I've stopped working on ${context.action.toLowerCase().replace(/_/g, ' ')}. What would you like to do instead?`,
+            conversationId: conversationId
+          };
+        }
+        
+        // If it's not a new action attempt, check if the action is actually complete
+        if (context.missingParameters && context.missingParameters.length === 0) {
+          console.log('🔍 DEBUG: Action appears complete but not executed, forcing execution');
+          // Action is complete, execute it
+          const allParameters = context.collectedParameters;
+          console.log('🔍 DEBUG: Executing completed action with parameters:', allParameters);
+          
+          // Update the intent data with the complete parameters
+          intentData.intent = context.action;
+          intentData.parameters = allParameters;
+          intent = context.action;
+          parameters = allParameters;
+          
+          console.log(`🔄 Forced execution of ${context.action}`);
+          // Continue with normal execution below
+        } else {
+          // Still missing parameters, ask for them
+          const contextMessage = getContextAwareMessage(conversationId);
+          return {
+            message: `I'm still waiting for information to complete the current action. ${contextMessage}`,
+            conversationId: conversationId,
+            ongoingAction: context
+          };
+        }
       }
     } else {
       // No ongoing action, check if this is a new action attempt (shouldn't happen, but safety check)
@@ -1477,6 +1504,12 @@ async function executeAction(intentData, originalMessage, userToken, req) {
               collectedParameters: { name: parameters.name }
             }
           };
+        }
+
+        // If we have both name and confirmed, proceed with course creation
+        if (parameters.name && parameters.confirmed) {
+          // Clear the ongoing action before proceeding
+          completeOngoingAction(conversationId);
         }
 
         const courseData = {
