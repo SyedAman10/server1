@@ -961,6 +961,94 @@ Extracted title:`;
         missingParameters
       });
       break;
+      
+    case 'CHECK_ASSIGNMENT_SUBMISSIONS':
+      // Handle course name collection for submission status check
+      if (missingParameters.includes('courseName')) {
+        const courseName = originalMessage.trim();
+        
+        // Check if user wants to list courses
+        if (courseName.toLowerCase().includes('list courses') || courseName.toLowerCase().includes('show courses')) {
+          try {
+            const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom/courses`, 'GET', null, userToken, req);
+            const courses = Array.isArray(coursesResponse) ? coursesResponse : (coursesResponse.courses || []);
+            
+            if (courses.length === 0) {
+              return {
+                action: 'CHECK_ASSIGNMENT_SUBMISSIONS',
+                missingParameters: ['courseName'],
+                collectedParameters: { ...collectedParameters },
+                nextMessage: "I don't see any courses available. Please create a course first or check your Google Classroom setup.",
+                actionComplete: false
+              };
+            }
+            
+            const courseList = courses.map(course => `• ${course.name}${course.section ? ` (${course.section})` : ''}`).join('\n');
+            
+            return {
+              action: 'CHECK_ASSIGNMENT_SUBMISSIONS',
+              missingParameters: ['courseName'],
+              collectedParameters: { ...collectedParameters },
+              nextMessage: `Here are your available courses:\n\n${courseList}\n\nWhich course would you like to check submission status for?`,
+              actionComplete: false
+            };
+          } catch (error) {
+            console.error('Error fetching courses for submission status:', error);
+            return {
+              action: 'CHECK_ASSIGNMENT_SUBMISSIONS',
+              missingParameters: ['courseName'],
+              collectedParameters: { ...collectedParameters },
+              nextMessage: "I couldn't fetch your courses. Please try again or specify the course name directly.",
+              actionComplete: false
+            };
+          }
+        }
+        
+        // Try to find matching course
+        try {
+          const courseMatch = await findMatchingCourse(courseName, userToken, req, baseUrl);
+          if (!courseMatch.success) {
+            return {
+              action: 'CHECK_ASSIGNMENT_SUBMISSIONS',
+              missingParameters: ['courseName'],
+              collectedParameters: { ...collectedParameters },
+              nextMessage: courseMatch.message,
+              actionComplete: false
+            };
+          }
+          
+          if (courseMatch.allMatches && courseMatch.allMatches.length > 1 && !courseMatch.isExactMatch) {
+            const courseOptions = courseMatch.allMatches.map(course => `• ${course.name}${course.section ? ` (${course.section})` : ''}`).join('\n');
+            return {
+              action: 'CHECK_ASSIGNMENT_SUBMISSIONS',
+              missingParameters: ['courseName'],
+              collectedParameters: { ...collectedParameters },
+              nextMessage: `I found multiple courses matching "${courseName}". Which one do you mean?\n\n${courseOptions}`,
+              actionComplete: false
+            };
+          }
+          
+          // Course found and validated - use the matched course name, not the user input
+          newParameters.courseName = courseMatch.course.name;
+          parametersFound = true;
+        } catch (error) {
+          console.error('Error in course matching for submission status:', error);
+          return {
+            action: 'CHECK_ASSIGNMENT_SUBMISSIONS',
+            missingParameters: ['courseName'],
+            collectedParameters: { ...collectedParameters },
+            nextMessage: "I encountered an error while looking up the course. Please try again.",
+            actionComplete: false
+          };
+        }
+      }
+      
+      console.log('🔍 DEBUG: CHECK_ASSIGNMENT_SUBMISSIONS parameter collection result:', {
+        parametersFound,
+        newParameters,
+        missingParameters
+      });
+      break;
   }
   
   if (parametersFound) {
@@ -3517,9 +3605,24 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           );
           
           if (!courseMatch.success) {
+            // Start ongoing action to maintain context for course name correction
+            if (conversationId) {
+              startOngoingAction(conversationId, 'CHECK_ASSIGNMENT_SUBMISSIONS', ['courseName'], {
+                isTodaysAssignment: parameters.isTodaysAssignment,
+                assignmentTitle: parameters.assignmentTitle
+              });
+            }
             return {
               message: courseMatch.message,
-              conversationId: req.body.conversationId
+              conversationId: req.body.conversationId,
+              ongoingAction: {
+                action: 'CHECK_ASSIGNMENT_SUBMISSIONS',
+                missingParameters: ['courseName'],
+                collectedParameters: {
+                  isTodaysAssignment: parameters.isTodaysAssignment,
+                  assignmentTitle: parameters.assignmentTitle
+                }
+              }
             };
           }
           
@@ -3705,6 +3808,11 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             }).join('\n');
           } else {
             message += 'None';
+          }
+          
+          // ✅ COMPLETE ACTION: Mark the ongoing action as completed
+          if (conversationId) {
+            completeOngoingAction(conversationId);
           }
           
           return {
