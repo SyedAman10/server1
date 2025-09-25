@@ -887,7 +887,7 @@ async function detectIntent(message, conversationHistory, conversationId) {
       Classify the following message into one of these intents:
       - LIST_COURSES: User wants to see their courses
       - GET_COURSE: User wants details about a specific course (extract courseId if possible)
-      - CREATE_COURSE: User wants to create a new course (extract course details if provided)
+      - CREATE_COURSE: User wants to create a new course (extract course details if provided) - This includes phrases like "create a new class", "create new class", "make a class", "new course", "create course"
       - CREATE_COURSE_CONTENT: User wants to create course content or materials (extract topic and details)
       - UPDATE_COURSE: User wants to update a course (extract courseId and details)
       - DELETE_COURSE: User wants to delete a course (extract courseId)
@@ -1007,8 +1007,14 @@ async function detectIntent(message, conversationHistory, conversationId) {
       2. Include it in the parameters as "courseName" or "courseIdentifier"
       3. Set a flag "needsDisambiguation": true if you think the system will need to ask the user which specific course they mean
       
-      IMPORTANT: For generic terms like "my class", "the class", "this class", "class", "course", use STUDENT_JOIN_SUGGESTION intent instead of INVITE_STUDENTS.
+      IMPORTANT: 
+      1. For course creation, use CREATE_COURSE intent for phrases like "create a new class", "create new class", "make a class", "new course", "create course"
+      2. For generic terms like "my class", "the class", "this class", "class", "course" when talking about student joining/inviting, use STUDENT_JOIN_SUGGESTION intent instead of INVITE_STUDENTS.
+      
       Examples:
+      - "create a new class" → CREATE_COURSE (not STUDENT_JOIN_SUGGESTION)
+      - "create new class" → CREATE_COURSE (not STUDENT_JOIN_SUGGESTION)
+      - "make a class" → CREATE_COURSE (not STUDENT_JOIN_SUGGESTION)
       - "add a student to my class" → STUDENT_JOIN_SUGGESTION (not INVITE_STUDENTS)
       - "invite student to the class" → STUDENT_JOIN_SUGGESTION (not INVITE_STUDENTS)
       - "add student to this class" → STUDENT_JOIN_SUGGESTION (not INVITE_STUDENTS)
