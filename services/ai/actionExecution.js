@@ -550,7 +550,27 @@ Extracted title:`;
       
       // Check if user provided course name
       if (missingParameters.includes('courseName')) {
-        const courseName = originalMessage.trim();
+        let courseName = originalMessage.trim();
+        
+        // Handle course name correction patterns
+        const correctionPatterns = [
+          /sorry\s+(?:the\s+)?course\s+name\s+is\s+(.+)/i,
+          /(?:the\s+)?course\s+name\s+is\s+(.+)/i,
+          /(?:it'?s|it\s+is)\s+(.+)/i,
+          /(?:actually\s+)?(?:it'?s|it\s+is)\s+(.+)/i,
+          /(?:correct\s+)?course\s+name\s+is\s+(.+)/i,
+          /(?:the\s+)?correct\s+name\s+is\s+(.+)/i
+        ];
+        
+        // Try to extract course name from correction patterns
+        for (const pattern of correctionPatterns) {
+          const match = courseName.match(pattern);
+          if (match && match[1]) {
+            courseName = match[1].trim();
+            console.log('🔍 DEBUG: Extracted course name from correction pattern:', courseName);
+            break;
+          }
+        }
         
         // Check if it's a generic term that needs clarification
         const genericTerms = [
@@ -698,7 +718,27 @@ Extracted title:`;
         
         // If we're waiting for a course name, treat the user's response as a course name
         if (missingParameters.includes('courseName')) {
-          const courseName = originalMessage.trim();
+          let courseName = originalMessage.trim();
+          
+          // Handle course name correction patterns
+          const correctionPatterns = [
+            /sorry\s+(?:the\s+)?course\s+name\s+is\s+(.+)/i,
+            /(?:the\s+)?course\s+name\s+is\s+(.+)/i,
+            /(?:it'?s|it\s+is)\s+(.+)/i,
+            /(?:actually\s+)?(?:it'?s|it\s+is)\s+(.+)/i,
+            /(?:correct\s+)?course\s+name\s+is\s+(.+)/i,
+            /(?:the\s+)?correct\s+name\s+is\s+(.+)/i
+          ];
+          
+          // Try to extract course name from correction patterns
+          for (const pattern of correctionPatterns) {
+            const match = courseName.match(pattern);
+            if (match && match[1]) {
+              courseName = match[1].trim();
+              console.log('🔍 DEBUG: Extracted course name from correction pattern:', courseName);
+              break;
+            }
+          }
           
           // Check if it's a generic term that needs clarification
           const genericTerms = [
@@ -749,6 +789,11 @@ Extracted title:`;
                 })),
                 actionComplete: false
               };
+            }
+            
+            // If we have an exact match, proceed directly
+            if (courseMatch.isExactMatch) {
+              console.log('🔍 DEBUG: Exact match found, proceeding with course:', courseMatch.course.name);
             }
             
             // Course found and validated - use the matched course name, not the user input
@@ -966,7 +1011,27 @@ Extracted title:`;
     case 'CHECK_ASSIGNMENT_SUBMISSIONS':
       // Handle course name collection for submission status check
       if (missingParameters.includes('courseName')) {
-        const courseName = originalMessage.trim();
+        let courseName = originalMessage.trim();
+        
+        // Handle course name correction patterns
+        const correctionPatterns = [
+          /sorry\s+(?:the\s+)?course\s+name\s+is\s+(.+)/i,
+          /(?:the\s+)?course\s+name\s+is\s+(.+)/i,
+          /(?:it'?s|it\s+is)\s+(.+)/i,
+          /(?:actually\s+)?(?:it'?s|it\s+is)\s+(.+)/i,
+          /(?:correct\s+)?course\s+name\s+is\s+(.+)/i,
+          /(?:the\s+)?correct\s+name\s+is\s+(.+)/i
+        ];
+        
+        // Try to extract course name from correction patterns
+        for (const pattern of correctionPatterns) {
+          const match = courseName.match(pattern);
+          if (match && match[1]) {
+            courseName = match[1].trim();
+            console.log('🔍 DEBUG: Extracted course name from correction pattern:', courseName);
+            break;
+          }
+        }
         
         // Check if user wants to list courses
         if (courseName.toLowerCase().includes('list courses') || courseName.toLowerCase().includes('show courses')) {
