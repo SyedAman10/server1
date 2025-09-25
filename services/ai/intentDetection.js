@@ -34,7 +34,22 @@ function detectIntentFallback(message, conversationId) {
     };
   }
   
-  // Proactive suggestions for joining/inviting students
+  // Create course - MUST come BEFORE student join suggestions to prevent false positives
+  console.log('🔍 DEBUG: Checking for course intent...');
+  console.log('🔍 DEBUG: Has create/make/new course:', lowerMessage.includes('create') || lowerMessage.includes('make') || lowerMessage.includes('new course'));
+  
+  if (lowerMessage.includes('create') || lowerMessage.includes('make') || lowerMessage.includes('new course')) {
+    console.log('🎯 DEBUG: Course intent detected!');
+    return {
+      intent: 'CREATE_COURSE',
+      confidence: 0.7,
+      parameters: {
+        name: message.split('called')[1]?.trim() || message.split('named')[1]?.trim()
+      }
+    };
+  }
+  
+  // Proactive suggestions for joining/inviting students - ONLY for specific student-related keywords
   if (
     lowerMessage.includes('join') || 
     lowerMessage.includes('invite') || 
@@ -67,8 +82,8 @@ function detectIntentFallback(message, conversationId) {
       }
     }
     
-    // Check for generic terms that should trigger clarification
-    const genericTerms = ['my class', 'my course', 'the class', 'the course', 'this class', 'this course', 'class', 'course'];
+    // Check for generic terms that should trigger clarification - but NOT for course creation
+    const genericTerms = ['my class', 'my course', 'the class', 'the course', 'this class', 'this course'];
     const isGenericTerm = genericTerms.some(term => 
       courseName.toLowerCase().includes(term.toLowerCase()) || 
       courseName.toLowerCase() === term.toLowerCase()
@@ -339,20 +354,6 @@ function detectIntentFallback(message, conversationId) {
     };
   }
   
-  // Create course
-  console.log('🔍 DEBUG: Checking for course intent...');
-  console.log('🔍 DEBUG: Has create/make/new course:', lowerMessage.includes('create') || lowerMessage.includes('make') || lowerMessage.includes('new course'));
-  
-  if (lowerMessage.includes('create') || lowerMessage.includes('make') || lowerMessage.includes('new course')) {
-    console.log('🎯 DEBUG: Course intent detected!');
-    return {
-      intent: 'CREATE_COURSE',
-      confidence: 0.7,
-      parameters: {
-        name: message.split('called')[1]?.trim() || message.split('named')[1]?.trim()
-      }
-    };
-  }
   
   // View announcements - MUST come BEFORE CREATE_ANNOUNCEMENT to prevent false positives
   if ((lowerMessage.includes('show') || lowerMessage.includes('view') || lowerMessage.includes('list') || lowerMessage.includes('get')) && 
