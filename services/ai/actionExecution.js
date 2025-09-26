@@ -3095,9 +3095,17 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           );
           
           if (!courseMatch.success) {
+            // Start ongoing action to allow user to correct course name
+            startOngoingAction(conversationId, 'INVITE_STUDENTS', ['courseName'], { studentEmails: parameters.studentEmails });
+            
             return {
               message: courseMatch.message,
-              conversationId: req.body.conversationId
+              conversationId: req.body.conversationId,
+              ongoingAction: {
+                action: 'INVITE_STUDENTS',
+                missingParameters: ['courseName'],
+                collectedParameters: { studentEmails: parameters.studentEmails }
+              }
             };
           }
           
