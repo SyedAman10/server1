@@ -1028,10 +1028,36 @@ Extracted title:`;
         console.log('🔍 DEBUG: Looking for student emails in message');
         const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
         const emails = originalMessage.match(emailRegex) || [];
-        if (emails.length > 0) {
-          newParameters.studentEmails = emails;
+        
+        // Also check for common email format issues
+        const potentialEmails = originalMessage.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.,-]+\.[a-zA-Z]{2,}/g) || [];
+        const correctedEmails = potentialEmails.map(email => {
+          // Fix common issues
+          return email.replace(/,/g, '.'); // Replace comma with period in domain
+        }).filter(email => {
+          // Validate the corrected email
+          return /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(email);
+        });
+        
+        const allEmails = [...emails, ...correctedEmails];
+        const uniqueEmails = [...new Set(allEmails)]; // Remove duplicates
+        
+        if (uniqueEmails.length > 0) {
+          newParameters.studentEmails = uniqueEmails;
           parametersFound = true;
-          console.log('🔍 DEBUG: Found student emails:', emails);
+          console.log('🔍 DEBUG: Found student emails:', uniqueEmails);
+          
+          // Check for potential issues and warn user
+          const problematicEmails = uniqueEmails.filter(email => {
+            return email.includes(',') || 
+                   !email.includes('@') || 
+                   !email.includes('.') ||
+                   email.trim() !== email;
+          });
+          
+          if (problematicEmails.length > 0) {
+            console.log('🔍 DEBUG: Found potentially problematic emails:', problematicEmails);
+          }
         }
       }
       
@@ -3319,7 +3345,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             completeOngoingAction(conversationId);
           }
           
-          // Check if it's a domain restriction issue
+          // Check for specific error types and provide helpful feedback
           if (error.message.includes('The caller does not have permission') || 
               error.message.includes('PERMISSION_DENIED')) {
             return {
@@ -3327,6 +3353,40 @@ async function executeAction(intentData, originalMessage, userToken, req) {
               conversationId: req.body.conversationId,
               enrollmentCode: selectedCourse.enrollmentCode,
               courseLink: selectedCourse.alternateLink
+            };
+          }
+          
+          // Check for "Requested entity was not found" - usually means invalid email
+          if (error.message.includes('Requested entity was not found')) {
+            const invalidEmails = studentEmails.filter(email => {
+              // Check for common email format issues
+              return !email.includes('@') || 
+                     email.includes(',') || 
+                     !email.includes('.') ||
+                     email.trim() !== email;
+            });
+            
+            let errorMessage = `**Invalid Email Address(es)**\n\nI couldn't invite some students because their email addresses appear to be invalid:\n\n`;
+            
+            if (invalidEmails.length > 0) {
+              errorMessage += `**Invalid Emails:**\n${invalidEmails.map(email => `• ${email}`).join('\n')}\n\n`;
+              errorMessage += `**Common Issues:**\n• Missing @ symbol\n• Using comma (,) instead of period (.) in domain\n• Extra spaces or characters\n• Missing domain extension\n\n`;
+            }
+            
+            errorMessage += `**All Emails Attempted:** ${studentEmails.join(', ')}\n**Course:** ${selectedCourse.name}\n\n**Correct Format:** student@domain.com\n**Incorrect:** student@domain,com or student@domain`;
+            
+            return {
+              message: errorMessage,
+              conversationId: req.body.conversationId,
+              invalidEmails: invalidEmails
+            };
+          }
+          
+          // Check for other specific Google Classroom errors
+          if (error.message.includes('INVALID_ARGUMENT') || error.message.includes('invalid')) {
+            return {
+              message: `**Invalid Request**\n\nThere was an issue with the student invitation request. Please check:\n\n**Student Emails:** ${studentEmails.join(', ')}\n**Course:** ${selectedCourse.name}\n\n**Try:**\n• Verify email addresses are correct\n• Check for typos in email domains\n• Ensure emails are properly formatted\n• Try with a different email address",
+              conversationId: req.body.conversationId
             };
           }
           
@@ -3371,7 +3431,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
         // If this is a generic term or needs disambiguation, ask for specific course
         if (needsDisambiguation || isGenericTerm) {
           return {
-            message: `I'd be happy to help you invite students! 😊\n\nI need to know which specific course you're referring to. Could you please tell me the name of the class? For example: "Computer Science", "Math 101", or "AI".\n\nOnce you tell me the course name, I can help you invite students to it!`,
+            message: "I'd be happy to help you invite students!\n\nI need to know which specific course you're referring to. Could you please tell me the name of the class? For example: \"Computer Science\", \"Math 101\", or \"AI\".\n\nOnce you tell me the course name, I can help you invite students to it!",
             conversationId: req.body.conversationId,
             suggestions: [
               "invite student [email] to class [course name]",
@@ -3393,7 +3453,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             ...req,
             body: {
               ...req.body,
-              message: `invite student ${emails[0]} to class ${extractedCourse}`
+              message: "invite student " + emails[0] + " to class " + extractedCourse
             }
           }, userRole, userToken, baseUrl);
         }
@@ -3404,12 +3464,12 @@ async function executeAction(intentData, originalMessage, userToken, req) {
         
         if (emails.length > 0) {
           // We found email but no course
-          suggestions.push(`invite student ${emails[0]} to class [course name]`);
-          specificHelp = `\n\nI found a student email: ${emails[0]}\nJust tell me which class to invite them to!`;
+          suggestions.push("invite student " + emails[0] + " to class [course name]");
+          specificHelp = "\n\nI found a student email: " + emails[0] + "\nJust tell me which class to invite them to!";
         } else if (extractedCourse && !isGenericTerm) {
           // We found course but no email
-          suggestions.push(`invite student [email] to class ${extractedCourse}`);
-          specificHelp = `\n\nI found a course: ${extractedCourse}\nJust tell me which student to invite!`;
+          suggestions.push("invite student [email] to class " + extractedCourse);
+          specificHelp = "\n\nI found a course: " + extractedCourse + "\nJust tell me which student to invite!";
         }
         
         // Add general suggestions
@@ -3420,7 +3480,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
         );
         
         return {
-          message: `I'd be happy to help you with student invitations! 😊\n\nInstead of sharing join links, it's better to invite students directly by adding their email addresses. This way, they'll receive a proper invitation and can join your class easily.\n\nHere's how to invite a student:\nJust say: "invite student [email] to class [course name]"\n\nFor example:\n"invite student john@gmail.com to class AI"`,
+          message: "I'd be happy to help you with student invitations!\n\nInstead of sharing join links, it's better to invite students directly by adding their email addresses. This way, they'll receive a proper invitation and can join your class easily.\n\nHere's how to invite a student:\nJust say: \"invite student [email] to class [course name]\"\n\nFor example:\n\"invite student john@gmail.com to class AI\"",
           conversationId: req.body.conversationId,
           suggestions: suggestions,
           extractedData: {
@@ -3439,7 +3499,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
         }
         // Get all courses to find the matching one
         const teacherCoursesResponse = await makeApiCall(
-          `${baseUrl}/api/classroom`,
+          baseUrl + "/api/classroom",
           'GET',
           null,
           userToken,
@@ -3460,14 +3520,14 @@ async function executeAction(intentData, originalMessage, userToken, req) {
 
         if (teacherMatchingCourses.length === 0) {
           return {
-            message: `I couldn't find any courses matching "${parameters.courseName}".`,
+            message: "I couldn't find any courses matching \"" + parameters.courseName + "\".",
             conversationId: req.body.conversationId
           };
         } else if (teacherMatchingCourses.length === 1) {
           // Exact match - invite the teachers
           const courseId = teacherMatchingCourses[0].id;
           const response = await makeApiCall(
-            `${baseUrl}/api/classroom/${courseId}/invite-teachers`,
+            baseUrl + "/api/classroom/" + courseId + "/invite-teachers",
             'POST',
             { emails: parameters.emails },
             userToken,
@@ -3475,14 +3535,14 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           );
 
           return {
-            message: `Successfully invited ${parameters.emails.length} teachers to ${teacherMatchingCourses[0].name}.`,
+            message: "Successfully invited " + parameters.emails.length + " teachers to " + teacherMatchingCourses[0].name + ".",
             conversationId: req.body.conversationId
           };
         } else {
           // Multiple matches - ask for clarification
           return {
             type: 'COURSE_DISAMBIGUATION_NEEDED',
-            message: `I found multiple courses matching "${parameters.courseName}". Which one would you like to invite the teachers to?`,
+            message: "I found multiple courses matching \"" + parameters.courseName + "\". Which one would you like to invite the teachers to?",
             options: teacherMatchingCourses.map(course => ({
               id: course.id,
               name: course.name,
