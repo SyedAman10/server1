@@ -2,6 +2,7 @@ const { calculateDateFromExpression, convertTimeExpression } = require('../../ut
 const axios = require('axios');
 const jwt = require('jsonwebtoken');
 const { getUserByEmail } = require('../../models/user.model');
+const OpenAI = require('openai');
 const { 
   generateConversationId, 
   startOngoingAction, 
@@ -15,6 +16,89 @@ const {
 } = require('./conversationManager');
 const { createAssignment, listAssignments } = require('../assignmentService');
 const { createMeeting, findMeetingByDateTime, updateMeeting, deleteMeeting, listUpcomingMeetings } = require('../meetingService');
+
+// Initialize OpenAI
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
+
+/**
+ * AI-powered error analysis and response generation
+ */
+async function generateIntelligentErrorResponse(error, context) {
+  try {
+    const errorLog = {
+      message: error.message,
+      status: error.status,
+      code: error.code,
+      errors: error.errors || [],
+      config: {
+        url: error.config?.url,
+        method: error.config?.method,
+        data: error.config?.data
+      },
+      response: {
+        status: error.response?.status,
+        statusText: error.response?.statusText
+      }
+    };
+
+    const contextInfo = {
+      action: context.action || 'UNKNOWN',
+      studentEmails: context.studentEmails || [],
+      courseName: context.courseName || 'Unknown',
+      courseId: context.courseId || 'Unknown'
+    };
+
+    const prompt = `
+You are an AI assistant that analyzes error logs and generates helpful, user-friendly error messages for a classroom management system.
+
+ERROR LOG:
+${JSON.stringify(errorLog, null, 2)}
+
+CONTEXT:
+${JSON.stringify(contextInfo, null, 2)}
+
+Based on this error information, generate a helpful error message that:
+1. Explains what went wrong in simple terms
+2. Identifies the specific issue (email format, permissions, network, etc.)
+3. Provides actionable solutions
+4. Is empathetic and professional
+5. Uses emojis and formatting to make it readable
+
+Common error patterns to look for:
+- "Requested entity was not found" + invalid email format (comma instead of period)
+- "PERMISSION_DENIED" + domain restrictions
+- "Missing required OAuth2 tokens" + authentication issues
+- Network timeouts or connection issues
+- Invalid course IDs or non-existent courses
+
+Generate a response that helps the user understand and fix the issue.
+`;
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: "You are an expert at analyzing technical errors and explaining them to users in a helpful, friendly way. Always provide actionable solutions."
+        },
+        {
+          role: "user",
+          content: prompt
+        }
+      ],
+      max_tokens: 500,
+      temperature: 0.3
+    });
+
+    return response.choices[0].message.content.trim();
+  } catch (aiError) {
+    console.error('Error generating AI error response:', aiError);
+    // Fallback to basic error message
+    return `❌ **Error Analysis Failed**\n\nI encountered an error while analyzing the problem: ${error.message}\n\nPlease try again or contact support if the issue persists.`;
+  }
+}
 
 /**
  * Check if user is trying to start a new action while one is in progress
@@ -3085,6 +3169,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           };
         }
         
+        let selectedCourse;
         try {
           // Use the reusable course matching function
           const courseMatch = await findMatchingCourse(
@@ -3109,7 +3194,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             };
           }
           
-          const selectedCourse = courseMatch.course;
+          selectedCourse = courseMatch.course;
           
           if (courseMatch.allMatches && courseMatch.allMatches.length > 1 && !courseMatch.isExactMatch) {
             // Multiple matches - ask for clarification
@@ -3322,11 +3407,15 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           // Check if it's a domain restriction issue
           if (error.message.includes('The caller does not have permission') || 
               error.message.includes('PERMISSION_DENIED')) {
+            const courseName = selectedCourse ? selectedCourse.name : parameters.courseName;
+            const enrollmentCode = selectedCourse ? selectedCourse.enrollmentCode : 'N/A';
+            const courseLink = selectedCourse ? selectedCourse.alternateLink : 'N/A';
+            
             return {
-              message: `❌ **Unable to Invite Students**\n\nI couldn't invite the students due to Google Classroom restrictions. This is likely because:\n\n**🔒 Domain Restrictions:**\n• Google Classroom may have domain restrictions enabled\n• Cross-domain invitations might be blocked\n• The student's email domain may not be allowed\n\n**📧 Student Email:** ${studentEmails.join(', ')}\n**🏫 Course:** ${selectedCourse.name}\n\n**💡 Solutions:**\n1. **Share the enrollment code:** ${selectedCourse.enrollmentCode}\n2. **Ask students to join manually:** They can use the code above\n3. **Check domain policies:** Contact your Google Workspace admin\n4. **Try with same-domain emails:** Use emails from your organization\n\n**🔗 Course Link:** ${selectedCourse.alternateLink}`,
+              message: `❌ **Unable to Invite Students**\n\nI couldn't invite the students due to Google Classroom restrictions. This is likely because:\n\n**🔒 Domain Restrictions:**\n• Google Classroom may have domain restrictions enabled\n• Cross-domain invitations might be blocked\n• The student's email domain may not be allowed\n\n**📧 Student Email:** ${studentEmails.join(', ')}\n**🏫 Course:** ${courseName}\n\n**💡 Solutions:**\n1. **Share the enrollment code:** ${enrollmentCode}\n2. **Ask students to join manually:** They can use the code above\n3. **Check domain policies:** Contact your Google Workspace admin\n4. **Try with same-domain emails:** Use emails from your organization\n\n**🔗 Course Link:** ${courseLink}`,
               conversationId: req.body.conversationId,
-              enrollmentCode: selectedCourse.enrollmentCode,
-              courseLink: selectedCourse.alternateLink
+              enrollmentCode: enrollmentCode,
+              courseLink: courseLink
             };
           }
           
@@ -3340,6 +3429,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
                      email.trim() !== email;
             });
             
+            const courseName = selectedCourse ? selectedCourse.name : parameters.courseName;
             let errorMessage = `❌ **Invalid Email Address(es)**\n\nI couldn't invite some students because their email addresses appear to be invalid:\n\n`;
             
             if (invalidEmails.length > 0) {
@@ -3347,7 +3437,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
               errorMessage += `**Common Issues:**\n• Missing @ symbol\n• Using comma (,) instead of period (.) in domain\n• Extra spaces or characters\n• Missing domain extension\n\n`;
             }
             
-            errorMessage += `**All Emails Attempted:** ${studentEmails.join(', ')}\n**Course:** ${selectedCourse.name}\n\n**Correct Format:** student@domain.com\n**Incorrect:** student@domain,com or student@domain`;
+            errorMessage += `**All Emails Attempted:** ${studentEmails.join(', ')}\n**Course:** ${courseName}\n\n**Correct Format:** student@domain.com\n**Incorrect:** student@domain,com or student@domain`;
             
             return {
               message: errorMessage,
@@ -3356,8 +3446,18 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             };
           }
           
+          // Generate AI-powered error response
+          const context = {
+            action: 'INVITE_STUDENTS',
+            studentEmails: studentEmails,
+            courseName: selectedCourse ? selectedCourse.name : parameters.courseName,
+            courseId: selectedCourse ? selectedCourse.id : 'Unknown'
+          };
+          
+          const intelligentErrorMessage = await generateIntelligentErrorResponse(error, context);
+          
           return {
-            message: "Sorry, I encountered an error while inviting students. Please try again.",
+            message: intelligentErrorMessage,
             error: error.message,
             conversationId: req.body.conversationId
           };
