@@ -64,7 +64,8 @@ Based on this error information, generate a helpful error message that:
 2. Identifies the specific issue (email format, permissions, network, etc.)
 3. Provides actionable solutions
 4. Is empathetic and professional
-5. Uses emojis and formatting to make it readable
+5. Keep it SHORT and CLEAN - no markdown formatting, no asterisks, no excessive emojis
+6. Use simple bullet points and clear language
 
 Common error patterns to look for:
 - "Requested entity was not found" + invalid email format (comma instead of period)
@@ -73,7 +74,7 @@ Common error patterns to look for:
 - Network timeouts or connection issues
 - Invalid course IDs or non-existent courses
 
-Generate a response that helps the user understand and fix the issue.
+Generate a concise response that helps the user understand and fix the issue.
 `;
 
     const response = await openai.chat.completions.create({
@@ -96,7 +97,7 @@ Generate a response that helps the user understand and fix the issue.
   } catch (aiError) {
     console.error('Error generating AI error response:', aiError);
     // Fallback to basic error message
-    return `❌ **Error Analysis Failed**\n\nI encountered an error while analyzing the problem: ${error.message}\n\nPlease try again or contact support if the issue persists.`;
+    return `Error Analysis Failed\n\nI encountered an error while analyzing the problem: ${error.message}\n\nPlease try again or contact support if the issue persists.`;
   }
 }
 
@@ -3430,14 +3431,14 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             });
             
             const courseName = selectedCourse ? selectedCourse.name : parameters.courseName;
-            let errorMessage = `❌ **Invalid Email Address(es)**\n\nI couldn't invite some students because their email addresses appear to be invalid:\n\n`;
+            let errorMessage = `I couldn't invite some students because their email addresses appear to be invalid:\n\n`;
             
             if (invalidEmails.length > 0) {
-              errorMessage += `**Invalid Emails:**\n${invalidEmails.map(email => `• ${email}`).join('\n')}\n\n`;
-              errorMessage += `**Common Issues:**\n• Missing @ symbol\n• Using comma (,) instead of period (.) in domain\n• Extra spaces or characters\n• Missing domain extension\n\n`;
+              errorMessage += `Invalid Emails:\n${invalidEmails.map(email => `• ${email}`).join('\n')}\n\n`;
+              errorMessage += `Common Issues:\n• Missing @ symbol\n• Using comma (,) instead of period (.) in domain\n• Extra spaces or characters\n• Missing domain extension\n\n`;
             }
             
-            errorMessage += `**All Emails Attempted:** ${studentEmails.join(', ')}\n**Course:** ${courseName}\n\n**Correct Format:** student@domain.com\n**Incorrect:** student@domain,com or student@domain`;
+            errorMessage += `All Emails Attempted: ${studentEmails.join(', ')}\nCourse: ${courseName}\n\nCorrect Format: student@domain.com\nIncorrect: student@domain,com or student@domain`;
             
             return {
               message: errorMessage,
