@@ -958,35 +958,69 @@ Extracted title:`;
       // Check if user provided course name
       if (missingParameters.includes('courseName')) {
         console.log('🔍 DEBUG: Looking for course name in message');
-        const courseMatch = originalMessage.match(/(?:to|in)\s+(.+?)(?:\s|$)/i);
-        if (courseMatch && courseMatch[1]) {
-          newParameters.courseName = courseMatch[1].trim();
-          parametersFound = true;
-          console.log('🔍 DEBUG: Found course name from pattern:', newParameters.courseName);
+        let courseName = originalMessage.trim();
+        
+        // Handle course name correction patterns first
+        const correctionPatterns = [
+          /sorry\s+(?:it\s+is|the\s+)?(.+)/i,
+          /(?:it'?s|it\s+is)\s+(.+)/i,
+          /(?:actually\s+)?(?:it'?s|it\s+is)\s+(.+)/i,
+          /(?:the\s+)?correct\s+(?:course\s+)?name\s+is\s+(.+)/i,
+          /(?:the\s+)?course\s+name\s+is\s+(.+)/i,
+          /(?:to|in)\s+(.+?)(?:\s|$)/i,
+          /add\s+student\s+to\s+(.+)/i
+        ];
+        
+        // Try to extract course name from correction patterns
+        for (const pattern of correctionPatterns) {
+          const match = courseName.match(pattern);
+          if (match && match[1]) {
+            courseName = match[1].trim();
+            console.log('🔍 DEBUG: Extracted course name from correction pattern:', courseName);
+            break;
+          }
         }
         
-        // Also check for "add student to class" pattern
-        const addToClassMatch = originalMessage.match(/add\s+student\s+to\s+(.+)/i);
-        if (addToClassMatch && addToClassMatch[1]) {
-          newParameters.courseName = addToClassMatch[1].trim();
-          parametersFound = true;
-          console.log('🔍 DEBUG: Found course name from add pattern:', newParameters.courseName);
+        // Check if user wants to list courses
+        if (courseName.toLowerCase().includes('list courses') || courseName.toLowerCase().includes('show courses')) {
+          try {
+            const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken, req);
+            const courses = Array.isArray(coursesResponse) ? coursesResponse : (coursesResponse.courses || []);
+            
+            if (courses.length === 0) {
+              return {
+                action: 'INVITE_STUDENTS',
+                missingParameters: ['courseName'],
+                collectedParameters: { ...collectedParameters },
+                nextMessage: "I don't see any courses available. Please create a course first or check your Google Classroom setup.",
+                actionComplete: false
+              };
+            }
+            
+            const courseList = courses.map(course => `• ${course.name}${course.section ? ` (${course.section})` : ''}`).join('\n');
+            
+            return {
+              action: 'INVITE_STUDENTS',
+              missingParameters: ['courseName'],
+              collectedParameters: { ...collectedParameters },
+              nextMessage: `Here are your available courses:\n\n${courseList}\n\nWhich course would you like to invite students to?`,
+              actionComplete: false
+            };
+          } catch (error) {
+            console.error('Error fetching courses:', error);
+            return {
+              action: 'INVITE_STUDENTS',
+              missingParameters: ['courseName'],
+              collectedParameters: { ...collectedParameters },
+              nextMessage: "I couldn't fetch your courses. Please try again or provide the course name directly.",
+              actionComplete: false
+            };
+          }
         }
         
-        // Check if user just provided a course name without "to" or "in"
-        if (!parametersFound && originalMessage.length < 50 && !originalMessage.includes('@')) {
-          // Likely just a course name
-          newParameters.courseName = originalMessage.trim();
-          parametersFound = true;
-          console.log('🔍 DEBUG: Treating message as course name:', newParameters.courseName);
-        }
-        
-        // If we still haven't found a course name, check if this is a simple course name
-        if (!parametersFound && originalMessage.length < 30 && !originalMessage.includes('@') && !originalMessage.includes(' ')) {
-          newParameters.courseName = originalMessage.trim();
-          parametersFound = true;
-          console.log('🔍 DEBUG: Treating short message as course name:', newParameters.courseName);
-        }
+        newParameters.courseName = courseName;
+        parametersFound = true;
+        console.log('🔍 DEBUG: Found course name:', newParameters.courseName);
       }
       
       // Check if user provided student emails
@@ -3721,6 +3755,64 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           message: helpMessage,
           conversationId: conversationId
         };
+
+      case 'COURSE_NAME_CORRECTION': {
+        // Handle course name corrections - this should be processed as parameter collection
+        if (conversationId) {
+          const context = getOngoingActionContext(conversationId);
+          if (context && context.action === 'INVITE_STUDENTS' && context.missingParameters.includes('courseName')) {
+            console.log('🔍 DEBUG: Processing course name correction for ongoing INVITE_STUDENTS action');
+            // Process this as parameter collection for the ongoing action
+            const parameterCollection = await handleParameterCollection(context.action, context.collectedParameters, conversationId, originalMessage, userToken, req, baseUrl);
+            
+            if (parameterCollection) {
+              if (parameterCollection.actionComplete) {
+                // Action is now complete, execute it with all collected parameters
+                console.log(`🎯 Action ${parameterCollection.action} is now complete with parameters:`, parameterCollection.allParameters);
+                
+                // Update the intent data with the complete parameters
+                intentData.intent = parameterCollection.action;
+                intentData.parameters = parameterCollection.allParameters;
+                intent = parameterCollection.action;
+                parameters = parameterCollection.allParameters;
+                
+                console.log(`🔄 Updated intent to ${parameterCollection.action}`);
+                
+                // Continue with normal execution below
+              } else {
+                // Still missing parameters, ask for the next one
+                console.log('🔍 Still missing parameters:', parameterCollection.missingParameters);
+                return {
+                  message: parameterCollection.nextMessage,
+                  conversationId: conversationId,
+                  ongoingAction: {
+                    action: parameterCollection.action,
+                    missingParameters: parameterCollection.missingParameters,
+                    collectedParameters: parameterCollection.collectedParameters
+                  }
+                };
+              }
+            } else {
+              // No parameter collection result, ask for clarification
+              return {
+                message: "I didn't understand that course name. Could you please provide the correct course name?",
+                conversationId: conversationId,
+                ongoingAction: context
+              };
+            }
+          } else {
+            return {
+              message: "I'm not sure what you're correcting. Could you please provide more context?",
+              conversationId: conversationId
+            };
+          }
+        }
+        
+        return {
+          message: "I'm not sure what you're correcting. Could you please provide more context?",
+          conversationId: conversationId
+        };
+      }
 
       case 'UNKNOWN':
         // Handle unknown intents gracefully

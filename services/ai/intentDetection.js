@@ -909,6 +909,7 @@ async function detectIntent(message, conversationHistory, conversationId) {
       - SEND_EMAIL: User wants to send an email to someone (extract recipientEmail, subject, message, attachments if specified)
       - CANCEL_ACTION: User wants to cancel, stop, or abort an ongoing action (e.g., user says "cancel", "stop", "never mind", "forget it", "that's all", "done", "quit", "exit", "abort")
       - PROCEED_WITH_AVAILABLE_INFO: User wants to skip providing more information and proceed with available data (e.g., user says "no", "skip", "that's all", "proceed", etc.)
+      - COURSE_NAME_CORRECTION: User is correcting or clarifying a course name (e.g., "sorry it is ai support", "it's actually math 101", "the course name is physics 2") - This should be used when user is providing a corrected course name
       - STUDENT_JOIN_SUGGESTION: User is asking about joining a class, inviting students, or how students can join (provide helpful suggestions and prompts) - USE THIS for generic terms like "my class", "the class", "this class", "class", "course"
       - GREETING: User is saying hello, hi, hey, good morning/afternoon/evening, how are you, what's up, thanks, or engaging in casual conversation (no action needed)
         Examples: "hi", "hello", "hey there", "good morning", "how are you doing?", "thanks", "thank you"
