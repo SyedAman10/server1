@@ -1153,7 +1153,11 @@ Extracted title:`;
         }
         
         // Check if user wants to check all courses
-        if (courseName.toLowerCase() === 'all' || courseName.toLowerCase() === 'all courses') {
+        if (courseName.toLowerCase() === 'all' || 
+            courseName.toLowerCase() === 'all courses' ||
+            courseName.toLowerCase().includes('all courses') ||
+            courseName.toLowerCase().includes('all courses created today') ||
+            courseName.toLowerCase().includes('courses created today')) {
           newParameters.courseName = 'all';
           newParameters.checkAllCourses = true;
           parametersFound = true;
@@ -5466,9 +5470,33 @@ async function executeAction(intentData, originalMessage, userToken, req) {
         }
       }
       
+      case 'PROCEED_WITH_AVAILABLE_INFO': {
+        // Handle user wanting to proceed with available information
+        if (conversationId) {
+          const context = getOngoingActionContext(conversationId);
+          if (context) {
+            // Complete the ongoing action and proceed with what we have
+            completeOngoingAction(conversationId);
+            return {
+              message: "I'll proceed with the available information. Let me know if you need anything else!",
+              conversationId: conversationId
+            };
+          } else {
+            return {
+              message: "I don't have any ongoing actions to proceed with. What would you like me to help you with?",
+              conversationId: conversationId
+            };
+          }
+        }
+        return {
+          message: "I don't have any ongoing actions to proceed with. What would you like me to help you with?",
+          conversationId: conversationId
+        };
+      }
+      
       default:
         console.log('❌ DEBUG: No matching case found for intent:', intent);
-        console.log('🔍 DEBUG: Available cases: LIST_COURSES, CREATE_COURSE, LIST_ASSIGNMENTS, CREATE_ANNOUNCEMENT, GET_ANNOUNCEMENTS, GET_COURSE, CREATE_ASSIGNMENT, INVITE_STUDENTS, INVITE_TEACHERS, PROVIDE_MATERIALS, HELP, CHECK_ASSIGNMENT_SUBMISSIONS, GRADE_ASSIGNMENT, CREATE_MEETING, SHOW_ENROLLED_STUDENTS, READ_EMAIL, SEND_EMAIL');
+        console.log('🔍 DEBUG: Available cases: LIST_COURSES, CREATE_COURSE, LIST_ASSIGNMENTS, CREATE_ANNOUNCEMENT, GET_ANNOUNCEMENTS, GET_COURSE, CREATE_ASSIGNMENT, INVITE_STUDENTS, INVITE_TEACHERS, PROVIDE_MATERIALS, HELP, CHECK_ASSIGNMENT_SUBMISSIONS, GRADE_ASSIGNMENT, CREATE_MEETING, SHOW_ENROLLED_STUDENTS, READ_EMAIL, SEND_EMAIL, PROCEED_WITH_AVAILABLE_INFO, CANCEL_ACTION');
         return {
           message: "I'm not sure how to handle that request. Please try again or ask for help.",
           conversationId: conversationId
