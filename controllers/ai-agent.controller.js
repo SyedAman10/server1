@@ -474,13 +474,24 @@ async function handleMessage(req, res) {
     
     let intentData;
     if (ongoingAction) {
-      // If there's an ongoing action, create a dummy intent for parameter collection
-      console.log('🔍 DEBUG: Ongoing action detected, skipping intent detection');
-      intentData = {
-        intent: 'PARAMETER_COLLECTION',
-        confidence: 1.0,
-        parameters: {}
-      };
+      // Check if the message is a new intent that should override the ongoing action
+      const newIntentData = await detectIntent(message, history);
+      
+      // Allow certain intents to override ongoing actions
+      const overrideIntents = ['CHECK_UNSUBMITTED_ASSIGNMENTS', 'CHECK_ASSIGNMENT_SUBMISSIONS', 'INVITE_STUDENTS', 'CREATE_ANNOUNCEMENT', 'CREATE_ASSIGNMENT'];
+      
+      if (overrideIntents.includes(newIntentData.intent) && newIntentData.confidence > 0.8) {
+        console.log('🔍 DEBUG: New intent detected, overriding ongoing action:', newIntentData.intent);
+        intentData = newIntentData;
+      } else {
+        // If there's an ongoing action, create a dummy intent for parameter collection
+        console.log('🔍 DEBUG: Ongoing action detected, skipping intent detection');
+        intentData = {
+          intent: 'PARAMETER_COLLECTION',
+          confidence: 1.0,
+          parameters: {}
+        };
+      }
     } else {
       // Detect intent only if no ongoing action
       intentData = await detectIntent(message, history);

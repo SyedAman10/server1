@@ -5991,6 +5991,12 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             });
           }
           
+          // Complete the ongoing action after showing results
+          if (conversationId) {
+            completeOngoingAction(conversationId);
+            console.log('✅ DEBUG: Completed CHECK_UNSUBMITTED_ASSIGNMENTS action - conversation context cleared');
+          }
+          
           return {
             message: message,
             conversationId: req.body.conversationId
