@@ -1196,9 +1196,14 @@ Extracted title:`;
           };
         }
         // Check if user wants to cancel (common responses after "couldn't find courses")
-        else if (courseName.toLowerCase() === 'ok' || courseName.toLowerCase() === 'cancel' || 
+        console.log('🔍 DEBUG: Checking for cancellation patterns:', courseName);
+        if (courseName.toLowerCase() === 'ok' || courseName.toLowerCase() === 'cancel' || 
                  courseName.toLowerCase() === 'stop' || courseName.toLowerCase() === 'never mind' ||
-                 courseName.toLowerCase() === 'forget it' || courseName.toLowerCase() === 'done') {
+                 courseName.toLowerCase() === 'forget it' || courseName.toLowerCase() === 'done' ||
+                 courseName.toLowerCase().includes('cancel') || courseName.toLowerCase().includes('stop') ||
+                 courseName.toLowerCase().includes('never mind') || courseName.toLowerCase().includes('forget it') ||
+                 courseName.toLowerCase().includes('cancel this action') || courseName.toLowerCase().includes('cancel action')) {
+          console.log('✅ DEBUG: Matched cancellation pattern, cancelling action');
           return {
             action: 'CHECK_ASSIGNMENT_SUBMISSIONS',
             missingParameters: [],
