@@ -1516,6 +1516,17 @@ Extracted title:`;
         newParameters.courseIdentifier = courseMatch.course.id;
         parametersFound = true;
         
+        // Update the ongoing action to track assignment title collection
+        updateOngoingActionParameters(conversationId, newParameters);
+        
+        // Update the ongoing action context to require assignment title instead of course name
+        const conversation = getConversation(conversationId);
+        if (conversation && conversation.context.ongoingAction === 'CHECK_UNSUBMITTED_ASSIGNMENTS') {
+          conversation.context.requiredParameters = ['assignmentTitle'];
+          conversation.context.missingParameters = ['assignmentTitle'];
+          console.log('🔍 DEBUG: Updated ongoing action to require assignmentTitle instead of courseName');
+        }
+        
         // If this is for today's assignment, we can complete the action
         if (collectedParameters.isTodaysAssignment) {
           return {
@@ -1542,6 +1553,8 @@ Extracted title:`;
       if (missingParameters.includes('assignmentTitle')) {
         console.log('🔍 DEBUG: Processing assignment title collection for CHECK_UNSUBMITTED_ASSIGNMENTS');
         console.log('🔍 DEBUG: originalMessage for assignment title:', originalMessage);
+        console.log('🔍 DEBUG: missingParameters:', missingParameters);
+        console.log('🔍 DEBUG: collectedParameters:', collectedParameters);
         let assignmentTitle = originalMessage.trim();
         
         // Handle assignment title correction patterns
