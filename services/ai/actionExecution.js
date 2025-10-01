@@ -4118,16 +4118,17 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           let matchingAssignments = [];
           
           if (parameters.isTodaysAssignment) {
-            // Find assignments created today
+            // Find assignments created today (using UTC to avoid timezone issues)
             const today = new Date();
-            const todayStr = today.toISOString().split('T')[0]; // YYYY-MM-DD format
+            const todayStr = today.toISOString().split('T')[0]; // YYYY-MM-DD format in UTC
             
-            console.log('🔍 DEBUG: Looking for assignments created today:', todayStr);
+            console.log('🔍 DEBUG: Looking for assignments created today (UTC):', todayStr);
+            console.log('🔍 DEBUG: Current server time:', today.toISOString());
             
             matchingAssignments = assignments.filter(a => {
               if (!a.creationTime) return false;
               
-              // Parse the creation date
+              // Parse the creation date (already in UTC from Google Classroom API)
               const creationDate = new Date(a.creationTime);
               const creationDateStr = creationDate.toISOString().split('T')[0];
               
@@ -4137,10 +4138,29 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             });
             
             if (matchingAssignments.length === 0) {
-              return {
-                message: `I couldn't find any assignments created today in ${selectedCourse.name}.`,
-                conversationId: req.body.conversationId
-              };
+              // If no assignments found for today, show recent assignments instead
+              const recentAssignments = assignments
+                .filter(a => a.creationTime)
+                .sort((a, b) => new Date(b.creationTime) - new Date(a.creationTime))
+                .slice(0, 3); // Show last 3 assignments
+              
+              if (recentAssignments.length > 0) {
+                const recentList = recentAssignments.map(a => {
+                  const date = new Date(a.creationTime).toLocaleDateString();
+                  return `• ${a.title} (${date})`;
+                }).join('\n');
+                
+                return {
+                  message: `I couldn't find any assignments created today in ${selectedCourse.name}.\n\nRecent assignments:\n${recentList}\n\nWould you like to check submissions for one of these assignments instead?`,
+                  conversationId: req.body.conversationId,
+                  suggestions: recentAssignments.map(a => `check submissions for ${a.title}`)
+                };
+              } else {
+                return {
+                  message: `I couldn't find any assignments created today in ${selectedCourse.name}. There are no assignments in this course yet.`,
+                  conversationId: req.body.conversationId
+                };
+              }
             } else if (matchingAssignments.length > 1) {
               // Start ongoing action to handle assignment selection
               if (conversationId) {
