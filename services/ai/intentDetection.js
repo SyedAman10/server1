@@ -15,6 +15,35 @@ function detectIntentFallback(message, conversationId) {
   const lastMessage = conversationId ? getLastMessage(conversationId) : null;
   const lastMessages = conversationId ? getLastMessages(conversationId, 3) : [];
   
+  // Check unsubmitted assignments
+  if (
+    lowerMessage.includes('who has not submitted') || 
+    lowerMessage.includes('who hasn\'t submitted') ||
+    lowerMessage.includes('who did not submit') ||
+    lowerMessage.includes('unsubmitted') ||
+    lowerMessage.includes('not submitted') ||
+    lowerMessage.includes('missing submissions')
+  ) {
+    // Extract course name
+    let courseName = '';
+    const courseMatch = message.match(/in\s+([\w\s-]+)/i);
+    if (courseMatch && courseMatch[1]) {
+      courseName = courseMatch[1].trim();
+    }
+    
+    // Check if it's about today's assignment
+    const isTodaysAssignment = lowerMessage.includes('today') || lowerMessage.includes('todays');
+    
+    return {
+      intent: 'CHECK_UNSUBMITTED_ASSIGNMENTS',
+      confidence: 0.9,
+      parameters: {
+        ...(courseName ? { courseName } : {}),
+        ...(isTodaysAssignment ? { isTodaysAssignment: true } : {})
+      }
+    };
+  }
+  
   // Show enrolled students
   if (
     (lowerMessage.includes('show') || lowerMessage.includes('list')) && lowerMessage.includes('students') || lowerMessage.includes('enrolled students')
@@ -898,6 +927,7 @@ async function detectIntent(message, conversationHistory, conversationId) {
       - GET_ANNOUNCEMENTS: User wants to view/list announcements for a course (extract courseId/courseName)
       - CREATE_ASSIGNMENT: User wants to create an assignment in a course (extract courseId, title, description, due date, and materials)
       - CHECK_ASSIGNMENT_SUBMISSIONS: User wants to check who has submitted an assignment (extract courseName and assignmentTitle) - For "today's assignment" or "todays assignment", set isTodaysAssignment: true and don't extract assignmentTitle
+      - CHECK_UNSUBMITTED_ASSIGNMENTS: User wants to check who has NOT submitted an assignment (extract courseName and assignmentTitle) - For "today's assignment" or "todays assignment", set isTodaysAssignment: true and don't extract assignmentTitle
       - GRADE_ASSIGNMENT: User wants to grade a student's assignment (extract courseName, assignmentTitle, studentEmail, assignedGrade, draftGrade)
       - LIST_ASSIGNMENTS: User wants to see all assignments in a course (extract courseName or courseId)
       - SHOW_ENROLLED_STUDENTS: User wants to see the list of enrolled students in a course (extract courseName)
@@ -949,6 +979,11 @@ async function detectIntent(message, conversationHistory, conversationId) {
       - "check submissions for test 1 in computer science" → CHECK_ASSIGNMENT_SUBMISSIONS with courseName: "computer science", assignmentTitle: "test 1"
       - "show submission status for today's assignment" → CHECK_ASSIGNMENT_SUBMISSIONS with isTodaysAssignment: true
       - "who submitted today's assignment in physics" → CHECK_ASSIGNMENT_SUBMISSIONS with courseName: "physics", isTodaysAssignment: true
+      
+      Examples for unsubmitted assignments:
+      - "who has not submitted their assignment" → CHECK_UNSUBMITTED_ASSIGNMENTS (no course specified, will ask)
+      - "who hasn't submitted today's assignment in math" → CHECK_UNSUBMITTED_ASSIGNMENTS with courseName: "math", isTodaysAssignment: true
+      - "show unsubmitted assignments for test 1 in physics" → CHECK_UNSUBMITTED_ASSIGNMENTS with courseName: "physics", assignmentTitle: "test 1"
       
       For grading assignments, extract these fields if provided:
       - courseName: The course name
