@@ -1255,7 +1255,13 @@ Extracted title:`;
         console.log('🔍 DEBUG: Selection:', selection);
         console.log('🔍 DEBUG: Available assignments count:', availableAssignments.length);
         
-        if (selection === 'all') {
+        // Handle positive responses like "yes", "ok", "sure" when there's only one assignment
+        if (availableAssignments.length === 1 && (selection === 'yes' || selection === 'ok' || selection === 'sure' || selection === 'y')) {
+          console.log('🔍 DEBUG: User confirmed single assignment selection');
+          newParameters.selectedAssignments = availableAssignments;
+          newParameters.assignmentTitle = availableAssignments[0].title;
+          parametersFound = true;
+        } else if (selection === 'all') {
           // User wants to check all assignments
           console.log('🔍 DEBUG: User selected "all"');
           newParameters.selectedAssignments = availableAssignments;
@@ -4150,9 +4156,27 @@ async function executeAction(intentData, originalMessage, userToken, req) {
                   return `• ${a.title} (${date})`;
                 }).join('\n');
                 
+                // Start ongoing action for assignment selection
+                if (conversationId) {
+                  startOngoingAction(conversationId, 'CHECK_ASSIGNMENT_SUBMISSIONS', ['assignmentSelection'], {
+                    courseName: selectedCourse.name,
+                    isTodaysAssignment: false,
+                    availableAssignments: recentAssignments
+                  });
+                }
+                
                 return {
                   message: `I couldn't find any assignments created today in ${selectedCourse.name}.\n\nRecent assignments:\n${recentList}\n\nWould you like to check submissions for one of these assignments instead?`,
                   conversationId: req.body.conversationId,
+                  ongoingAction: {
+                    action: 'CHECK_ASSIGNMENT_SUBMISSIONS',
+                    missingParameters: ['assignmentSelection'],
+                    collectedParameters: {
+                      courseName: selectedCourse.name,
+                      isTodaysAssignment: false,
+                      availableAssignments: recentAssignments
+                    }
+                  },
                   suggestions: recentAssignments.map(a => `check submissions for ${a.title}`)
                 };
               } else {
