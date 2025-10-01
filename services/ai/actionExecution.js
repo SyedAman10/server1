@@ -1153,14 +1153,29 @@ Extracted title:`;
         }
         
         // Check if user wants to check all courses
+        console.log('🔍 DEBUG: Checking course name for "all courses" patterns:', courseName);
         if (courseName.toLowerCase() === 'all' || 
             courseName.toLowerCase() === 'all courses' ||
             courseName.toLowerCase().includes('all courses') ||
             courseName.toLowerCase().includes('all courses created today') ||
-            courseName.toLowerCase().includes('courses created today')) {
+            courseName.toLowerCase().includes('courses created today') ||
+            courseName.toLowerCase().includes('show me all courses') ||
+            courseName.toLowerCase().includes('just show me all courses') ||
+            courseName.toLowerCase().includes('list all courses') ||
+            courseName.toLowerCase().includes('show all courses')) {
+          console.log('✅ DEBUG: Matched "all courses" pattern, setting checkAllCourses = true');
           newParameters.courseName = 'all';
           newParameters.checkAllCourses = true;
           parametersFound = true;
+          
+          // Return early to avoid course matching logic
+          return {
+            action: 'CHECK_ASSIGNMENT_SUBMISSIONS',
+            missingParameters: [],
+            collectedParameters: { ...collectedParameters, ...newParameters },
+            nextMessage: "I'll check all courses for today's assignments.",
+            actionComplete: true
+          };
         }
         // Check if user wants to check recent assignments across all courses
         else if (courseName.toLowerCase().includes('check recent assignments') || courseName.toLowerCase().includes('recent assignments')) {
