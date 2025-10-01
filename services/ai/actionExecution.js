@@ -5874,16 +5874,22 @@ async function executeAction(intentData, originalMessage, userToken, req) {
               };
             }
           } else if (parameters.assignmentTitle) {
-            // Find assignment by title
-            matchingAssignments = assignments.filter(a => 
-              a.title.toLowerCase().includes(parameters.assignmentTitle.toLowerCase())
-            );
-            
-            if (matchingAssignments.length === 0) {
-              return {
-                message: `I couldn't find any assignments matching "${parameters.assignmentTitle}" in ${selectedCourse.name}.`,
-                conversationId: req.body.conversationId
-              };
+            // Check if user wants all assignments
+            if (parameters.assignmentTitle === 'all') {
+              console.log('🔍 DEBUG: User wants all assignments, using all assignments');
+              matchingAssignments = assignments;
+            } else {
+              // Find assignment by title
+              matchingAssignments = assignments.filter(a => 
+                a.title.toLowerCase().includes(parameters.assignmentTitle.toLowerCase())
+              );
+              
+              if (matchingAssignments.length === 0) {
+                return {
+                  message: `I couldn't find any assignments matching "${parameters.assignmentTitle}" in ${selectedCourse.name}.`,
+                  conversationId: req.body.conversationId
+                };
+              }
             }
           } else {
             // No specific assignment - show all assignments with unsubmitted students
