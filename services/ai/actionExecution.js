@@ -1374,6 +1374,10 @@ Extracted title:`;
       break;
       
     case 'CHECK_UNSUBMITTED_ASSIGNMENTS':
+      console.log('🔍 DEBUG: CHECK_UNSUBMITTED_ASSIGNMENTS parameter collection - missingParameters:', missingParameters);
+      console.log('🔍 DEBUG: CHECK_UNSUBMITTED_ASSIGNMENTS collectedParameters:', collectedParameters);
+      console.log('🔍 DEBUG: CHECK_UNSUBMITTED_ASSIGNMENTS originalMessage:', originalMessage);
+      
       // Handle course name collection for unsubmitted assignments check
       if (missingParameters.includes('courseName')) {
         let courseName = originalMessage.trim();
@@ -1467,6 +1471,21 @@ Extracted title:`;
           };
         }
         
+        // Check if this might be an assignment title response that got misrouted
+        if (courseName.toLowerCase() === 'all' || 
+            courseName.toLowerCase() === 'all assignments' ||
+            courseName.toLowerCase().includes('all assignments')) {
+          console.log('🔍 DEBUG: Detected "all" in course name collection - might be misrouted assignment title');
+          // This should not happen if the flow is correct, but let's handle it
+          return {
+            action: 'CHECK_UNSUBMITTED_ASSIGNMENTS',
+            missingParameters: ['assignmentTitle'],
+            collectedParameters: { ...collectedParameters },
+            nextMessage: "It looks like you want to check all assignments. Which assignment would you like to check for unsubmitted students?",
+            actionComplete: false
+          };
+        }
+        
         // Try to find matching course
         const courseMatch = await findMatchingCourse(courseName, userToken, req, baseUrl);
         
@@ -1521,6 +1540,8 @@ Extracted title:`;
       
       // Handle assignment title collection
       if (missingParameters.includes('assignmentTitle')) {
+        console.log('🔍 DEBUG: Processing assignment title collection for CHECK_UNSUBMITTED_ASSIGNMENTS');
+        console.log('🔍 DEBUG: originalMessage for assignment title:', originalMessage);
         let assignmentTitle = originalMessage.trim();
         
         // Handle assignment title correction patterns
@@ -1564,9 +1585,15 @@ Extracted title:`;
         }
         
         // Check if user wants to check all assignments
+        console.log('🔍 DEBUG: Checking if assignment title is "all" or similar:', assignmentTitle);
         if (assignmentTitle.toLowerCase() === 'all' || 
             assignmentTitle.toLowerCase() === 'all assignments' ||
-            assignmentTitle.toLowerCase().includes('all assignments')) {
+            assignmentTitle.toLowerCase().includes('all assignments') ||
+            assignmentTitle.toLowerCase() === 'all of them' ||
+            assignmentTitle.toLowerCase().includes('every assignment') ||
+            assignmentTitle.toLowerCase().includes('everyone') ||
+            assignmentTitle.toLowerCase().includes('all students')) {
+          console.log('✅ DEBUG: Matched "all assignments" pattern, setting assignmentTitle = "all"');
           newParameters.assignmentTitle = 'all';
           parametersFound = true;
           
@@ -5526,7 +5553,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           if (!parameters.courseName && !parameters.courseIdentifier) {
             missingParams.push('courseName');
           }
-          if (!parameters.isTodaysAssignment && !parameters.assignmentTitle) {
+          if (!parameters.isTodaysAssignment && !parameters.assignmentTitle && parameters.assignmentTitle !== 'all') {
             missingParams.push('assignmentTitle');
           }
 
