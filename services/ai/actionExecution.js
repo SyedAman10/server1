@@ -4330,10 +4330,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
                 if (s.assignmentSubmission && s.assignmentSubmission.attachments && s.assignmentSubmission.attachments.length > 0) {
                   const docLinks = s.assignmentSubmission.attachments.map(att => {
                     if (att.driveFile && att.driveFile.alternateLink) {
-                      const title = att.driveFile.title || 'Document';
-                      const url = att.driveFile.alternateLink;
-                      // Try HTML link first, with fallback to plain URL
-                      return `<a href="${url}" target="_blank">${title}</a> (${url})`;
+                      return `[${att.driveFile.title || 'Document'}](${att.driveFile.alternateLink})`;
                     }
                     return null;
                   }).filter(link => link !== null);
