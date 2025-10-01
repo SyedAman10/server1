@@ -1173,6 +1173,7 @@ Extracted title:`;
             action: 'CHECK_ASSIGNMENT_SUBMISSIONS',
             missingParameters: [],
             collectedParameters: { ...collectedParameters, ...newParameters },
+            allParameters: { ...collectedParameters, ...newParameters },
             nextMessage: "I'll check all courses for today's assignments.",
             actionComplete: true
           };
@@ -1183,6 +1184,16 @@ Extracted title:`;
           newParameters.checkAllCourses = true;
           newParameters.checkRecentAssignments = true;
           parametersFound = true;
+          
+          // Return early to avoid course matching logic
+          return {
+            action: 'CHECK_ASSIGNMENT_SUBMISSIONS',
+            missingParameters: [],
+            collectedParameters: { ...collectedParameters, ...newParameters },
+            allParameters: { ...collectedParameters, ...newParameters },
+            nextMessage: "I'll check recent assignments across all courses.",
+            actionComplete: true
+          };
         }
         // Check if user wants to cancel (common responses after "couldn't find courses")
         else if (courseName.toLowerCase() === 'ok' || courseName.toLowerCase() === 'cancel' || 
