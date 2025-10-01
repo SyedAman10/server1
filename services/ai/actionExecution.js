@@ -4307,37 +4307,60 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             } else {
               message = `Submissions for "${assignment.title}" in ${selectedCourse.name}:\n`;
             }
-            message += `\nSubmitted (${details.turnedIn.length}):\n`;
+            message += `\n✅ Submitted (${details.turnedIn.length}):\n`;
             
             if (details.turnedIn.length > 0) {
               message += details.turnedIn.map(s => {
                 const userId = s.userId || s.id;
                 const userProfile = userProfiles[userId];
+                let studentName = 'Unknown Student';
+                let studentEmail = '';
+                
                 if (userProfile && userProfile.name && userProfile.name.fullName) {
-                  return `• ${userProfile.name.fullName} (${userProfile.emailAddress}) - ${s.state}`;
+                  studentName = userProfile.name.fullName;
+                  studentEmail = userProfile.emailAddress || '';
                 } else if (userProfile && userProfile.emailAddress) {
-                  return `• ${userProfile.emailAddress} (${s.state})`;
-                } else {
-                  return `• ${userId} (${s.state})`;
+                  studentName = userProfile.emailAddress;
+                  studentEmail = userProfile.emailAddress;
                 }
+                
+                let submissionInfo = `• ${studentName} - ${s.state}`;
+                
+                // Add document links if available
+                if (s.assignmentSubmission && s.assignmentSubmission.attachments && s.assignmentSubmission.attachments.length > 0) {
+                  const docLinks = s.assignmentSubmission.attachments.map(att => {
+                    if (att.driveFile && att.driveFile.alternateLink) {
+                      return `[${att.driveFile.title || 'Document'}](${att.driveFile.alternateLink})`;
+                    }
+                    return null;
+                  }).filter(link => link !== null);
+                  
+                  if (docLinks.length > 0) {
+                    submissionInfo += `\n  📎 Documents: ${docLinks.join(', ')}`;
+                  }
+                }
+                
+                return submissionInfo;
               }).join('\n');
             } else {
               message += 'None';
             }
             
-            message += `\n\nNot Submitted (${details.notTurnedIn.length}):\n`;
+            message += `\n\n❌ Not Submitted (${details.notTurnedIn.length}):\n`;
             
             if (details.notTurnedIn.length > 0) {
               message += details.notTurnedIn.map(s => {
                 const userId = s.userId || s.id;
                 const userProfile = userProfiles[userId];
+                let studentName = 'Unknown Student';
+                
                 if (userProfile && userProfile.name && userProfile.name.fullName) {
-                  return `• ${userProfile.name.fullName} (${userProfile.emailAddress}) - ${s.state}`;
+                  studentName = userProfile.name.fullName;
                 } else if (userProfile && userProfile.emailAddress) {
-                  return `• ${userProfile.emailAddress} (${s.state})`;
-                } else {
-                  return `• ${userId} (${s.state})`;
+                  studentName = userProfile.emailAddress;
                 }
+                
+                return `• ${studentName}`;
               }).join('\n');
             } else {
               message += 'None';
