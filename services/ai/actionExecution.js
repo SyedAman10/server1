@@ -5774,19 +5774,25 @@ async function executeAction(intentData, originalMessage, userToken, req) {
               }
             }
             
-            // Format response for all courses - focus on unsubmitted students
-            let message = `📊 Unsubmitted assignments for all courses with today's assignments:\n\n`;
+            // Format response for all courses - improved formatting
+            let message = `📊 **Unsubmitted Assignments Report - All Courses (Today's Assignments)**\n\n`;
             
             allResults.forEach(({ course, assignmentDetails }, courseIndex) => {
-              message += `**${course.name}**\n`;
+              message += `🎓 **${course.name}**\n`;
+              message += '='.repeat(50) + '\n\n';
               
               assignmentDetails.forEach((details, assignmentIndex) => {
                 const assignment = details.assignment;
-                message += `  ${assignmentIndex + 1}. "${assignment.title}":\n`;
+                const totalStudents = details.turnedIn.length + details.notTurnedIn.length;
+                const submittedCount = details.turnedIn.length;
+                const notSubmittedCount = details.notTurnedIn.length;
+                
+                message += `**${assignmentIndex + 1}. ${assignment.title}**\n`;
+                message += `📈 Progress: ${submittedCount}/${totalStudents} students submitted (${Math.round((submittedCount/totalStudents)*100)}%)\n\n`;
                 
                 if (details.notTurnedIn.length > 0) {
-                  message += `     ❌ Not Submitted (${details.notTurnedIn.length}):\n`;
-                  message += details.notTurnedIn.map(s => {
+                  message += `❌ **Not Submitted (${notSubmittedCount} students):**\n`;
+                  details.notTurnedIn.forEach((s, studentIndex) => {
                     const userId = s.userId || s.id;
                     const userProfile = details.userProfiles[userId];
                     let studentName = 'Unknown Student';
@@ -5797,17 +5803,17 @@ async function executeAction(intentData, originalMessage, userToken, req) {
                       studentName = userProfile.emailAddress;
                     }
                     
-                    return `       • ${studentName}`;
-                  }).join('\n');
+                    message += `   ${studentIndex + 1}. ${studentName}\n`;
+                  });
                 } else {
-                  message += `     ✅ All students have submitted\n`;
+                  message += `✅ **All students have submitted this assignment!**\n`;
                 }
                 
-                message += '\n';
+                message += '\n' + '─'.repeat(40) + '\n\n';
               });
               
               if (courseIndex < allResults.length - 1) {
-                message += '---\n\n';
+                message += '\n' + '═'.repeat(60) + '\n\n';
               }
             });
             
@@ -5935,16 +5941,26 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           if (matchingAssignments.length === 1) {
             const assignment = matchingAssignments[0];
             const details = assignmentDetails[0];
+            const totalStudents = details.turnedIn.length + details.notTurnedIn.length;
+            const submittedCount = details.turnedIn.length;
+            const notSubmittedCount = details.notTurnedIn.length;
             
             if (parameters.isTodaysAssignment) {
-              message = `Unsubmitted assignments for "${assignment.title}" (created today) in ${selectedCourse.name}:\n`;
+              message = `📊 **Assignment Submission Report**\n\n`;
+              message += `**Assignment:** ${assignment.title}\n`;
+              message += `**Course:** ${selectedCourse.name}\n`;
+              message += `**Created:** Today\n\n`;
             } else {
-              message = `Unsubmitted students for "${assignment.title}" in ${selectedCourse.name}:\n`;
+              message = `📊 **Assignment Submission Report**\n\n`;
+              message += `**Assignment:** ${assignment.title}\n`;
+              message += `**Course:** ${selectedCourse.name}\n\n`;
             }
             
+            message += `📈 **Progress:** ${submittedCount}/${totalStudents} students submitted (${Math.round((submittedCount/totalStudents)*100)}%)\n\n`;
+            
             if (details.notTurnedIn.length > 0) {
-              message += `\n❌ Not Submitted (${details.notTurnedIn.length}):\n`;
-              message += details.notTurnedIn.map(s => {
+              message += `❌ **Not Submitted (${notSubmittedCount} students):**\n\n`;
+              details.notTurnedIn.forEach((s, index) => {
                 const userId = s.userId || s.id;
                 const userProfile = details.userProfiles[userId];
                 let studentName = 'Unknown Student';
@@ -5955,22 +5971,27 @@ async function executeAction(intentData, originalMessage, userToken, req) {
                   studentName = userProfile.emailAddress;
                 }
                 
-                return `• ${studentName}`;
-              }).join('\n');
+                message += `   ${index + 1}. ${studentName}\n`;
+              });
             } else {
-              message += `\n✅ All students have submitted this assignment!`;
+              message += `✅ **All students have submitted this assignment!**\n`;
             }
           } else {
-            // Multiple assignments
-            message = `Unsubmitted assignments in ${selectedCourse.name}:\n\n`;
+            // Multiple assignments - improved formatting
+            message = `📊 **Unsubmitted Assignments Report for ${selectedCourse.name}**\n\n`;
             
             assignmentDetails.forEach((details, index) => {
               const assignment = details.assignment;
-              message += `${index + 1}. "${assignment.title}":\n`;
+              const totalStudents = details.turnedIn.length + details.notTurnedIn.length;
+              const submittedCount = details.turnedIn.length;
+              const notSubmittedCount = details.notTurnedIn.length;
+              
+              message += `**${index + 1}. ${assignment.title}**\n`;
+              message += `📈 Progress: ${submittedCount}/${totalStudents} students submitted (${Math.round((submittedCount/totalStudents)*100)}%)\n\n`;
               
               if (details.notTurnedIn.length > 0) {
-                message += `   ❌ Not Submitted (${details.notTurnedIn.length}):\n`;
-                message += details.notTurnedIn.map(s => {
+                message += `❌ **Not Submitted (${notSubmittedCount} students):**\n`;
+                details.notTurnedIn.forEach((s, studentIndex) => {
                   const userId = s.userId || s.id;
                   const userProfile = details.userProfiles[userId];
                   let studentName = 'Unknown Student';
@@ -5981,13 +6002,13 @@ async function executeAction(intentData, originalMessage, userToken, req) {
                     studentName = userProfile.emailAddress;
                   }
                   
-                  return `     • ${studentName}`;
-                }).join('\n');
+                  message += `   ${studentIndex + 1}. ${studentName}\n`;
+                });
               } else {
-                message += `   ✅ All students have submitted\n`;
+                message += `✅ **All students have submitted this assignment!**\n`;
               }
               
-              message += '\n';
+              message += '\n' + '─'.repeat(50) + '\n\n';
             });
           }
           
