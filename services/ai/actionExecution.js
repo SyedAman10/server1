@@ -1210,7 +1210,7 @@ Extracted title:`;
         // Check if user wants to list courses
         else if (courseName.toLowerCase().includes('list courses') || courseName.toLowerCase().includes('show courses')) {
           try {
-            const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom/courses`, 'GET', null, userToken, req);
+            const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken, req);
             const courses = Array.isArray(coursesResponse) ? coursesResponse : (coursesResponse.courses || []);
             
             if (courses.length === 0) {
@@ -4152,7 +4152,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           // Check if user wants to check all courses
           if (parameters.checkAllCourses && parameters.courseName === 'all') {
             // Get all courses and find ones with assignments created today
-            const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom/courses`, 'GET', null, userToken, req);
+            const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken, req);
             const courses = Array.isArray(coursesResponse) ? coursesResponse : (coursesResponse.courses || []);
             
             if (courses.length === 0) {
