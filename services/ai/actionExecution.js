@@ -6033,6 +6033,202 @@ async function executeAction(intentData, originalMessage, userToken, req) {
         }
       }
 
+      case 'HIGHLIGHT_MISSING_WORK_STUDENTS': {
+        // Only allow teachers and super_admin to highlight missing work students
+        if (userRole !== 'teacher' && userRole !== 'super_admin') {
+          return {
+            message: 'You are not authorized to view student performance data. Only teachers and super admins can access this information.',
+            conversationId: req.body.conversationId
+          };
+        }
+
+        try {
+          console.log('🔍 DEBUG: Starting cross-course analysis for missing work students');
+          
+          // Get all courses
+          const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken, req);
+          const courses = Array.isArray(coursesResponse) ? coursesResponse : (coursesResponse.courses || []);
+          
+          if (courses.length === 0) {
+            return {
+              message: "I don't see any courses available. Please create a course first or check your Google Classroom setup.",
+              conversationId: req.body.conversationId
+            };
+          }
+          
+          console.log(`🔍 DEBUG: Analyzing ${courses.length} courses for missing work students`);
+          
+          // Analyze each course for missing work
+          const courseAnalysis = [];
+          const studentMissingWork = new Map(); // studentId -> { studentInfo, missingAssignments: [] }
+          
+          for (const course of courses) {
+            try {
+              console.log(`🔍 DEBUG: Analyzing course: ${course.name}`);
+              
+              // Get assignments for this course
+              const assignmentsResponse = await makeApiCall(`${baseUrl}/api/courses/${course.id}/assignments`, 'GET', null, userToken, req);
+              const assignments = Array.isArray(assignmentsResponse) ? assignmentsResponse : [];
+              
+              if (assignments.length === 0) {
+                console.log(`🔍 DEBUG: No assignments found in ${course.name}`);
+                continue;
+              }
+              
+              // Get students for this course
+              const studentsResponse = await makeApiCall(`${baseUrl}/api/classroom/${course.id}/students`, 'GET', null, userToken, req);
+              const students = Array.isArray(studentsResponse) ? studentsResponse : (studentsResponse.students || []);
+              
+              if (students.length === 0) {
+                console.log(`🔍 DEBUG: No students found in ${course.name}`);
+                continue;
+              }
+              
+              // Create user profiles map
+              const userProfiles = {};
+              students.forEach(student => {
+                if (student.userId && student.profile) {
+                  userProfiles[student.userId] = student.profile;
+                }
+              });
+              
+              // Analyze each assignment
+              for (const assignment of assignments) {
+                try {
+                  const submissionsResponse = await makeApiCall(`${baseUrl}/api/courses/${course.id}/assignments/${assignment.id}/submissions`, 'GET', null, userToken, req);
+                  const submissions = Array.isArray(submissionsResponse) ? submissionsResponse : [];
+                  
+                  // Find students who haven't submitted
+                  const notTurnedIn = submissions.filter(s => s.state !== 'TURNED_IN');
+                  
+                  notTurnedIn.forEach(submission => {
+                    const userId = submission.userId || submission.id;
+                    const userProfile = userProfiles[userId];
+                    
+                    if (userProfile) {
+                      let studentName = 'Unknown Student';
+                      let studentEmail = '';
+                      
+                      if (userProfile.name && userProfile.name.fullName) {
+                        studentName = userProfile.name.fullName;
+                        studentEmail = userProfile.emailAddress || '';
+                      } else if (userProfile.emailAddress) {
+                        studentName = userProfile.emailAddress;
+                        studentEmail = userProfile.emailAddress;
+                      }
+                      
+                      // Initialize student data if not exists
+                      if (!studentMissingWork.has(userId)) {
+                        studentMissingWork.set(userId, {
+                          studentInfo: {
+                            name: studentName,
+                            email: studentEmail,
+                            userId: userId
+                          },
+                          missingAssignments: []
+                        });
+                      }
+                      
+                      // Add missing assignment
+                      studentMissingWork.get(userId).missingAssignments.push({
+                        courseName: course.name,
+                        courseId: course.id,
+                        assignmentTitle: assignment.title,
+                        assignmentId: assignment.id,
+                        dueDate: assignment.dueDate,
+                        maxPoints: assignment.maxPoints
+                      });
+                    }
+                  });
+                  
+                } catch (error) {
+                  console.log(`Error analyzing assignment ${assignment.title} in ${course.name}:`, error.message);
+                  // Continue with other assignments
+                }
+              }
+              
+            } catch (error) {
+              console.log(`Error analyzing course ${course.name}:`, error.message);
+              // Continue with other courses
+            }
+          }
+          
+          // Convert map to array and sort by number of missing assignments
+          const studentsWithMissingWork = Array.from(studentMissingWork.values())
+            .filter(student => student.missingAssignments.length > 0)
+            .sort((a, b) => b.missingAssignments.length - a.missingAssignments.length);
+          
+          if (studentsWithMissingWork.length === 0) {
+            return {
+              message: "🎉 **Great News!**\n\nAll students are up to date with their assignments across all courses. No missing work found!",
+              conversationId: req.body.conversationId
+            };
+          }
+          
+          // Format the comprehensive report
+          let message = `🚨 **Students with Missing Work - Cross-Course Analysis**\n\n`;
+          message += `📊 **Summary:** ${studentsWithMissingWork.length} students have missing assignments across ${courses.length} courses\n\n`;
+          message += '='.repeat(60) + '\n\n';
+          
+          studentsWithMissingWork.forEach((student, index) => {
+            const missingCount = student.missingAssignments.length;
+            const riskLevel = missingCount >= 5 ? '🔴 HIGH RISK' : missingCount >= 3 ? '🟡 MEDIUM RISK' : '🟢 LOW RISK';
+            
+            message += `**${index + 1}. ${student.studentInfo.name}** ${riskLevel}\n`;
+            message += `📧 Email: ${student.studentInfo.email}\n`;
+            message += `📉 Missing Assignments: ${missingCount}\n\n`;
+            
+            // Group missing assignments by course
+            const assignmentsByCourse = {};
+            student.missingAssignments.forEach(assignment => {
+              if (!assignmentsByCourse[assignment.courseName]) {
+                assignmentsByCourse[assignment.courseName] = [];
+              }
+              assignmentsByCourse[assignment.courseName].push(assignment);
+            });
+            
+            // List missing assignments by course
+            Object.entries(assignmentsByCourse).forEach(([courseName, assignments]) => {
+              message += `   🎓 **${courseName}** (${assignments.length} missing):\n`;
+              assignments.forEach(assignment => {
+                const dueDateStr = assignment.dueDate ? new Date(assignment.dueDate).toLocaleDateString() : 'No due date';
+                const pointsStr = assignment.maxPoints ? ` (${assignment.maxPoints} pts)` : '';
+                message += `      • ${assignment.assignmentTitle} - Due: ${dueDateStr}${pointsStr}\n`;
+              });
+              message += '\n';
+            });
+            
+            message += '─'.repeat(50) + '\n\n';
+          });
+          
+          // Add summary statistics
+          const totalMissingAssignments = studentsWithMissingWork.reduce((sum, student) => sum + student.missingAssignments.length, 0);
+          const highRiskStudents = studentsWithMissingWork.filter(s => s.missingAssignments.length >= 5).length;
+          const mediumRiskStudents = studentsWithMissingWork.filter(s => s.missingAssignments.length >= 3 && s.missingAssignments.length < 5).length;
+          const lowRiskStudents = studentsWithMissingWork.filter(s => s.missingAssignments.length < 3).length;
+          
+          message += `📈 **Summary Statistics:**\n`;
+          message += `• Total Missing Assignments: ${totalMissingAssignments}\n`;
+          message += `• High Risk Students (5+ missing): ${highRiskStudents}\n`;
+          message += `• Medium Risk Students (3-4 missing): ${mediumRiskStudents}\n`;
+          message += `• Low Risk Students (1-2 missing): ${lowRiskStudents}\n\n`;
+          message += `💡 **Recommendation:** Focus on high-risk students first and consider reaching out to provide additional support.`;
+          
+          return {
+            message: message,
+            conversationId: req.body.conversationId
+          };
+          
+        } catch (error) {
+          console.error('Error in HIGHLIGHT_MISSING_WORK_STUDENTS:', error);
+          return {
+            message: "Sorry, I encountered an error while analyzing student performance across courses. Please try again.",
+            error: error.message,
+            conversationId: req.body.conversationId
+          };
+        }
+      }
+
       case 'SHOW_ENROLLED_STUDENTS': {
         // Only allow teachers and super_admin to view enrolled students
         if (userRole !== 'teacher' && userRole !== 'super_admin') {
@@ -6281,7 +6477,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
       
       default:
         console.log('❌ DEBUG: No matching case found for intent:', intent);
-        console.log('🔍 DEBUG: Available cases: LIST_COURSES, CREATE_COURSE, LIST_ASSIGNMENTS, CREATE_ANNOUNCEMENT, GET_ANNOUNCEMENTS, GET_COURSE, CREATE_ASSIGNMENT, INVITE_STUDENTS, INVITE_TEACHERS, PROVIDE_MATERIALS, HELP, CHECK_ASSIGNMENT_SUBMISSIONS, CHECK_UNSUBMITTED_ASSIGNMENTS, GRADE_ASSIGNMENT, CREATE_MEETING, SHOW_ENROLLED_STUDENTS, READ_EMAIL, SEND_EMAIL, PROCEED_WITH_AVAILABLE_INFO, CANCEL_ACTION');
+        console.log('🔍 DEBUG: Available cases: LIST_COURSES, CREATE_COURSE, LIST_ASSIGNMENTS, CREATE_ANNOUNCEMENT, GET_ANNOUNCEMENTS, GET_COURSE, CREATE_ASSIGNMENT, INVITE_STUDENTS, INVITE_TEACHERS, PROVIDE_MATERIALS, HELP, CHECK_ASSIGNMENT_SUBMISSIONS, CHECK_UNSUBMITTED_ASSIGNMENTS, HIGHLIGHT_MISSING_WORK_STUDENTS, GRADE_ASSIGNMENT, CREATE_MEETING, SHOW_ENROLLED_STUDENTS, READ_EMAIL, SEND_EMAIL, PROCEED_WITH_AVAILABLE_INFO, CANCEL_ACTION');
         return {
           message: "I'm not sure how to handle that request. Please try again or ask for help.",
           conversationId: conversationId

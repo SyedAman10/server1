@@ -478,7 +478,7 @@ async function handleMessage(req, res) {
       const newIntentData = await detectIntent(message, history);
       
       // Allow certain intents to override ongoing actions
-      const overrideIntents = ['CHECK_UNSUBMITTED_ASSIGNMENTS', 'CHECK_ASSIGNMENT_SUBMISSIONS', 'INVITE_STUDENTS', 'CREATE_ANNOUNCEMENT', 'CREATE_ASSIGNMENT'];
+      const overrideIntents = ['CHECK_UNSUBMITTED_ASSIGNMENTS', 'CHECK_ASSIGNMENT_SUBMISSIONS', 'HIGHLIGHT_MISSING_WORK_STUDENTS', 'INVITE_STUDENTS', 'CREATE_ANNOUNCEMENT', 'CREATE_ASSIGNMENT'];
       
       if (overrideIntents.includes(newIntentData.intent) && newIntentData.confidence > 0.8) {
         console.log('🔍 DEBUG: New intent detected, overriding ongoing action:', newIntentData.intent);

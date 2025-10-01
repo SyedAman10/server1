@@ -44,6 +44,26 @@ function detectIntentFallback(message, conversationId) {
     };
   }
   
+  // Highlight students with missing work across multiple classes
+  if (
+    lowerMessage.includes('highlight students') ||
+    lowerMessage.includes('students with missing work') ||
+    lowerMessage.includes('missing work across') ||
+    lowerMessage.includes('students struggling') ||
+    lowerMessage.includes('at-risk students') ||
+    lowerMessage.includes('students behind') ||
+    lowerMessage.includes('across multiple classes') ||
+    lowerMessage.includes('across all classes') ||
+    lowerMessage.includes('cross-course analysis') ||
+    lowerMessage.includes('student performance across')
+  ) {
+    return {
+      intent: 'HIGHLIGHT_MISSING_WORK_STUDENTS',
+      confidence: 0.95,
+      parameters: {}
+    };
+  }
+  
   // Show enrolled students
   if (
     (lowerMessage.includes('show') || lowerMessage.includes('list')) && lowerMessage.includes('students') || lowerMessage.includes('enrolled students')
@@ -928,6 +948,7 @@ async function detectIntent(message, conversationHistory, conversationId) {
       - CREATE_ASSIGNMENT: User wants to create an assignment in a course (extract courseId, title, description, due date, and materials)
       - CHECK_ASSIGNMENT_SUBMISSIONS: User wants to check who has submitted an assignment (extract courseName and assignmentTitle) - For "today's assignment" or "todays assignment", set isTodaysAssignment: true and don't extract assignmentTitle
       - CHECK_UNSUBMITTED_ASSIGNMENTS: User wants to check who has NOT submitted an assignment (extract courseName and assignmentTitle) - For "today's assignment" or "todays assignment", set isTodaysAssignment: true and don't extract assignmentTitle
+      - HIGHLIGHT_MISSING_WORK_STUDENTS: User wants to highlight students with missing work across multiple classes (no parameters needed) - This analyzes all courses to find students who are behind
       - GRADE_ASSIGNMENT: User wants to grade a student's assignment (extract courseName, assignmentTitle, studentEmail, assignedGrade, draftGrade)
       - LIST_ASSIGNMENTS: User wants to see all assignments in a course (extract courseName or courseId)
       - SHOW_ENROLLED_STUDENTS: User wants to see the list of enrolled students in a course (extract courseName)
@@ -984,6 +1005,12 @@ async function detectIntent(message, conversationHistory, conversationId) {
       - "who has not submitted their assignment" → CHECK_UNSUBMITTED_ASSIGNMENTS (no course specified, will ask)
       - "who hasn't submitted today's assignment in math" → CHECK_UNSUBMITTED_ASSIGNMENTS with courseName: "math", isTodaysAssignment: true
       - "show unsubmitted assignments for test 1 in physics" → CHECK_UNSUBMITTED_ASSIGNMENTS with courseName: "physics", assignmentTitle: "test 1"
+      
+      Examples for highlighting missing work students:
+      - "highlight students with missing work across multiple classes" → HIGHLIGHT_MISSING_WORK_STUDENTS
+      - "show me students struggling across all classes" → HIGHLIGHT_MISSING_WORK_STUDENTS
+      - "find at-risk students across multiple classes" → HIGHLIGHT_MISSING_WORK_STUDENTS
+      - "students behind across all classes" → HIGHLIGHT_MISSING_WORK_STUDENTS
       
       For grading assignments, extract these fields if provided:
       - courseName: The course name
