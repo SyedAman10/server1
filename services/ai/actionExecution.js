@@ -1152,8 +1152,33 @@ Extracted title:`;
           }
         }
         
+        // Check if user wants to check all courses
+        if (courseName.toLowerCase() === 'all' || courseName.toLowerCase() === 'all courses') {
+          newParameters.courseName = 'all';
+          newParameters.checkAllCourses = true;
+          parametersFound = true;
+        }
+        // Check if user wants to check recent assignments across all courses
+        else if (courseName.toLowerCase().includes('check recent assignments') || courseName.toLowerCase().includes('recent assignments')) {
+          newParameters.courseName = 'all';
+          newParameters.checkAllCourses = true;
+          newParameters.checkRecentAssignments = true;
+          parametersFound = true;
+        }
+        // Check if user wants to cancel (common responses after "couldn't find courses")
+        else if (courseName.toLowerCase() === 'ok' || courseName.toLowerCase() === 'cancel' || 
+                 courseName.toLowerCase() === 'stop' || courseName.toLowerCase() === 'never mind' ||
+                 courseName.toLowerCase() === 'forget it' || courseName.toLowerCase() === 'done') {
+          return {
+            action: 'CHECK_ASSIGNMENT_SUBMISSIONS',
+            missingParameters: [],
+            collectedParameters: { ...collectedParameters },
+            nextMessage: "Okay, I've cancelled the submission status check. Is there anything else I can help you with?",
+            actionComplete: true
+          };
+        }
         // Check if user wants to list courses
-        if (courseName.toLowerCase().includes('list courses') || courseName.toLowerCase().includes('show courses')) {
+        else if (courseName.toLowerCase().includes('list courses') || courseName.toLowerCase().includes('show courses')) {
           try {
             const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom/courses`, 'GET', null, userToken, req);
             const courses = Array.isArray(coursesResponse) ? coursesResponse : (coursesResponse.courses || []);
@@ -1192,15 +1217,15 @@ Extracted title:`;
         // Try to find matching course
         try {
           const courseMatch = await findMatchingCourse(courseName, userToken, req, baseUrl);
-          if (!courseMatch.success) {
-            return {
-              action: 'CHECK_ASSIGNMENT_SUBMISSIONS',
-              missingParameters: ['courseName'],
-              collectedParameters: { ...collectedParameters },
-              nextMessage: courseMatch.message,
-              actionComplete: false
-            };
-          }
+            if (!courseMatch.success) {
+              return {
+                action: 'CHECK_ASSIGNMENT_SUBMISSIONS',
+                missingParameters: ['courseName'],
+                collectedParameters: { ...collectedParameters },
+                nextMessage: `${courseMatch.message}\n\nWould you like to:\n• Try a different course name\n• List all available courses\n• Cancel this action\n\nPlease let me know what you'd like to do.`,
+                actionComplete: false
+              };
+            }
           
           if (courseMatch.allMatches && courseMatch.allMatches.length > 1 && !courseMatch.isExactMatch) {
             const courseOptions = courseMatch.allMatches.map(course => `• ${course.name}${course.section ? ` (${course.section})` : ''}`).join('\n');
@@ -4092,20 +4117,212 @@ async function executeAction(intentData, originalMessage, userToken, req) {
         
         try {
           // At this point, all parameters should be collected and validated
-          // Find the course (should already be validated above)
-          const courseMatch = await findMatchingCourse(
-            parameters.courseName, 
-            userToken, 
-            req, 
-            baseUrl
-          );
+          let selectedCourse, courseId;
           
+          // Check if user wants to check all courses
+          if (parameters.checkAllCourses && parameters.courseName === 'all') {
+            // Get all courses and find ones with assignments created today
+            const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom/courses`, 'GET', null, userToken, req);
+            const courses = Array.isArray(coursesResponse) ? coursesResponse : (coursesResponse.courses || []);
+            
+            if (courses.length === 0) {
+              return {
+                message: "I don't see any courses available. Please create a course first or check your Google Classroom setup.",
+                conversationId: req.body.conversationId
+              };
+            }
+            
+            // Find courses with assignments created today
+            const today = new Date();
+            const todayStr = today.toISOString().split('T')[0];
+            
+            const coursesWithTodayAssignments = [];
+            
+            for (const course of courses) {
+              try {
+                const assignmentsResponse = await makeApiCall(`${baseUrl}/api/courses/${course.id}/assignments`, 'GET', null, userToken, req);
+                const assignments = Array.isArray(assignmentsResponse) ? assignmentsResponse : [];
+                
+                const todayAssignments = assignments.filter(a => {
+                  if (!a.creationTime) return false;
+                  const creationDate = new Date(a.creationTime);
+                  const creationDateStr = creationDate.toISOString().split('T')[0];
+                  return creationDateStr === todayStr;
+                });
+                
+                if (todayAssignments.length > 0) {
+                  coursesWithTodayAssignments.push({
+                    course: course,
+                    assignments: todayAssignments
+                  });
+                }
+              } catch (error) {
+                console.log(`Error checking assignments for course ${course.name}:`, error.message);
+                // Continue with other courses
+              }
+            }
+            
+            if (coursesWithTodayAssignments.length === 0) {
+              // Start ongoing action to allow retry
+              startOngoingAction(conversationId, 'CHECK_ASSIGNMENT_SUBMISSIONS', ['courseName'], { checkAllCourses: true });
+              return {
+                message: "I couldn't find any courses with assignments created today. Would you like me to:\n• Check recent assignments across all courses\n• List all available courses\n• Cancel this action\n\nPlease let me know what you'd like to do.",
+                conversationId: req.body.conversationId,
+                ongoingAction: {
+                  action: 'CHECK_ASSIGNMENT_SUBMISSIONS',
+                  missingParameters: ['courseName'],
+                  collectedParameters: { checkAllCourses: true }
+                },
+                suggestions: ["check recent assignments", "list all courses", "cancel"]
+              };
+            }
+            
+            // Process all courses with today's assignments
+            let allResults = [];
+            
+            for (const { course, assignments } of coursesWithTodayAssignments) {
+              try {
+                // Get submission details for each assignment
+                const assignmentDetails = [];
+                
+                for (const assignment of assignments) {
+                  const submissionsResponse = await makeApiCall(`${baseUrl}/api/courses/${course.id}/assignments/${assignment.id}/submissions`, 'GET', null, userToken, req);
+                  const submissions = Array.isArray(submissionsResponse) ? submissionsResponse : [];
+                  
+                  // Get student profiles
+                  const studentsResponse = await makeApiCall(`${baseUrl}/api/classroom/${course.id}/students`, 'GET', null, userToken, req);
+                  const students = Array.isArray(studentsResponse) ? studentsResponse : (studentsResponse.students || []);
+                  
+                  const userProfiles = {};
+                  students.forEach(student => {
+                    if (student.userId && student.profile) {
+                      userProfiles[student.userId] = student.profile;
+                    }
+                  });
+                  
+                  const turnedIn = submissions.filter(s => s.state === 'TURNED_IN');
+                  const notTurnedIn = submissions.filter(s => s.state !== 'TURNED_IN');
+                  
+                  assignmentDetails.push({
+                    assignment: assignment,
+                    turnedIn: turnedIn,
+                    notTurnedIn: notTurnedIn,
+                    userProfiles: userProfiles
+                  });
+                }
+                
+                allResults.push({
+                  course: course,
+                  assignmentDetails: assignmentDetails
+                });
+              } catch (error) {
+                console.log(`Error processing course ${course.name}:`, error.message);
+                // Continue with other courses
+              }
+            }
+            
+            // Format response for all courses
+            let message = `📊 Assignment submissions for all courses with today's assignments:\n\n`;
+            
+            allResults.forEach(({ course, assignmentDetails }, courseIndex) => {
+              message += `**${course.name}**\n`;
+              
+              assignmentDetails.forEach((details, assignmentIndex) => {
+                const assignment = details.assignment;
+                message += `  ${assignmentIndex + 1}. "${assignment.title}":\n`;
+                message += `     ✅ Submitted (${details.turnedIn.length}):\n`;
+                
+                if (details.turnedIn.length > 0) {
+                  message += details.turnedIn.map(s => {
+                    const userId = s.userId || s.id;
+                    const userProfile = details.userProfiles[userId];
+                    let studentName = 'Unknown Student';
+                    
+                    if (userProfile && userProfile.name && userProfile.name.fullName) {
+                      studentName = userProfile.name.fullName;
+                    } else if (userProfile && userProfile.emailAddress) {
+                      studentName = userProfile.emailAddress;
+                    }
+                    
+                    let submissionInfo = `       • ${studentName} - ${s.state}`;
+                    
+                    // Add document links if available
+                    if (s.assignmentSubmission && s.assignmentSubmission.attachments && s.assignmentSubmission.attachments.length > 0) {
+                      const docLinks = s.assignmentSubmission.attachments.map(att => {
+                        if (att.driveFile && att.driveFile.alternateLink) {
+                          return `[${att.driveFile.title || 'Document'}](${att.driveFile.alternateLink})`;
+                        }
+                        return null;
+                      }).filter(link => link !== null);
+                      
+                      if (docLinks.length > 0) {
+                        submissionInfo += `\n         📎 Documents: ${docLinks.join(', ')}`;
+                      }
+                    }
+                    
+                    return submissionInfo;
+                  }).join('\n');
+                } else {
+                  message += '       None\n';
+                }
+                
+                message += `     ❌ Not Submitted (${details.notTurnedIn.length}):\n`;
+                if (details.notTurnedIn.length > 0) {
+                  message += details.notTurnedIn.map(s => {
+                    const userId = s.userId || s.id;
+                    const userProfile = details.userProfiles[userId];
+                    let studentName = 'Unknown Student';
+                    
+                    if (userProfile && userProfile.name && userProfile.name.fullName) {
+                      studentName = userProfile.name.fullName;
+                    } else if (userProfile && userProfile.emailAddress) {
+                      studentName = userProfile.emailAddress;
+                    }
+                    
+                    return `       • ${studentName}`;
+                  }).join('\n');
+                } else {
+                  message += '       None\n';
+                }
+                
+                message += '\n';
+              });
+              
+              if (courseIndex < allResults.length - 1) {
+                message += '---\n\n';
+              }
+            });
+            
+            return {
+              message: message,
+              conversationId: req.body.conversationId
+            };
+          } else {
+            // Single course logic (existing)
+            const courseMatch = await findMatchingCourse(
+              parameters.courseName, 
+              userToken, 
+              req, 
+              baseUrl
+            );
+            
           if (!courseMatch.success) {
-            throw new Error(`Course not found: ${courseMatch.message}`);
+            // Start ongoing action to allow retry
+            startOngoingAction(conversationId, 'CHECK_ASSIGNMENT_SUBMISSIONS', ['courseName'], {});
+            return {
+              message: `${courseMatch.message}\n\nWould you like to:\n• Try a different course name\n• List all available courses\n• Cancel this action\n\nPlease let me know what you'd like to do.`,
+              conversationId: req.body.conversationId,
+              ongoingAction: {
+                action: 'CHECK_ASSIGNMENT_SUBMISSIONS',
+                missingParameters: ['courseName'],
+                collectedParameters: {}
+              }
+            };
           }
-          
-          const selectedCourse = courseMatch.course;
-          const courseId = selectedCourse.id;
+            
+            selectedCourse = courseMatch.course;
+            courseId = selectedCourse.id;
+          }
           // 2. Find the assignment by title
           const assignmentsResponse = await makeApiCall(`${baseUrl}/api/courses/${courseId}/assignments`, 'GET', null, userToken, req);
           console.log('DEBUG assignmentsResponse:', assignmentsResponse);
