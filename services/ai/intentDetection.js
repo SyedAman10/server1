@@ -825,6 +825,30 @@ function detectIntentFallback(message, conversationId) {
     };
   }
   
+  // Educational questions - check for study-related keywords
+  if (
+    lowerMessage.includes('explain') || lowerMessage.includes('what is') || lowerMessage.includes('define') ||
+    lowerMessage.includes('how does') || lowerMessage.includes('what are') || lowerMessage.includes('describe') ||
+    lowerMessage.includes('tell me about') || lowerMessage.includes('can you explain') ||
+    lowerMessage.includes('math') || lowerMessage.includes('science') || lowerMessage.includes('physics') ||
+    lowerMessage.includes('chemistry') || lowerMessage.includes('biology') || lowerMessage.includes('history') ||
+    lowerMessage.includes('literature') || lowerMessage.includes('english') || lowerMessage.includes('programming') ||
+    lowerMessage.includes('computer science') || lowerMessage.includes('engineering') || lowerMessage.includes('economics') ||
+    lowerMessage.includes('psychology') || lowerMessage.includes('sociology') || lowerMessage.includes('geography') ||
+    lowerMessage.includes('art') || lowerMessage.includes('music') || lowerMessage.includes('philosophy') ||
+    lowerMessage.includes('sql') || lowerMessage.includes('database') || lowerMessage.includes('algorithm') ||
+    lowerMessage.includes('calculus') || lowerMessage.includes('algebra') || lowerMessage.includes('geometry') ||
+    lowerMessage.includes('photosynthesis') || lowerMessage.includes('thermodynamics') || lowerMessage.includes('quantum')
+  ) {
+    return {
+      intent: 'EDUCATIONAL_QUESTION',
+      confidence: 0.8,
+      parameters: {
+        question: message
+      }
+    };
+  }
+
   // Greeting and casual conversation
   if (lowerMessage.includes('hi') || lowerMessage.includes('hello') || lowerMessage.includes('hey') || 
       lowerMessage.includes('good morning') || lowerMessage.includes('good afternoon') || 
@@ -964,6 +988,8 @@ async function detectIntent(message, conversationHistory, conversationId) {
       - STUDENT_JOIN_SUGGESTION: User is asking about joining a class, inviting students, or how students can join (provide helpful suggestions and prompts) - USE THIS for generic terms like "my class", "the class", "this class", "class", "course"
       - GREETING: User is saying hello, hi, hey, good morning/afternoon/evening, how are you, what's up, thanks, or engaging in casual conversation (no action needed)
         Examples: "hi", "hello", "hey there", "good morning", "how are you doing?", "thanks", "thank you"
+      - EDUCATIONAL_QUESTION: User is asking a study-related or academic question (extract the subject/topic and question details)
+        Examples: "Explain what SQL is", "What is photosynthesis?", "How does machine learning work?", "Define calculus", "Explain the water cycle", "What are the laws of thermodynamics?"
       - HELP: User needs help or instructions
       - UNKNOWN: None of the above
       

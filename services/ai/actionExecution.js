@@ -4283,6 +4283,10 @@ async function executeAction(intentData, originalMessage, userToken, req) {
         };
       }
 
+      case 'EDUCATIONAL_QUESTION':
+        // Handle educational/academic questions
+        return await handleEducationalQuestion(originalMessage, conversationId);
+
       case 'UNKNOWN':
         // Handle unknown intents gracefully
         return {
@@ -6493,6 +6497,50 @@ async function executeAction(intentData, originalMessage, userToken, req) {
     }
     return {
       message: "Sorry, I couldn't complete that action. Please try again later.",
+      conversationId: conversationId
+    };
+  }
+}
+
+/**
+ * Handle educational/academic questions using AI
+ */
+async function handleEducationalQuestion(question, conversationId) {
+  try {
+    const { GoogleGenerativeAI } = require('@google/generative-ai');
+    
+    // Initialize Gemini Flash
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+
+    // Create a focused prompt for educational questions
+    const prompt = `
+      You are an educational AI assistant that helps students with academic questions. 
+      Please provide a clear, educational explanation for the following question.
+      
+      Guidelines:
+      - Keep explanations clear and easy to understand
+      - Use examples when helpful
+      - Structure your response with proper formatting
+      - Focus on educational content only
+      - If the question is not academic/educational, politely redirect to classroom management topics
+      
+      Question: "${question}"
+      
+      Please provide a helpful educational response.
+    `;
+
+    const result = await model.generateContent(prompt);
+    const response = result.response.text();
+
+    return {
+      message: response,
+      conversationId: conversationId
+    };
+  } catch (error) {
+    console.error('Error handling educational question:', error);
+    return {
+      message: "I'm sorry, I encountered an error while trying to answer your educational question. Please try again or rephrase your question.",
       conversationId: conversationId
     };
   }
