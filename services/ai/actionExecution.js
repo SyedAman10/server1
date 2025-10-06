@@ -2512,6 +2512,117 @@ async function executeAction(intentData, originalMessage, userToken, req) {
         }
       }
         
+      case 'LIST_PENDING_ASSIGNMENTS': {
+        // Only students can view their pending assignments
+        if (userRole !== 'student') {
+          return {
+            message: 'Only students can view their pending assignments. Please contact your administrator.',
+            conversationId: req.body.conversationId || generateConversationId()
+          };
+        }
+
+        try {
+          // Get all courses for the student
+          const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken, req);
+          const courses = Array.isArray(coursesResponse) ? coursesResponse : (coursesResponse.courses || []);
+
+          if (courses.length === 0) {
+            return {
+              message: "You're not enrolled in any courses yet.",
+              conversationId: req.body.conversationId || generateConversationId()
+            };
+          }
+
+          // Get assignments from all courses
+          const allAssignments = [];
+          const now = new Date();
+
+          for (const course of courses) {
+            try {
+              const assignmentsResponse = await makeApiCall(`${baseUrl}/api/classroom/${course.id}/assignments`, 'GET', null, userToken, req);
+              const assignments = Array.isArray(assignmentsResponse) ? assignmentsResponse : [];
+
+              // Filter for pending assignments (not yet due)
+              const pendingAssignments = assignments.filter(assignment => {
+                if (!assignment.dueDate) return false; // No due date means not pending
+                
+                const dueDate = new Date(assignment.dueDate.year, assignment.dueDate.month - 1, assignment.dueDate.day);
+                if (assignment.dueTime) {
+                  dueDate.setHours(assignment.dueTime.hours || 23, assignment.dueTime.minutes || 59, 0, 0);
+                } else {
+                  dueDate.setHours(23, 59, 59, 999); // End of day if no time specified
+                }
+                
+                return dueDate > now; // Only future assignments
+              });
+
+              // Add course name to each assignment
+              pendingAssignments.forEach(assignment => {
+                assignment.courseName = course.name;
+                assignment.courseId = course.id;
+              });
+
+              allAssignments.push(...pendingAssignments);
+            } catch (error) {
+              console.error(`Error fetching assignments for course ${course.name}:`, error);
+              // Continue with other courses even if one fails
+            }
+          }
+
+          // Sort by due date (earliest first)
+          allAssignments.sort((a, b) => {
+            const dateA = new Date(a.dueDate.year, a.dueDate.month - 1, a.dueDate.day);
+            const dateB = new Date(b.dueDate.year, b.dueDate.month - 1, b.dueDate.day);
+            return dateA - dateB;
+          });
+
+          if (allAssignments.length === 0) {
+            return {
+              message: "🎉 Great news! You have no pending assignments at the moment.",
+              conversationId: req.body.conversationId || generateConversationId()
+            };
+          }
+
+          // Format the response
+          let message = `📚 **Your Pending Assignments (${allAssignments.length}):**\n\n`;
+          
+          allAssignments.forEach((assignment, index) => {
+            const dueDate = new Date(assignment.dueDate.year, assignment.dueDate.month - 1, assignment.dueDate.day);
+            const dueDateStr = dueDate.toLocaleDateString('en-US', { 
+              weekday: 'short', 
+              month: 'short', 
+              day: 'numeric',
+              year: 'numeric'
+            });
+            
+            const dueTimeStr = assignment.dueTime ? 
+              ` at ${assignment.dueTime.hours.toString().padStart(2, '0')}:${assignment.dueTime.minutes.toString().padStart(2, '0')}` : 
+              '';
+            
+            message += `${index + 1}. **${assignment.title}**\n`;
+            message += `   📚 Course: ${assignment.courseName}\n`;
+            message += `   📅 Due: ${dueDateStr}${dueTimeStr}\n`;
+            message += `   📊 Points: ${assignment.maxPoints || 'N/A'}\n`;
+            if (assignment.description) {
+              message += `   📝 Description: ${assignment.description.substring(0, 100)}${assignment.description.length > 100 ? '...' : ''}\n`;
+            }
+            message += '\n';
+          });
+
+          return {
+            message: message,
+            conversationId: req.body.conversationId || generateConversationId()
+          };
+
+        } catch (error) {
+          console.error('Error fetching pending assignments:', error);
+          return {
+            message: "I couldn't retrieve your pending assignments. Please try again later.",
+            conversationId: req.body.conversationId || generateConversationId()
+          };
+        }
+      }
+
       case 'LIST_ASSIGNMENTS': {
         // Students can view assignments but with different messaging
         if (userRole === 'student') {

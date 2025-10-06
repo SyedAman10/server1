@@ -703,6 +703,26 @@ function detectIntentFallback(message, conversationId) {
     };
   }
 
+  // List pending assignments across all courses
+  if (
+    lowerMessage.includes('pending assignment') ||
+    lowerMessage.includes('due assignment') ||
+    lowerMessage.includes('my assignment') ||
+    lowerMessage.includes('upcoming assignment') ||
+    lowerMessage.includes('assignment due') ||
+    lowerMessage.includes('homework due') ||
+    lowerMessage.includes('list my assignment') ||
+    lowerMessage.includes('show my assignment') ||
+    lowerMessage.includes('what assignment') ||
+    lowerMessage.includes('assignment i have')
+  ) {
+    return {
+      intent: 'LIST_PENDING_ASSIGNMENTS',
+      confidence: 0.9,
+      parameters: {}
+    };
+  }
+
   // List assignments in a course
   if (
     lowerMessage.includes('show') && lowerMessage.includes('assignment') ||
@@ -975,6 +995,7 @@ async function detectIntent(message, conversationHistory, conversationId) {
       - HIGHLIGHT_MISSING_WORK_STUDENTS: User wants to highlight students with missing work across multiple classes (no parameters needed) - This analyzes all courses to find students who are behind
       - GRADE_ASSIGNMENT: User wants to grade a student's assignment (extract courseName, assignmentTitle, studentEmail, assignedGrade, draftGrade)
       - LIST_ASSIGNMENTS: User wants to see all assignments in a course (extract courseName or courseId)
+      - LIST_PENDING_ASSIGNMENTS: User wants to see their pending/due assignments across all courses (no parameters needed)
       - SHOW_ENROLLED_STUDENTS: User wants to see the list of enrolled students in a course (extract courseName)
       - CREATE_MEETING: User wants to create a meeting or schedule an appointment (extract title, attendees, dateExpr, timeExpr, duration, description)
       - LIST_MEETINGS: User wants to see all meetings or list upcoming meetings (no parameters needed)
