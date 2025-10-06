@@ -2640,6 +2640,150 @@ async function executeAction(intentData, originalMessage, userToken, req) {
         }
       }
 
+      case 'SHOW_COURSE_GRADES': {
+        try {
+          if (userRole !== 'student') {
+            return {
+              message: "This feature is only available for students.",
+              conversationId: req.body.conversationId || generateConversationId()
+            };
+          }
+
+          const { courseNames } = parameters;
+          if (!courseNames || courseNames.length === 0) {
+            return {
+              message: "I need to know which courses you want to see grades for. Please specify the course names (e.g., 'Show me my grades in SQL and Tableau').",
+              conversationId: req.body.conversationId || generateConversationId()
+            };
+          }
+
+          // Get all courses for the student
+          const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken, req);
+          const allCourses = Array.isArray(coursesResponse) ? coursesResponse : [];
+
+          // Find courses that match the requested course names
+          const matchingCourses = allCourses.filter(course => {
+            const courseNameLower = course.name.toLowerCase();
+            return courseNames.some(requestedCourse => 
+              courseNameLower.includes(requestedCourse.toLowerCase())
+            );
+          });
+
+          if (matchingCourses.length === 0) {
+            return {
+              message: `I couldn't find any courses matching: ${courseNames.join(', ')}. Please check the course names and try again.`,
+              conversationId: req.body.conversationId || generateConversationId()
+            };
+          }
+
+          // Fetch grades for each matching course
+          const courseGrades = [];
+          
+          for (const course of matchingCourses) {
+            try {
+              // Get assignments for this course
+              const assignmentsResponse = await makeApiCall(`${baseUrl}/api/courses/${course.id}/assignments`, 'GET', null, userToken, req);
+              const assignments = Array.isArray(assignmentsResponse) ? assignmentsResponse : [];
+
+              // Get submissions for each assignment
+              const courseGradeData = {
+                courseName: course.name,
+                courseId: course.id,
+                assignments: []
+              };
+
+              for (const assignment of assignments) {
+                try {
+                  // Get submissions for this assignment
+                  const submissionsResponse = await makeApiCall(`${baseUrl}/api/courses/${course.id}/assignments/${assignment.id}/submissions`, 'GET', null, userToken, req);
+                  const submissions = Array.isArray(submissionsResponse) ? submissionsResponse : [];
+
+                  // Find the student's submission
+                  const studentSubmission = submissions.find(sub => sub.userId === userId);
+                  
+                  if (studentSubmission) {
+                    courseGradeData.assignments.push({
+                      title: assignment.title,
+                      maxPoints: assignment.maxPoints || 0,
+                      grade: studentSubmission.assignedGrade || studentSubmission.draftGrade || 0,
+                      state: studentSubmission.state || 'UNKNOWN',
+                      dueDate: assignment.dueDate,
+                      submissionTime: studentSubmission.submissionTime
+                    });
+                  }
+                } catch (error) {
+                  console.error(`Error fetching submissions for assignment ${assignment.title}:`, error);
+                }
+              }
+
+              courseGrades.push(courseGradeData);
+            } catch (error) {
+              console.error(`Error fetching grades for course ${course.name}:`, error);
+            }
+          }
+
+          // Format the response
+          let message = `📊 **Your Grades in ${courseNames.join(' and ')}:**\n\n`;
+          
+          if (courseGrades.length === 0) {
+            message += "No grades found for the specified courses.";
+          } else {
+            courseGrades.forEach(courseData => {
+              message += `**${courseData.courseName}**\n`;
+              
+              if (courseData.assignments.length === 0) {
+                message += `   No graded assignments found.\n\n`;
+              } else {
+                courseData.assignments.forEach(assignment => {
+                  const percentage = assignment.maxPoints > 0 ? 
+                    Math.round((assignment.grade / assignment.maxPoints) * 100) : 0;
+                  
+                  message += `   📝 ${assignment.title}\n`;
+                  message += `   📊 Grade: ${assignment.grade}/${assignment.maxPoints} (${percentage}%)\n`;
+                  message += `   📋 Status: ${assignment.state}\n`;
+                  
+                  if (assignment.dueDate) {
+                    const dueDate = new Date(assignment.dueDate.year, assignment.dueDate.month - 1, assignment.dueDate.day);
+                    const dueDateStr = dueDate.toLocaleDateString('en-US', { 
+                      weekday: 'short', 
+                      month: 'short', 
+                      day: 'numeric',
+                      year: 'numeric'
+                    });
+                    message += `   📅 Due: ${dueDateStr}\n`;
+                  }
+                  
+                  if (assignment.submissionTime) {
+                    const submissionDate = new Date(assignment.submissionTime);
+                    const submissionStr = submissionDate.toLocaleDateString('en-US', { 
+                      weekday: 'short', 
+                      month: 'short', 
+                      day: 'numeric',
+                      year: 'numeric'
+                    });
+                    message += `   ⏰ Submitted: ${submissionStr}\n`;
+                  }
+                  
+                  message += '\n';
+                });
+              }
+            });
+          }
+
+          return {
+            message: message,
+            conversationId: req.body.conversationId || generateConversationId()
+          };
+
+        } catch (error) {
+          console.error('Error fetching course grades:', error);
+          return {
+            message: "I couldn't retrieve your grades. Please try again later.",
+            conversationId: req.body.conversationId || generateConversationId()
+          };
+        }
+      }
+
       case 'LIST_ASSIGNMENTS': {
         // Students can view assignments but with different messaging
         if (userRole === 'student') {

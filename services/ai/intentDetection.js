@@ -723,6 +723,49 @@ function detectIntentFallback(message, conversationId) {
     };
   }
 
+  // Show grades in specific courses
+  if (
+    (lowerMessage.includes('show') || lowerMessage.includes('my') || lowerMessage.includes('grades')) &&
+    (lowerMessage.includes('grade') || lowerMessage.includes('score') || lowerMessage.includes('mark')) &&
+    (lowerMessage.includes('in') || lowerMessage.includes('for'))
+  ) {
+    // Extract course names from the message
+    const courseNames = [];
+    
+    // Look for common course name patterns
+    const coursePatterns = [
+      /(?:in|for|of)\s+([A-Za-z\s]+?)(?:\s+and|\s+&|\s*,|\s*$)/g,
+      /(?:in|for|of)\s+([A-Za-z\s]+?)(?:\s+course|\s+class)/g,
+      /(?:in|for|of)\s+([A-Za-z\s]+?)(?:\s+subject)/g
+    ];
+    
+    for (const pattern of coursePatterns) {
+      let match;
+      while ((match = pattern.exec(lowerMessage)) !== null) {
+        const courseName = match[1].trim();
+        if (courseName && courseName.length > 1 && !courseName.includes('grade') && !courseName.includes('score')) {
+          courseNames.push(courseName);
+        }
+      }
+    }
+    
+    // Also look for specific course names mentioned
+    const specificCourses = ['sql', 'tableau', 'python', 'java', 'javascript', 'math', 'physics', 'chemistry', 'biology', 'english', 'history'];
+    for (const course of specificCourses) {
+      if (lowerMessage.includes(course)) {
+        courseNames.push(course);
+      }
+    }
+    
+    return {
+      intent: 'SHOW_COURSE_GRADES',
+      confidence: 0.85,
+      parameters: {
+        courseNames: courseNames.length > 0 ? courseNames : []
+      }
+    };
+  }
+
   // List assignments in a course
   if (
     lowerMessage.includes('show') && lowerMessage.includes('assignment') ||
@@ -996,6 +1039,7 @@ async function detectIntent(message, conversationHistory, conversationId) {
       - GRADE_ASSIGNMENT: User wants to grade a student's assignment (extract courseName, assignmentTitle, studentEmail, assignedGrade, draftGrade)
       - LIST_ASSIGNMENTS: User wants to see all assignments in a course (extract courseName or courseId)
       - LIST_PENDING_ASSIGNMENTS: User wants to see their pending/due assignments across all courses (no parameters needed)
+      - SHOW_COURSE_GRADES: User wants to see their grades in specific courses (extract courseNames from the request)
       - SHOW_ENROLLED_STUDENTS: User wants to see the list of enrolled students in a course (extract courseName)
       - CREATE_MEETING: User wants to create a meeting or schedule an appointment (extract title, attendees, dateExpr, timeExpr, duration, description)
       - LIST_MEETINGS: User wants to see all meetings or list upcoming meetings (no parameters needed)
