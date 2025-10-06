@@ -6542,14 +6542,14 @@ function formatCoursesResponse(coursesResponse, userRole, conversationId) {
       if (course.alternateLink) {
         message += `   🔗 **[View in Google Classroom](${course.alternateLink})**\n`;
       }
-      message += '\n';
+      message += '\n\n';
     });
 
     // Add footer based on user role
     if (userRole === 'student') {
-      message += '💡 **Student Actions:**\n• View assignments and materials\n• Submit work\n• Check grades';
+      message += '\n💡 **Student Actions:**\n• View assignments and materials\n• Submit work\n• Check grades';
     } else {
-      message += '💡 **Teacher Actions:**\n• Create assignments\n• Invite students\n• Post announcements\n• Manage course materials';
+      message += '\n💡 **Teacher Actions:**\n• Create assignments\n• Invite students\n• Post announcements\n• Manage course materials';
     }
 
     return {
