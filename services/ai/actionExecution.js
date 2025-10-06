@@ -2539,7 +2539,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
 
           for (const course of courses) {
             try {
-              const assignmentsResponse = await makeApiCall(`${baseUrl}/api/classroom/${course.id}/assignments`, 'GET', null, userToken, req);
+              const assignmentsResponse = await makeApiCall(`${baseUrl}/api/courses/${course.id}/assignments`, 'GET', null, userToken, req);
               const assignments = Array.isArray(assignmentsResponse) ? assignmentsResponse : [];
 
               // Filter for pending assignments (not yet due)
