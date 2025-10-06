@@ -6534,15 +6534,8 @@ function formatCoursesResponse(coursesResponse, userRole, conversationId) {
     courses.forEach((course, index) => {
       const courseNumber = index + 1;
       const section = course.section ? ` (${course.section})` : '';
-      const enrollmentCode = course.enrollmentCode ? `\n   📝 **Enrollment Code:** ${course.enrollmentCode}` : '';
-      const state = course.courseState ? `\n   📊 **Status:** ${course.courseState}` : '';
       
-      message += `${courseNumber}. **${course.name}**${section}${enrollmentCode}${state}\n`;
-      
-      if (course.alternateLink) {
-        message += `   🔗 **[View in Google Classroom](${course.alternateLink})**\n`;
-      }
-      message += '\n\n';
+      message += `${courseNumber}. **${course.name}**${section}\n`;
     });
 
     // Add footer based on user role
