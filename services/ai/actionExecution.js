@@ -2649,6 +2649,8 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             };
           }
 
+          console.log('🔍 DEBUG: User is a student, proceeding with grade lookup');
+
           const { courseNames } = parameters;
           if (!courseNames || courseNames.length === 0) {
             return {
@@ -2675,6 +2677,8 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           });
 
           // Debug: Log available courses for troubleshooting
+          console.log('🔍 DEBUG: User role:', userRole);
+          console.log('🔍 DEBUG: User ID:', userId);
           console.log('🔍 DEBUG: Available courses:', allCourses.map(c => c.name));
           console.log('🔍 DEBUG: Requested course names:', courseNames);
           console.log('🔍 DEBUG: Matching courses found:', matchingCourses.map(c => c.name));
