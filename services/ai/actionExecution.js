@@ -6547,9 +6547,9 @@ function formatCoursesResponse(coursesResponse, userRole, conversationId) {
 
     // Add footer based on user role
     if (userRole === 'student') {
-      message += '💡 **Student Actions:**\n* • View assignments and materials\n* • Submit work\n* • Check grades';
+      message += '💡 **Student Actions:**\n• View assignments and materials\n• Submit work\n• Check grades';
     } else {
-      message += '💡 **Teacher Actions:**\n* • Create assignments\n* • Invite students\n* • Post announcements\n* • Manage course materials';
+      message += '💡 **Teacher Actions:**\n• Create assignments\n• Invite students\n• Post announcements\n• Manage course materials';
     }
 
     return {
