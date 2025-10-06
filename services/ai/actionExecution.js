@@ -2664,14 +2664,26 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           // Find courses that match the requested course names
           const matchingCourses = allCourses.filter(course => {
             const courseNameLower = course.name.toLowerCase();
-            return courseNames.some(requestedCourse => 
-              courseNameLower.includes(requestedCourse.toLowerCase())
-            );
+            return courseNames.some(requestedCourse => {
+              const requestedLower = requestedCourse.toLowerCase().trim();
+              // Try multiple matching strategies
+              return courseNameLower.includes(requestedLower) ||
+                     courseNameLower.includes(requestedLower.replace(/\s+/g, '')) ||
+                     courseNameLower.includes(requestedLower.replace(/\s+/g, '-')) ||
+                     courseNameLower.includes(requestedLower.replace(/\s+/g, '_'));
+            });
           });
 
+          // Debug: Log available courses for troubleshooting
+          console.log('🔍 DEBUG: Available courses:', allCourses.map(c => c.name));
+          console.log('🔍 DEBUG: Requested course names:', courseNames);
+          console.log('🔍 DEBUG: Matching courses found:', matchingCourses.map(c => c.name));
+
           if (matchingCourses.length === 0) {
+            // Show available courses to help the user
+            const availableCourseNames = allCourses.map(course => course.name).join(', ');
             return {
-              message: `I couldn't find any courses matching: ${courseNames.join(', ')}. Please check the course names and try again.`,
+              message: `I couldn't find any courses matching: ${courseNames.join(', ')}.\n\nAvailable courses: ${availableCourseNames}\n\nPlease check the course names and try again.`,
               conversationId: req.body.conversationId || generateConversationId()
             };
           }

@@ -734,9 +734,10 @@ function detectIntentFallback(message, conversationId) {
     
     // Look for common course name patterns
     const coursePatterns = [
-      /(?:in|for|of)\s+([A-Za-z\s]+?)(?:\s+and|\s+&|\s*,|\s*$)/g,
-      /(?:in|for|of)\s+([A-Za-z\s]+?)(?:\s+course|\s+class)/g,
-      /(?:in|for|of)\s+([A-Za-z\s]+?)(?:\s+subject)/g
+      /(?:in|for|of)\s+([A-Za-z0-9\s]+?)(?:\s+and|\s+&|\s*,|\s*$)/g,
+      /(?:in|for|of)\s+([A-Za-z0-9\s]+?)(?:\s+course|\s+class)/g,
+      /(?:in|for|of)\s+([A-Za-z0-9\s]+?)(?:\s+subject)/g,
+      /(?:in|for|of)\s+([A-Za-z0-9\s]+?)(?:\s+grades?|\s+scores?)/g
     ];
     
     for (const pattern of coursePatterns) {
@@ -749,11 +750,18 @@ function detectIntentFallback(message, conversationId) {
       }
     }
     
-    // Also look for specific course names mentioned
+    // Also look for specific course names mentioned (including numbered courses)
     const specificCourses = ['sql', 'tableau', 'python', 'java', 'javascript', 'math', 'physics', 'chemistry', 'biology', 'english', 'history'];
     for (const course of specificCourses) {
       if (lowerMessage.includes(course)) {
-        courseNames.push(course);
+        // Try to find the full course name with numbers
+        const coursePattern = new RegExp(`\\b${course}\\s*\\d+\\b`, 'gi');
+        const match = lowerMessage.match(coursePattern);
+        if (match) {
+          courseNames.push(match[0]);
+        } else {
+          courseNames.push(course);
+        }
       }
     }
     
