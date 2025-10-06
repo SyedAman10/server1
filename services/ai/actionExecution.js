@@ -1252,15 +1252,15 @@ Extracted title:`;
         // Try to find matching course
         try {
           const courseMatch = await findMatchingCourse(courseName, userToken, req, baseUrl);
-            if (!courseMatch.success) {
-              return {
-                action: 'CHECK_ASSIGNMENT_SUBMISSIONS',
-                missingParameters: ['courseName'],
-                collectedParameters: { ...collectedParameters },
+          if (!courseMatch.success) {
+            return {
+              action: 'CHECK_ASSIGNMENT_SUBMISSIONS',
+              missingParameters: ['courseName'],
+              collectedParameters: { ...collectedParameters },
                 nextMessage: `${courseMatch.message}\n\nWould you like to:\n• Try a different course name\n• List all available courses\n• Cancel this action\n\nPlease let me know what you'd like to do.`,
-                actionComplete: false
-              };
-            }
+              actionComplete: false
+            };
+          }
           
           if (courseMatch.allMatches && courseMatch.allMatches.length > 1 && !courseMatch.isExactMatch) {
             const courseOptions = courseMatch.allMatches.map(course => `• ${course.name}${course.section ? ` (${course.section})` : ''}`).join('\n');
@@ -3773,8 +3773,8 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             }
             
             errorMessage += `All Emails Attempted: ${studentEmails.join(', ')}\nCourse: ${courseName}\n\nCorrect Format: student@domain.com\nIncorrect: student@domain,com or student@domain`;
-            
-            return {
+          
+          return {
               message: errorMessage,
               conversationId: req.body.conversationId,
               invalidEmails: invalidEmails
@@ -4602,13 +4602,13 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             };
           } else {
             // Single course logic (existing)
-            const courseMatch = await findMatchingCourse(
-              parameters.courseName, 
-              userToken, 
-              req, 
-              baseUrl
-            );
-            
+          const courseMatch = await findMatchingCourse(
+            parameters.courseName, 
+            userToken, 
+            req, 
+            baseUrl
+          );
+          
           if (!courseMatch.success) {
             // Start ongoing action to allow retry
             startOngoingAction(conversationId, 'CHECK_ASSIGNMENT_SUBMISSIONS', ['courseName'], {});
@@ -4685,7 +4685,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
                   });
                 }
                 
-                return {
+              return {
                   message: `I couldn't find any assignments created today in ${selectedCourse.name}.\n\nRecent assignments:\n${recentList}\n\nWould you like to check submissions for one of these assignments instead?`,
                   conversationId: req.body.conversationId,
                   ongoingAction: {
@@ -4702,8 +4702,8 @@ async function executeAction(intentData, originalMessage, userToken, req) {
               } else {
                 return {
                   message: `I couldn't find any assignments created today in ${selectedCourse.name}. There are no assignments in this course yet.`,
-                  conversationId: req.body.conversationId
-                };
+                conversationId: req.body.conversationId
+              };
               }
             } else if (matchingAssignments.length > 1) {
               // Start ongoing action to handle assignment selection
@@ -6534,22 +6534,22 @@ function formatCoursesResponse(coursesResponse, userRole, conversationId) {
     courses.forEach((course, index) => {
       const courseNumber = index + 1;
       const section = course.section ? ` (${course.section})` : '';
-      const enrollmentCode = course.enrollmentCode ? `\n   📝 Enrollment Code: ${course.enrollmentCode}` : '';
-      const state = course.courseState ? `\n   📊 Status: ${course.courseState}` : '';
+      const enrollmentCode = course.enrollmentCode ? `\n   📝 **Enrollment Code:** ${course.enrollmentCode}` : '';
+      const state = course.courseState ? `\n   📊 **Status:** ${course.courseState}` : '';
       
       message += `${courseNumber}. **${course.name}**${section}${enrollmentCode}${state}\n`;
       
       if (course.alternateLink) {
-        message += `   🔗 [View in Google Classroom](${course.alternateLink})\n`;
+        message += `   🔗 **[View in Google Classroom](${course.alternateLink})**\n`;
       }
       message += '\n';
     });
 
     // Add footer based on user role
     if (userRole === 'student') {
-      message += '💡 **Student Actions:**\n• View assignments and materials\n• Submit work\n• Check grades';
+      message += '💡 **Student Actions:**\n* • View assignments and materials\n* • Submit work\n* • Check grades';
     } else {
-      message += '💡 **Teacher Actions:**\n• Create assignments\n• Invite students\n• Post announcements\n• Manage course materials';
+      message += '💡 **Teacher Actions:**\n* • Create assignments\n* • Invite students\n* • Post announcements\n* • Manage course materials';
     }
 
     return {
