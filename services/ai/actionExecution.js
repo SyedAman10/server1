@@ -3800,9 +3800,9 @@ async function executeAction(intentData, originalMessage, userToken, req) {
 
       case 'STUDENT_JOIN_SUGGESTION':
         // Extract potential course names and emails from the message
-        const originalMessage = req.body.message || '';
+        const messageText = req.body.message || '';
         const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
-        const emails = originalMessage.match(emailRegex) || [];
+        const emails = messageText.match(emailRegex) || [];
         
         // Try to extract course names from common patterns
         const coursePatterns = [
@@ -3814,7 +3814,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
         
         let extractedCourse = '';
         for (const pattern of coursePatterns) {
-          const match = originalMessage.match(pattern);
+          const match = messageText.match(pattern);
           if (match && match[1]) {
             extractedCourse = match[1].trim();
             break;
