@@ -6535,15 +6535,9 @@ function formatCoursesResponse(coursesResponse, userRole, conversationId) {
       const courseNumber = index + 1;
       const section = course.section ? ` (${course.section})` : '';
       
-      message += `${courseNumber}. **${course.name}**${section}\n`;
+      message += `${courseNumber}. ${course.name}${section}\n`;
     });
 
-    // Add footer based on user role
-    if (userRole === 'student') {
-      message += '\n💡 **Student Actions:**\n• View assignments and materials\n• Submit work\n• Check grades';
-    } else {
-      message += '\n💡 **Teacher Actions:**\n• Create assignments\n• Invite students\n• Post announcements\n• Manage course materials';
-    }
 
     return {
       message: message,
