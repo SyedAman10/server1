@@ -6515,28 +6515,19 @@ async function handleEducationalQuestion(question, conversationId) {
 
     // Create a focused prompt for educational questions
     const prompt = `
-      You are an educational AI assistant that helps students with academic questions. 
-      Please provide a clear, educational explanation for the following question.
+      You are an educational AI assistant. Provide a SHORT, concise answer to the academic question.
       
-      IMPORTANT FORMATTING REQUIREMENTS:
-      - Use **bold text** for important terms and concepts (NOT asterisks)
-      - Use bullet points with • for lists (NOT asterisks)
-      - Use proper line breaks between sections
-      - Use numbered lists (1., 2., 3.) for steps or sequences
-      - Use code blocks with \`\`\` for code examples
-      - Keep paragraphs short and well-spaced
-      - Use headings with ## for main sections
-      
-      Guidelines:
-      - Keep explanations clear and easy to understand
-      - Use examples when helpful
-      - Structure your response with proper markdown formatting
-      - Focus on educational content only
-      - If the question is not academic/educational, politely redirect to classroom management topics
+      REQUIREMENTS:
+      - Keep response under 150 words
+      - Use **bold** for key terms only
+      - Use • for brief bullet points
+      - Be direct and to the point
+      - No unnecessary examples or lengthy explanations
+      - Focus on the core concept only
       
       Question: "${question}"
       
-      Please provide a helpful educational response with proper markdown formatting. Do NOT use asterisks (*) for formatting.
+      Give a brief, educational answer. Be concise.
     `;
 
     const result = await model.generateContent(prompt);
