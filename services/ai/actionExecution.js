@@ -2542,10 +2542,12 @@ async function executeAction(intentData, originalMessage, userToken, req) {
               const assignmentsResponse = await makeApiCall(`${baseUrl}/api/courses/${course.id}/assignments`, 'GET', null, userToken, req);
               const assignments = Array.isArray(assignmentsResponse) ? assignmentsResponse : [];
 
-              // Filter for pending assignments (not yet due)
+              // Filter for pending assignments (not yet due or no due date)
               const pendingAssignments = assignments.filter(assignment => {
-                if (!assignment.dueDate) return false; // No due date means not pending
+                // If no due date, consider it pending (student hasn't submitted yet)
+                if (!assignment.dueDate) return true;
                 
+                // If has due date, check if it's in the future
                 const dueDate = new Date(assignment.dueDate.year, assignment.dueDate.month - 1, assignment.dueDate.day);
                 if (assignment.dueTime) {
                   dueDate.setHours(assignment.dueTime.hours || 23, assignment.dueTime.minutes || 59, 0, 0);
@@ -2569,11 +2571,20 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             }
           }
 
-          // Sort by due date (earliest first)
+          // Sort by due date (earliest first), assignments without due dates go to the end
           allAssignments.sort((a, b) => {
-            const dateA = new Date(a.dueDate.year, a.dueDate.month - 1, a.dueDate.day);
-            const dateB = new Date(b.dueDate.year, b.dueDate.month - 1, b.dueDate.day);
-            return dateA - dateB;
+            // If both have due dates, sort by date
+            if (a.dueDate && b.dueDate) {
+              const dateA = new Date(a.dueDate.year, a.dueDate.month - 1, a.dueDate.day);
+              const dateB = new Date(b.dueDate.year, b.dueDate.month - 1, b.dueDate.day);
+              return dateA - dateB;
+            }
+            // If only a has due date, a comes first
+            if (a.dueDate && !b.dueDate) return -1;
+            // If only b has due date, b comes first
+            if (!a.dueDate && b.dueDate) return 1;
+            // If neither has due date, sort by title
+            return a.title.localeCompare(b.title);
           });
 
           if (allAssignments.length === 0) {
@@ -2587,21 +2598,27 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           let message = `📚 **Your Pending Assignments (${allAssignments.length}):**\n\n`;
           
           allAssignments.forEach((assignment, index) => {
-            const dueDate = new Date(assignment.dueDate.year, assignment.dueDate.month - 1, assignment.dueDate.day);
-            const dueDateStr = dueDate.toLocaleDateString('en-US', { 
-              weekday: 'short', 
-              month: 'short', 
-              day: 'numeric',
-              year: 'numeric'
-            });
-            
-            const dueTimeStr = assignment.dueTime ? 
-              ` at ${assignment.dueTime.hours.toString().padStart(2, '0')}:${assignment.dueTime.minutes.toString().padStart(2, '0')}` : 
-              '';
-            
             message += `${index + 1}. **${assignment.title}**\n`;
             message += `   📚 Course: ${assignment.courseName}\n`;
-            message += `   📅 Due: ${dueDateStr}${dueTimeStr}\n`;
+            
+            if (assignment.dueDate) {
+              const dueDate = new Date(assignment.dueDate.year, assignment.dueDate.month - 1, assignment.dueDate.day);
+              const dueDateStr = dueDate.toLocaleDateString('en-US', { 
+                weekday: 'short', 
+                month: 'short', 
+                day: 'numeric',
+                year: 'numeric'
+              });
+              
+              const dueTimeStr = assignment.dueTime ? 
+                ` at ${assignment.dueTime.hours.toString().padStart(2, '0')}:${(assignment.dueTime.minutes || 0).toString().padStart(2, '0')}` : 
+                '';
+              
+              message += `   📅 Due: ${dueDateStr}${dueTimeStr}\n`;
+            } else {
+              message += `   📅 Due: No due date set\n`;
+            }
+            
             message += `   📊 Points: ${assignment.maxPoints || 'N/A'}\n`;
             if (assignment.description) {
               message += `   📝 Description: ${assignment.description.substring(0, 100)}${assignment.description.length > 100 ? '...' : ''}\n`;
