@@ -2842,6 +2842,74 @@ async function executeAction(intentData, originalMessage, userToken, req) {
         };
       }
 
+      case 'JOIN_CLASS_HELP': {
+        return {
+          message: `🎓 **How to Join a Class in Google Classroom:**
+
+**Method 1: Using Class Code (Most Common)**
+
+1. **Get the Class Code**
+   • Ask your teacher for the class code
+   • It's usually 6-7 characters (e.g., "abc1234")
+   • Your teacher can find it in the class settings
+
+2. **Join the Class**
+   • Go to classroom.google.com
+   • Sign in with your school account
+   • Click the "+" button in the top right
+   • Select "Join class"
+   • Enter the class code
+   • Click "Join"
+
+**Method 2: Using Email Invitation**
+
+1. **Check Your Email**
+   • Look for an invitation from your teacher
+   • It will be from Google Classroom
+
+2. **Accept the Invitation**
+   • Click "Join" in the email
+   • Or click the link in the email
+   • You'll be automatically added to the class
+
+**Method 3: Using Google Meet Link**
+
+1. **Join via Meet**
+   • If your teacher shared a Meet link
+   • Click the link to join the class
+   • You may be automatically enrolled
+
+**Troubleshooting:**
+
+❌ **"Class not found" error:**
+• Double-check the class code
+• Make sure you're using the correct Google account
+• Ask your teacher to verify the code
+
+❌ **"You're already in this class" message:**
+• You're already enrolled
+• Check your Google Classroom homepage
+
+❌ **Can't find the "+" button:**
+• Make sure you're signed in
+• Try refreshing the page
+• Check if you're using the correct account
+
+**Important Tips:**
+• 🔐 Use your school Google account, not personal
+• 📱 You can also join using the Google Classroom mobile app
+• ⏰ Join as soon as possible to not miss assignments
+• 📧 Check your email regularly for invitations
+• 🆘 Contact your teacher if you have trouble joining
+
+**Need the Class Code?**
+Ask your teacher for the class code - they can find it in:
+• Class settings → General → Class code
+• Or they can share it from the class page`,
+          conversationId: req.body.conversationId || generateConversationId()
+        };
+      }
+
       case 'LIST_ASSIGNMENTS': {
         // Students can view assignments but with different messaging
         if (userRole === 'student') {

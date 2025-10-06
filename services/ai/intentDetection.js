@@ -798,6 +798,33 @@ function detectIntentFallback(message, conversationId) {
     };
   }
 
+  // Join class help
+  if (
+    lowerMessage.includes('how do i join') ||
+    lowerMessage.includes('how to join') ||
+    lowerMessage.includes('how can i join') ||
+    lowerMessage.includes('how do you join') ||
+    lowerMessage.includes('join class') ||
+    lowerMessage.includes('join a class') ||
+    lowerMessage.includes('join the class') ||
+    lowerMessage.includes('enroll in class') ||
+    lowerMessage.includes('enroll in a class') ||
+    lowerMessage.includes('add me to class') ||
+    lowerMessage.includes('add me to the class') ||
+    lowerMessage.includes('class code') ||
+    lowerMessage.includes('join with code') ||
+    lowerMessage.includes('enter class code') ||
+    lowerMessage.includes('how to enter') ||
+    (lowerMessage.includes('help') && lowerMessage.includes('join')) ||
+    (lowerMessage.includes('help') && lowerMessage.includes('class'))
+  ) {
+    return {
+      intent: 'JOIN_CLASS_HELP',
+      confidence: 0.9,
+      parameters: {}
+    };
+  }
+
   // List assignments in a course
   if (
     lowerMessage.includes('show') && lowerMessage.includes('assignment') ||
@@ -1073,6 +1100,7 @@ async function detectIntent(message, conversationHistory, conversationId) {
       - LIST_PENDING_ASSIGNMENTS: User wants to see their pending/due assignments across all courses (no parameters needed)
       - SHOW_COURSE_GRADES: User wants to see their grades in specific courses (extract courseNames from the request)
       - ASSIGNMENT_SUBMISSION_HELP: User is asking how to submit an assignment or needs help with assignment submission process (no parameters needed)
+      - JOIN_CLASS_HELP: User is asking how to join a class or needs help with joining a Google Classroom (no parameters needed)
       - SHOW_ENROLLED_STUDENTS: User wants to see the list of enrolled students in a course (extract courseName)
       - CREATE_MEETING: User wants to create a meeting or schedule an appointment (extract title, attendees, dateExpr, timeExpr, duration, description)
       - LIST_MEETINGS: User wants to see all meetings or list upcoming meetings (no parameters needed)
