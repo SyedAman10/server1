@@ -6518,20 +6518,31 @@ async function handleEducationalQuestion(question, conversationId) {
       You are an educational AI assistant that helps students with academic questions. 
       Please provide a clear, educational explanation for the following question.
       
+      IMPORTANT FORMATTING REQUIREMENTS:
+      - Use **bold text** for important terms and concepts (NOT asterisks)
+      - Use bullet points with • for lists (NOT asterisks)
+      - Use proper line breaks between sections
+      - Use numbered lists (1., 2., 3.) for steps or sequences
+      - Use code blocks with \`\`\` for code examples
+      - Keep paragraphs short and well-spaced
+      - Use headings with ## for main sections
+      
       Guidelines:
       - Keep explanations clear and easy to understand
       - Use examples when helpful
-      - Structure your response with proper formatting
+      - Structure your response with proper markdown formatting
       - Focus on educational content only
       - If the question is not academic/educational, politely redirect to classroom management topics
       
       Question: "${question}"
       
-      Please provide a helpful educational response.
+      Please provide a helpful educational response with proper markdown formatting. Do NOT use asterisks (*) for formatting.
     `;
 
     const result = await model.generateContent(prompt);
     const response = result.response.text();
+    
+    console.log('🔍 DEBUG: Raw AI response for educational question:', response);
 
     return {
       message: response,
