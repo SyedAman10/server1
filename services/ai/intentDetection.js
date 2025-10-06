@@ -774,6 +774,30 @@ function detectIntentFallback(message, conversationId) {
     };
   }
 
+  // Assignment submission help
+  if (
+    lowerMessage.includes('how do i submit') ||
+    lowerMessage.includes('how to submit') ||
+    lowerMessage.includes('how can i submit') ||
+    lowerMessage.includes('how do you submit') ||
+    lowerMessage.includes('submit assignment') ||
+    lowerMessage.includes('hand in assignment') ||
+    lowerMessage.includes('turn in assignment') ||
+    lowerMessage.includes('upload assignment') ||
+    lowerMessage.includes('assignment submission') ||
+    lowerMessage.includes('how to hand in') ||
+    lowerMessage.includes('how to turn in') ||
+    lowerMessage.includes('how to upload') ||
+    (lowerMessage.includes('help') && lowerMessage.includes('assignment')) ||
+    (lowerMessage.includes('help') && lowerMessage.includes('submit'))
+  ) {
+    return {
+      intent: 'ASSIGNMENT_SUBMISSION_HELP',
+      confidence: 0.9,
+      parameters: {}
+    };
+  }
+
   // List assignments in a course
   if (
     lowerMessage.includes('show') && lowerMessage.includes('assignment') ||
@@ -1048,6 +1072,7 @@ async function detectIntent(message, conversationHistory, conversationId) {
       - LIST_ASSIGNMENTS: User wants to see all assignments in a course (extract courseName or courseId)
       - LIST_PENDING_ASSIGNMENTS: User wants to see their pending/due assignments across all courses (no parameters needed)
       - SHOW_COURSE_GRADES: User wants to see their grades in specific courses (extract courseNames from the request)
+      - ASSIGNMENT_SUBMISSION_HELP: User is asking how to submit an assignment or needs help with assignment submission process (no parameters needed)
       - SHOW_ENROLLED_STUDENTS: User wants to see the list of enrolled students in a course (extract courseName)
       - CREATE_MEETING: User wants to create a meeting or schedule an appointment (extract title, attendees, dateExpr, timeExpr, duration, description)
       - LIST_MEETINGS: User wants to see all meetings or list upcoming meetings (no parameters needed)

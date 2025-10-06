@@ -2649,8 +2649,6 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             };
           }
 
-          console.log('🔍 DEBUG: User is a student, proceeding with grade lookup');
-
           const { courseNames } = parameters;
           if (!courseNames || courseNames.length === 0) {
             return {
@@ -2677,8 +2675,6 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           });
 
           // Debug: Log available courses for troubleshooting
-          console.log('🔍 DEBUG: User role:', userRole);
-          console.log('🔍 DEBUG: User ID:', userId);
           console.log('🔍 DEBUG: Available courses:', allCourses.map(c => c.name));
           console.log('🔍 DEBUG: Requested course names:', courseNames);
           console.log('🔍 DEBUG: Matching courses found:', matchingCourses.map(c => c.name));
@@ -2798,6 +2794,52 @@ async function executeAction(intentData, originalMessage, userToken, req) {
             conversationId: req.body.conversationId || generateConversationId()
           };
         }
+      }
+
+      case 'ASSIGNMENT_SUBMISSION_HELP': {
+        return {
+          message: `📝 **How to Submit an Assignment in Google Classroom:**
+
+**Step-by-Step Guide:**
+
+1. **Open Google Classroom**
+   • Go to classroom.google.com
+   • Sign in with your school account
+
+2. **Find Your Assignment**
+   • Click on the class where the assignment was posted
+   • Look for the assignment in the "Classwork" tab
+   • Click on the assignment title
+
+3. **Submit Your Work**
+   • Click the "View assignment" button
+   • Click "Add or create" to upload your file
+   • Choose from:
+     - 📁 **Upload from device** - Select files from your computer
+     - 📄 **Google Drive** - Choose files from your Drive
+     - 📝 **Create** - Make a new Google Doc, Sheet, or Slide
+     - 🔗 **Link** - Add a link to your work
+
+4. **Add Comments (Optional)**
+   • Click "Add private comment" to message your teacher
+   • This is only visible to you and your teacher
+
+5. **Submit**
+   • Click the blue "Turn in" button
+   • Confirm by clicking "Turn in" again
+
+**Important Tips:**
+• ⏰ Submit before the due date to avoid late penalties
+• 📱 You can also submit from the Google Classroom mobile app
+• 🔄 You can unsubmit and resubmit before the due date
+• 📋 Check the assignment details for specific requirements
+
+**Need Help?**
+• Ask your teacher if you have questions about the assignment
+• Check the assignment instructions for specific submission requirements
+• Make sure your file is in the correct format (PDF, DOC, etc.)`,
+          conversationId: req.body.conversationId || generateConversationId()
+        };
       }
 
       case 'LIST_ASSIGNMENTS': {
