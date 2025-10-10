@@ -20,27 +20,40 @@ function calculateDateFromExpression(dateExpr) {
       
       const result = new Date(today);
       result.setDate(today.getDate() + daysToAdd);
-      return result.toISOString().split('T')[0];
+      // Use local date methods to avoid timezone issues
+      const year = result.getFullYear();
+      const month = (result.getMonth() + 1).toString().padStart(2, '0');
+      const day = result.getDate().toString().padStart(2, '0');
+      return `${year}-${month}-${day}`;
     }
   }
   
   // Handle "today"
   if (expr === 'today') {
-    return today.toISOString().split('T')[0];
+    const year = today.getFullYear();
+    const month = (today.getMonth() + 1).toString().padStart(2, '0');
+    const day = today.getDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
   
   // Handle "tomorrow"
   if (expr === 'tomorrow') {
     const tomorrow = new Date(today);
     tomorrow.setDate(today.getDate() + 1);
-    return tomorrow.toISOString().split('T')[0];
+    const year = tomorrow.getFullYear();
+    const month = (tomorrow.getMonth() + 1).toString().padStart(2, '0');
+    const day = tomorrow.getDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
   
   // Handle "next week"
   if (expr === 'next week') {
     const nextWeek = new Date(today);
     nextWeek.setDate(today.getDate() + 7);
-    return nextWeek.toISOString().split('T')[0];
+    const year = nextWeek.getFullYear();
+    const month = (nextWeek.getMonth() + 1).toString().padStart(2, '0');
+    const day = nextWeek.getDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
   
   // Handle "in X weeks"
@@ -49,13 +62,19 @@ function calculateDateFromExpression(dateExpr) {
     const weeks = parseInt(weeksMatch[1]);
     const futureDate = new Date(today);
     futureDate.setDate(today.getDate() + (weeks * 7));
-    return futureDate.toISOString().split('T')[0];
+    const year = futureDate.getFullYear();
+    const month = (futureDate.getMonth() + 1).toString().padStart(2, '0');
+    const day = futureDate.getDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
   
   // Handle "end of month"
   if (expr === 'end of month') {
     const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-    return lastDay.toISOString().split('T')[0];
+    const year = lastDay.getFullYear();
+    const month = (lastDay.getMonth() + 1).toString().padStart(2, '0');
+    const day = lastDay.getDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
   
   // If we can't parse the expression, return null
