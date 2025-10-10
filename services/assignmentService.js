@@ -35,8 +35,12 @@ function validateAndFormatDueDate(dueDate, dueTime) {
     // If time is provided, set it on the date object for more accurate comparison
     date.setHours(hours, minutes, 0, 0);
   } else {
-    // If no time provided, set to end of day (23:59:59)
+    // If no time provided, set to end of day (23:59:59) and provide default dueTime
     date.setHours(23, 59, 59, 999);
+    formattedTime = {
+      hours: 23,
+      minutes: 59
+    };
   }
   
   // Validate that the date is in the future
