@@ -37,11 +37,12 @@ function validateAndFormatDueDate(dueDate, dueTime) {
     // If time is provided, set it on the date object for more accurate comparison
     date.setHours(hours, minutes, 0, 0);
   } else {
-    // If no time provided, set to end of day (23:59:59) and provide default dueTime
-    date.setHours(23, 59, 59, 999);
+    // If no time provided, set to 6 PM local time to avoid timezone issues
+    // 6 PM local time should not cause date shifts in most timezones
+    date.setHours(18, 0, 0, 0);
     formattedTime = {
-      hours: 23,
-      minutes: 59
+      hours: 18,
+      minutes: 0
     };
   }
   
@@ -138,6 +139,8 @@ async function createAssignment(tokens, courseId, assignmentData) {
     dueTime,
     topicId: assignmentData.topicId
   };
+  
+  console.log('🔍 DEBUG: Google Classroom API request body:', JSON.stringify(requestBody, null, 2));
 
   // Create the assignment
   const result = await classroom.courses.courseWork.create({
