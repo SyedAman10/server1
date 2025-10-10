@@ -3600,7 +3600,9 @@ Ask your teacher for the class code - they can find it in:
           // If course name is missing, ask for it first and validate it
           if (missingParams.includes('courseName')) {
             // 🚀 START TRACKING: Start tracking this action for parameter collection
-            startOngoingAction(conversationId, 'CREATE_ASSIGNMENT', ['courseName'], parameters);
+            // Preserve any existing parameters (like dueDateExpr) when starting parameter collection
+            const preservedParams = { ...parameters };
+            startOngoingAction(conversationId, 'CREATE_ASSIGNMENT', ['courseName'], preservedParams);
             
           return {
             message: "I need to know which course you want to create an assignment for. Please provide a course name.",
@@ -3625,7 +3627,9 @@ Ask your teacher for the class code - they can find it in:
               
               if (!courseMatch.success) {
                 // Start ongoing action to allow user to correct course name
-                startOngoingAction(conversationId, 'CREATE_ASSIGNMENT', ['courseName'], {});
+                // Preserve any existing parameters (like dueDateExpr) when starting parameter collection
+                const preservedParams = { ...parameters };
+                startOngoingAction(conversationId, 'CREATE_ASSIGNMENT', ['courseName'], preservedParams);
                 
           return {
                   message: `I couldn't find any courses matching "${parameters.courseName}". Could you please check the course name and try again?`,
@@ -3633,14 +3637,16 @@ Ask your teacher for the class code - they can find it in:
                   ongoingAction: {
                     action: 'CREATE_ASSIGNMENT',
                     missingParameters: ['courseName'],
-                    collectedParameters: {}
+                    collectedParameters: preservedParams
                   }
                 };
               }
               
               if (courseMatch.allMatches && courseMatch.allMatches.length > 1 && !courseMatch.isExactMatch) {
                 // Multiple matches - ask for clarification
-                startOngoingAction(conversationId, 'CREATE_ASSIGNMENT', ['courseName'], {});
+                // Preserve any existing parameters (like dueDateExpr) when starting parameter collection
+                const preservedParams = { ...parameters };
+                startOngoingAction(conversationId, 'CREATE_ASSIGNMENT', ['courseName'], preservedParams);
                 
                 return {
                   message: `I found multiple courses matching "${parameters.courseName}". Which one would you like to create an assignment for?`,
@@ -3653,13 +3659,20 @@ Ask your teacher for the class code - they can find it in:
                   ongoingAction: {
                     action: 'CREATE_ASSIGNMENT',
                     missingParameters: ['courseName'],
-                    collectedParameters: {}
+                    collectedParameters: preservedParams
                   }
                 };
               }
               
               // Course validated successfully, now ask for assignment title
-              startOngoingAction(conversationId, 'CREATE_ASSIGNMENT', ['title'], { courseName: courseMatch.course.name });
+              // Preserve any existing parameters (like dueDateExpr) when starting parameter collection
+              const preservedParams = { courseName: courseMatch.course.name };
+              if (parameters.dueDateExpr) preservedParams.dueDateExpr = parameters.dueDateExpr;
+              if (parameters.dueTimeExpr) preservedParams.dueTimeExpr = parameters.dueTimeExpr;
+              if (parameters.description) preservedParams.description = parameters.description;
+              if (parameters.maxPoints) preservedParams.maxPoints = parameters.maxPoints;
+              
+              startOngoingAction(conversationId, 'CREATE_ASSIGNMENT', ['title'], preservedParams);
               
               return {
                 message: `Great! I found your course "${courseMatch.course.name}". Please provide a title for your assignment.`,
@@ -3672,7 +3685,9 @@ Ask your teacher for the class code - they can find it in:
               };
             } catch (error) {
               console.error('Error validating course name:', error);
-              startOngoingAction(conversationId, 'CREATE_ASSIGNMENT', ['courseName'], {});
+              // Preserve any existing parameters (like dueDateExpr) when starting parameter collection
+              const preservedParams = { ...parameters };
+              startOngoingAction(conversationId, 'CREATE_ASSIGNMENT', ['courseName'], preservedParams);
               
               return {
                 message: `I encountered an error while looking for the course. Could you please try again?`,
@@ -3680,7 +3695,7 @@ Ask your teacher for the class code - they can find it in:
                 ongoingAction: {
                   action: 'CREATE_ASSIGNMENT',
                   missingParameters: ['courseName'],
-                  collectedParameters: {}
+                  collectedParameters: preservedParams
                 }
               };
             }
