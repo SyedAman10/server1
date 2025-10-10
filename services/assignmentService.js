@@ -8,10 +8,12 @@ const { google } = require('googleapis');
  * @returns {Object} Formatted due date and time
  */
 function validateAndFormatDueDate(dueDate, dueTime) {
+  console.log('🔍 DEBUG: validateAndFormatDueDate called with dueDate:', dueDate, 'dueTime:', dueTime);
   if (!dueDate) return { dueDate: undefined, dueTime: undefined };
 
   // Parse the date string (YYYY-MM-DD)
   const [year, month, day] = dueDate.split('-').map(Number);
+  console.log('🔍 DEBUG: Parsed date - year:', year, 'month:', month, 'day:', day);
   
   // Create a Date object for validation
   const date = new Date(year, month - 1, day);
@@ -97,10 +99,12 @@ async function createAssignment(tokens, courseId, assignmentData) {
   const classroom = await getClassroomClient(tokens);
 
   // Validate and format due date
+  console.log('🔍 DEBUG: Assignment service received dueDate:', assignmentData.dueDate, 'dueTime:', assignmentData.dueTime);
   const { dueDate, dueTime } = validateAndFormatDueDate(
     assignmentData.dueDate,
     assignmentData.dueTime
   );
+  console.log('🔍 DEBUG: After validation - dueDate:', dueDate, 'dueTime:', dueTime);
 
   // Process materials
   let materials = [];

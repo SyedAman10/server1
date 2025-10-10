@@ -3704,9 +3704,12 @@ Ask your teacher for the class code - they can find it in:
 
         // Calculate due date from expression if provided
         if (parameters.dueDateExpr) {
+          console.log('🔍 DEBUG: Calculating due date from expression:', parameters.dueDateExpr);
           const calculatedDate = calculateDateFromExpression(parameters.dueDateExpr);
+          console.log('🔍 DEBUG: Calculated due date:', calculatedDate);
           if (calculatedDate) {
             parameters.dueDate = calculatedDate;
+            console.log('🔍 DEBUG: Set parameters.dueDate to:', parameters.dueDate);
           }
         }
 
@@ -3769,6 +3772,7 @@ Ask your teacher for the class code - they can find it in:
             }
             
             // Prepare assignment data for internal service
+            console.log('🔍 DEBUG: Preparing assignment data with dueDate:', parameters.dueDate, 'dueTime:', parameters.dueTime);
             const assignmentData = {
               title: parameters.title,
               description: parameters.description || '',
@@ -3778,6 +3782,7 @@ Ask your teacher for the class code - they can find it in:
               dueDate: parameters.dueDate,
               dueTime: parameters.dueTime
             };
+            console.log('🔍 DEBUG: Final assignmentData:', assignmentData);
             
             // Use internal service function instead of external API call
             const response = await createAssignment(
