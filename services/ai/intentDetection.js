@@ -83,6 +83,67 @@ function detectIntentFallback(message, conversationId) {
     };
   }
   
+  // Create assignment - MUST come BEFORE course creation to prevent false positives
+  if (
+    lowerMessage.includes('create') && lowerMessage.includes('assignment') ||
+    lowerMessage.includes('create') && lowerMessage.includes('homework') ||
+    lowerMessage.includes('create') && lowerMessage.includes('project') ||
+    lowerMessage.includes('create') && lowerMessage.includes('task') ||
+    lowerMessage.includes('create') && lowerMessage.includes('due') ||
+    lowerMessage.includes('create') && lowerMessage.includes('grade') ||
+    lowerMessage.includes('create') && lowerMessage.includes('class') && lowerMessage.includes('due')
+  ) {
+    console.log('🎯 DEBUG: Assignment creation intent detected!');
+    
+    // Extract course name
+    let courseName = '';
+    const courseMatch = message.match(/for\s+(?:the\s+)?([\w\s-]+?)(?:\s*,|\s+due|\s*$)/i);
+    if (courseMatch && courseMatch[1]) {
+      courseName = courseMatch[1].trim();
+    }
+    
+    // Extract assignment title
+    let title = '';
+    const titleMatch = message.match(/assignment\s+(?:called\s+|named\s+|titled\s+)?([^,]+?)(?:\s+for|\s+in|\s+due|\s*$)/i);
+    if (titleMatch && titleMatch[1]) {
+      title = titleMatch[1].trim();
+    }
+    
+    // Extract due date expression - improved patterns
+    let dueDateExpr = '';
+    const datePatterns = [
+      /(?:due|by)\s+(today|tomorrow|next\s+\w+|in\s+\d+\s+weeks?|end\s+of\s+month)/i,
+      /(?:due|by)\s+(\w+\s+\d+)/i, // e.g., "December 15"
+      /(?:due|by)\s+(\d{1,2}\/\d{1,2})/i, // e.g., "12/15"
+      /(?:due|by)\s+(next\s+monday|next\s+tuesday|next\s+wednesday|next\s+thursday|next\s+friday|next\s+saturday|next\s+sunday)/i,
+      /(?:due|by)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i,
+      /(?:due|by)\s+(\d{1,2}\/\d{1,2}\/\d{4})/i, // e.g., "12/15/2024"
+      /(?:due|by)\s+(\d{4}-\d{2}-\d{2})/i // e.g., "2024-12-15"
+    ];
+    
+    for (const pattern of datePatterns) {
+      const match = message.match(pattern);
+      if (match && match[1]) {
+        dueDateExpr = match[1].trim();
+        break;
+      }
+    }
+    
+    console.log('🎯 DEBUG: Extracted courseName:', courseName);
+    console.log('🎯 DEBUG: Extracted title:', title);
+    console.log('🎯 DEBUG: Extracted dueDateExpr:', dueDateExpr);
+    
+    return {
+      intent: 'CREATE_ASSIGNMENT',
+      confidence: 0.9,
+      parameters: {
+        ...(courseName ? { courseName } : {}),
+        ...(title ? { title } : {}),
+        ...(dueDateExpr ? { dueDateExpr } : {})
+      }
+    };
+  }
+
   // Create course - MUST come BEFORE student join suggestions to prevent false positives
   console.log('🔍 DEBUG: Checking for course intent...');
   console.log('🔍 DEBUG: Has create/make/new course:', lowerMessage.includes('create') || lowerMessage.includes('make') || lowerMessage.includes('new course'));

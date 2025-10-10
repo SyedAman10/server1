@@ -3780,7 +3780,7 @@ Ask your teacher for the class code - they can find it in:
             }
 
             return {
-              message: `Great! I've successfully created your assignment "${parameters.title}" in ${selectedCourse.name}. 😊\n\nAssignment Details:\n• Title: ${parameters.title}${parameters.description ? `\n• Description: ${parameters.description}` : ''}${parameters.dueDate ? `\n• Due Date: ${parameters.dueDate.year}-${parameters.dueDate.month}-${parameters.dueDate.day}` : ''}${parameters.dueTime ? `\n• Due Time: ${parameters.dueTime.hours}:${parameters.dueTime.minutes.toString().padStart(2, '0')}` : ''}${parameters.maxPoints ? `\n• Max Points: ${parameters.maxPoints}` : ''}\n\nYour assignment is now live in Google Classroom and students can start working on it.\n\nNext steps:\n• Review student submissions\n• Grade completed assignments\n• Provide feedback to students`,
+              message: `Great! I've successfully created your assignment "${parameters.title}" in ${selectedCourse.name}. 😊\n\nAssignment Details:\n• Title: ${parameters.title}${parameters.description ? `\n• Description: ${parameters.description}` : ''}${parameters.dueDate ? `\n• Due Date: ${parameters.dueDate}` : ''}${parameters.dueTime ? `\n• Due Time: ${parameters.dueTime.hours}:${parameters.dueTime.minutes.toString().padStart(2, '0')}` : ''}${parameters.maxPoints ? `\n• Max Points: ${parameters.maxPoints}` : ''}\n\nYour assignment is now live in Google Classroom and students can start working on it.\n\nNext steps:\n• Review student submissions\n• Grade completed assignments\n• Provide feedback to students`,
               assignment: response,
               conversationId: req.body.conversationId || generateConversationId()
             };
