@@ -4327,7 +4327,7 @@ Ask your teacher for the class code - they can find it in:
           };
         }
         // Get all courses to find the matching one
-        const teacherCoursesResponse = await makeApiCall(
+        let teacherCoursesResponse = await makeApiCall(
           `${baseUrl}/api/classroom`,
           'GET',
           null,
@@ -4335,11 +4335,17 @@ Ask your teacher for the class code - they can find it in:
           req
         );
 
+        // Handle cases where coursesResponse might be directly an array
         if (!teacherCoursesResponse || !teacherCoursesResponse.courses || !Array.isArray(teacherCoursesResponse.courses)) {
-          return {
-            message: 'Failed to retrieve courses. Please try again.',
-            conversationId: req.body.conversationId
-          };
+          if (Array.isArray(teacherCoursesResponse)) {
+            console.log('DEBUG: teacherCoursesResponse is directly an array, wrapping it');
+            teacherCoursesResponse = { courses: teacherCoursesResponse };
+          } else {
+            return {
+              message: 'Failed to retrieve courses. Please try again.',
+              conversationId: req.body.conversationId
+            };
+          }
         }
 
         // Find courses matching the name
