@@ -1863,10 +1863,20 @@ async function makeApiCall(url, method, data, userToken, req) {
               refresh_token: user.refresh_token
             });
             
-            const result = await classroom.courses.list({
-              pageSize: 30,
-              teacherId: 'me'
-            });
+            // Respect user role when listing courses (same logic as classroom.controller.js)
+            let listOptions = { pageSize: 30 };
+            
+            if (user.role === 'student') {
+              // For students: fetch courses they're enrolled in
+              listOptions.studentId = 'me';
+            } else if (user.role === 'teacher') {
+              // For teachers: fetch courses they're teaching
+              listOptions.teacherId = 'me';
+            }
+            // For super_admin and other roles: fetch all courses (no filter)
+            
+            console.log('DEBUG: Listing courses with options:', listOptions, 'for role:', user.role);
+            const result = await classroom.courses.list(listOptions);
             
             console.log('DEBUG: Internal listCourses call successful');
             return result.data.courses;
@@ -2909,7 +2919,7 @@ Ask your teacher for the class code - they can find it in:
           conversationId: req.body.conversationId || generateConversationId()
         };
       }
-
+        
       case 'LIST_ASSIGNMENTS': {
         // Students can view assignments but with different messaging
         if (userRole === 'student') {
