@@ -4392,7 +4392,7 @@ Ask your teacher for the class code - they can find it in:
             startOngoingAction(conversationId, 'INVITE_TEACHERS', ['courseName'], { emails: inviteEmails });
           }
           return {
-            message: 'To invite a teacher, please provide the course name or use: "invite teacher TEACHER_EMAIL to CLASS_NAME".',
+            message: 'To invite a teacher, please use: "invite teacher TEACHER_EMAIL to CLASS_NAME".',
             conversationId: req.body.conversationId,
             ongoingAction: {
               action: 'INVITE_TEACHERS',
