@@ -1387,6 +1387,7 @@ async function detectIntent(message, conversationHistory, conversationId) {
       IMPORTANT: 
       1. For course creation, use CREATE_COURSE intent for phrases like "create a new class", "create new class", "make a class", "new course", "create course"
       2. For generic terms like "my class", "the class", "this class", "class", "course" when talking about student joining/inviting, use STUDENT_JOIN_SUGGESTION intent instead of INVITE_STUDENTS.
+      3. If the message mentions a teacher/professor/instructor, classify as INVITE_TEACHERS. If the course reference is generic or missing (e.g., "class", "course"), set parameters.needsCourseName = true and parameters.courseName = null.
       
       Examples:
       - "create a new class" → CREATE_COURSE (not STUDENT_JOIN_SUGGESTION)
@@ -1396,6 +1397,7 @@ async function detectIntent(message, conversationHistory, conversationId) {
       - "invite student to the class" → STUDENT_JOIN_SUGGESTION (not INVITE_STUDENTS)
       - "add student to this class" → STUDENT_JOIN_SUGGESTION (not INVITE_STUDENTS)
       - "invite student john@email.com to Computer Science" → INVITE_STUDENTS (specific course name)
+      - "add teacher to class" → INVITE_TEACHERS with { courseName: null, needsCourseName: true }
       
       For course name extraction, when you see patterns like "my class [COURSE_NAME]", "the class [COURSE_NAME]", "this class [COURSE_NAME]", extract only the specific course name part:
       - "post announcement to my class ai" → courseName: "ai" (not "my class ai")
