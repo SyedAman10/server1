@@ -465,9 +465,9 @@ const inviteTeachers = async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Only teachers can invite other teachers
-    if (user.role !== 'teacher') {
-      return res.status(403).json({ error: 'Only teachers can invite other teachers' });
+    // Only teachers and super_admin can invite other teachers
+    if (user.role !== 'teacher' && user.role !== 'super_admin') {
+      return res.status(403).json({ error: 'Only teachers and super admins can invite other teachers' });
     }
 
     const classroom = getClassroomClient({
@@ -499,12 +499,23 @@ const inviteTeachers = async (req, res) => {
       })
     );
 
-    const results = await Promise.all(invitationPromises);
-
-    res.status(201).json({
-      message: `Successfully invited ${emails.length} teachers`,
-      invitations: results.map(r => r.data)
-    });
+    try {
+      const results = await Promise.all(invitationPromises);
+      return res.status(201).json({
+        message: `Successfully invited ${emails.length} teachers`,
+        invitations: results.map(r => r.data)
+      });
+    } catch (apiErr) {
+      // Surface clearer errors for common Classroom API failures
+      const msg = apiErr?.response?.data?.error?.message || apiErr.message || 'Failed to create teacher invitations';
+      if (msg.includes('UserInIllegalDomain')) {
+        return res.status(400).json({
+          error: 'The specified user belongs to a domain that cannot be invited to this Classroom',
+          details: msg
+        });
+      }
+      throw apiErr;
+    }
   } catch (err) {
     console.error('Error inviting teachers:', err);
     if (err.response && err.response.data && err.response.data.error) {
