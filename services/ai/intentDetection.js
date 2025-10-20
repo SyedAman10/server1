@@ -801,13 +801,11 @@ async function detectIntentFallback(message, conversationId) {
     };
   }
 
-  // AI-based intent detection for assignment queries (primary method for assignment-related queries)
+  // AI-based intent detection for assignment queries (fallback for ambiguous cases)
   if (lowerMessage.includes('assignment') || lowerMessage.includes('homework')) {
     try {
-      console.log('🔍 DEBUG: Using AI-based intent detection for assignment query');
       const aiIntent = await detectAssignmentIntentWithAI(message, conversationId);
       if (aiIntent) {
-        console.log('🔍 DEBUG: AI detected intent:', aiIntent.intent);
         return aiIntent;
       }
     } catch (error) {
@@ -1171,11 +1169,6 @@ async function detectIntent(message, conversationHistory, conversationId) {
     // Structure prompt to classify the intent
     const prompt = `
       Act as an intent classifier for a classroom management system.
-      
-      IMPORTANT: Distinguish between student and teacher queries:
-      - Students ask about THEIR assignments: "what assignments are due today?" → LIST_PENDING_ASSIGNMENTS
-      - Teachers ask about WHO submitted assignments: "who submitted today's assignment?" → CHECK_ASSIGNMENT_SUBMISSIONS
-      
       Classify the following message into one of these intents:
       - LIST_COURSES: User wants to see their courses
       - GET_COURSE: User wants details about a specific course (extract courseId if possible)
@@ -1189,12 +1182,12 @@ async function detectIntent(message, conversationHistory, conversationId) {
       - AI_ASSISTED_ANNOUNCEMENT: User wants AI help to create an announcement (e.g., "can you help me announce", "help me make an announcement", "I need help with an announcement")
       - GET_ANNOUNCEMENTS: User wants to view/list announcements for a course (extract courseId/courseName)
       - CREATE_ASSIGNMENT: User wants to create an assignment in a course (extract courseId, title, description, due date, and materials)
-      - CHECK_ASSIGNMENT_SUBMISSIONS: Teacher/admin wants to check who has submitted an assignment (extract courseName and assignmentTitle) - ONLY for queries like "who submitted", "check submissions", "submission status" - For "today's assignment" or "todays assignment", set isTodaysAssignment: true and don't extract assignmentTitle
-      - CHECK_UNSUBMITTED_ASSIGNMENTS: Teacher/admin wants to check who has NOT submitted an assignment (extract courseName and assignmentTitle) - ONLY for queries like "who hasn't submitted", "unsubmitted", "missing submissions" - For "today's assignment" or "todays assignment", set isTodaysAssignment: true and don't extract assignmentTitle
+      - CHECK_ASSIGNMENT_SUBMISSIONS: User wants to check who has submitted an assignment (extract courseName and assignmentTitle) - For "today's assignment" or "todays assignment", set isTodaysAssignment: true and don't extract assignmentTitle
+      - CHECK_UNSUBMITTED_ASSIGNMENTS: User wants to check who has NOT submitted an assignment (extract courseName and assignmentTitle) - For "today's assignment" or "todays assignment", set isTodaysAssignment: true and don't extract assignmentTitle
       - HIGHLIGHT_MISSING_WORK_STUDENTS: User wants to highlight students with missing work across multiple classes (no parameters needed) - This analyzes all courses to find students who are behind
       - GRADE_ASSIGNMENT: User wants to grade a student's assignment (extract courseName, assignmentTitle, studentEmail, assignedGrade, draftGrade)
       - LIST_ASSIGNMENTS: User wants to see all assignments in a course (extract courseName or courseId)
-      - LIST_PENDING_ASSIGNMENTS: Student wants to see their pending/due assignments across all courses (no parameters needed) - Use for queries like "what assignments are due", "my assignments", "assignments due today", "what homework do I have", "show my assignments"
+      - LIST_PENDING_ASSIGNMENTS: User wants to see their pending/due assignments across all courses (no parameters needed)
       - SHOW_COURSE_GRADES: User wants to see their grades in specific courses (extract courseNames from the request)
       - ASSIGNMENT_SUBMISSION_HELP: User is asking how to submit an assignment or needs help with assignment submission process (no parameters needed)
       - JOIN_CLASS_HELP: User is asking how to join a class or needs help with joining a Google Classroom (no parameters needed)
@@ -1254,16 +1247,6 @@ async function detectIntent(message, conversationHistory, conversationId) {
       - "who has not submitted their assignment" → CHECK_UNSUBMITTED_ASSIGNMENTS (no course specified, will ask)
       - "who hasn't submitted today's assignment in math" → CHECK_UNSUBMITTED_ASSIGNMENTS with courseName: "math", isTodaysAssignment: true
       - "show unsubmitted assignments for test 1 in physics" → CHECK_UNSUBMITTED_ASSIGNMENTS with courseName: "physics", assignmentTitle: "test 1"
-      
-      Examples for student assignment queries:
-      - "what assignments are due today?" → LIST_PENDING_ASSIGNMENTS
-      - "what assignments are due?" → LIST_PENDING_ASSIGNMENTS
-      - "my assignments" → LIST_PENDING_ASSIGNMENTS
-      - "show my assignments" → LIST_PENDING_ASSIGNMENTS
-      - "assignments due today" → LIST_PENDING_ASSIGNMENTS
-      - "what homework do I have?" → LIST_PENDING_ASSIGNMENTS
-      - "pending assignments" → LIST_PENDING_ASSIGNMENTS
-      - "upcoming assignments" → LIST_PENDING_ASSIGNMENTS
       
       Examples for highlighting missing work students:
       - "highlight students with missing work across multiple classes" → HIGHLIGHT_MISSING_WORK_STUDENTS
@@ -1401,35 +1384,26 @@ async function detectAssignmentIntentWithAI(message, conversationId) {
   try {
     const { generateResponse } = require('./openaiService');
     
-    const prompt = `You are an expert intent classifier for a classroom management system. Analyze this user message about assignments and determine the correct intent.
+    const prompt = `Analyze this user message about assignments and determine the intent. Respond with JSON only.
 
 User message: "${message}"
 
-CRITICAL: Distinguish between student and teacher perspectives:
-- Students ask about THEIR OWN assignments: "what assignments are due today?" = LIST_PENDING_ASSIGNMENTS
-- Teachers ask about WHO submitted assignments: "who submitted today's assignment?" = CHECK_ASSIGNMENT_SUBMISSIONS
+Determine if this is:
+1. A student asking about their assignments (due dates, pending work, etc.) - return LIST_PENDING_ASSIGNMENTS
+2. A teacher asking about who submitted assignments - return CHECK_ASSIGNMENT_SUBMISSIONS  
+3. A teacher asking about who hasn't submitted - return CHECK_UNSUBMITTED_ASSIGNMENTS
+4. A teacher wanting to create a new assignment - return CREATE_ASSIGNMENT
+5. A teacher wanting to grade assignments - return GRADE_ASSIGNMENT
+6. Something else - return null
 
-Classify into one of these intents:
+Key indicators:
+- "What assignments are due today?" = LIST_PENDING_ASSIGNMENTS (student view)
+- "Who submitted today's assignment?" = CHECK_ASSIGNMENT_SUBMISSIONS (teacher view)
+- "Who hasn't submitted?" = CHECK_UNSUBMITTED_ASSIGNMENTS (teacher view)
+- "Create assignment titled X" = CREATE_ASSIGNMENT (teacher action)
+- "Grade assignment X for student Y" = GRADE_ASSIGNMENT (teacher action)
 
-1. LIST_PENDING_ASSIGNMENTS - Student wants to see their pending/due assignments
-   Examples: "what assignments are due today?", "my assignments", "assignments due", "what homework do I have?", "show my assignments", "pending assignments"
-
-2. CHECK_ASSIGNMENT_SUBMISSIONS - Teacher wants to check who submitted assignments
-   Examples: "who submitted today's assignment?", "check submissions", "submission status", "who turned in the homework?"
-
-3. CHECK_UNSUBMITTED_ASSIGNMENTS - Teacher wants to check who hasn't submitted
-   Examples: "who hasn't submitted?", "unsubmitted assignments", "missing submissions", "who didn't turn in?"
-
-4. CREATE_ASSIGNMENT - Teacher wants to create a new assignment
-   Examples: "create assignment titled X", "make homework", "new assignment", "add assignment"
-
-5. GRADE_ASSIGNMENT - Teacher wants to grade student work
-   Examples: "grade assignment X for student Y", "give grade", "mark assignment"
-
-6. LIST_ASSIGNMENTS - User wants to see all assignments in a course
-   Examples: "list assignments in course X", "show all assignments"
-
-Respond with JSON only: {"intent": "INTENT_NAME", "confidence": 0.95, "parameters": {}}`;
+Respond with JSON: {"intent": "INTENT_NAME", "confidence": 0.9, "parameters": {}}`;
 
     const response = await generateResponse(prompt, conversationId);
     
@@ -1443,15 +1417,13 @@ Respond with JSON only: {"intent": "INTENT_NAME", "confidence": 0.95, "parameter
       const result = JSON.parse(cleanedResponse);
       
       // Only return if it's a valid assignment-related intent
-      if (result.intent && ['LIST_PENDING_ASSIGNMENTS', 'CHECK_ASSIGNMENT_SUBMISSIONS', 'CHECK_UNSUBMITTED_ASSIGNMENTS', 'CREATE_ASSIGNMENT', 'GRADE_ASSIGNMENT', 'LIST_ASSIGNMENTS'].includes(result.intent)) {
-        console.log('🔍 DEBUG: AI assignment intent result:', result);
+      if (result.intent && ['LIST_PENDING_ASSIGNMENTS', 'CHECK_ASSIGNMENT_SUBMISSIONS', 'CHECK_UNSUBMITTED_ASSIGNMENTS', 'CREATE_ASSIGNMENT', 'GRADE_ASSIGNMENT'].includes(result.intent)) {
         return result;
       }
       
       return null;
     } catch (parseError) {
       console.error('Error parsing AI assignment intent response:', parseError);
-      console.log('Raw AI response:', response);
       return null;
     }
   } catch (error) {
