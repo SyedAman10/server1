@@ -718,15 +718,15 @@ function detectIntentFallback(message, conversationId) {
     };
   }
   
-  // Check assignment submissions
+  // Check assignment submissions (teacher/admin only)
   if (
-    lowerMessage.includes('check') && lowerMessage.includes('assignment') ||
+    (lowerMessage.includes('check') && lowerMessage.includes('assignment')) ||
     lowerMessage.includes('assignment submissions') ||
     lowerMessage.includes('who submitted') ||
     lowerMessage.includes('submissions for') ||
     lowerMessage.includes('submission status') ||
-    lowerMessage.includes('today\'s assignment') ||
-    lowerMessage.includes('todays assignment')
+    (lowerMessage.includes('today\'s assignment') && (lowerMessage.includes('who') || lowerMessage.includes('submitted'))) ||
+    (lowerMessage.includes('todays assignment') && (lowerMessage.includes('who') || lowerMessage.includes('submitted')))
   ) {
     // Try to extract assignment title and course name
     let assignmentTitle = '';
@@ -764,7 +764,7 @@ function detectIntentFallback(message, conversationId) {
     };
   }
 
-  // List pending assignments across all courses
+  // List pending assignments across all courses (student-focused)
   if (
     lowerMessage.includes('pending assignment') ||
     lowerMessage.includes('due assignment') ||
@@ -775,7 +775,12 @@ function detectIntentFallback(message, conversationId) {
     lowerMessage.includes('list my assignment') ||
     lowerMessage.includes('show my assignment') ||
     lowerMessage.includes('what assignment') ||
-    lowerMessage.includes('assignment i have')
+    lowerMessage.includes('assignment i have') ||
+    lowerMessage.includes('assignments due today') ||
+    lowerMessage.includes('what assignments are due') ||
+    lowerMessage.includes('assignments due') ||
+    (lowerMessage.includes('today\'s assignment') && !lowerMessage.includes('who') && !lowerMessage.includes('submitted')) ||
+    (lowerMessage.includes('todays assignment') && !lowerMessage.includes('who') && !lowerMessage.includes('submitted'))
   ) {
     return {
       intent: 'LIST_PENDING_ASSIGNMENTS',
