@@ -1,5 +1,5 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-const { getLastMessage, getLastMessages } = require('./conversationManager');
+const { getLastMessage, getLastMessages, getConversationHistory } = require('./conversationManager');
 
 // Initialize Gemini Flash
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -1211,34 +1211,14 @@ async function detectIntent(message, conversationHistory, conversationId) {
   
   try {
     // Format conversation history for Gemini
-    const formattedHistory = conversationHistory
-      .filter(entry => typeof entry === 'object' && 'isUser' in entry && 'message' in entry)
-      .map(entry => ({
-        role: entry.isUser ? 'user' : 'model',
-        parts: [{ text: typeof entry.message === 'string' ? entry.message : JSON.stringify(entry.message) }]
-      }));
+    const history = conversationId ? getConversationHistory(conversationId) : [];
+    const historyContext = history && history.length > 0 ? `Conversation history (last ${Math.min(history.length, 5)} messages):\n` + history.slice(-5).map(h => `- ${typeof h.content === 'object' ? JSON.stringify(h.content) : h.content}`).join('\n') : '';
 
-    // Create a new chat session
-    const chat = model.startChat({
-      history: formattedHistory,
-      generationConfig: {
-        temperature: 0.2,
-        maxOutputTokens: 1000,
-      }
-    });
+    // Initialize Gemini client
+    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const chat = model.startChat({ history: [] });
 
-    // Construct history context for better intent detection
-    let historyContext = '';
-    if (formattedHistory.length > 0) {
-      historyContext = `
-        Previous conversation context:
-        ${formattedHistory.map(h => `${h.role === 'user' ? 'User' : 'Assistant'}: ${h.parts[0].text}`).join('\n')}
-        
-        Consider the conversation history above when determining the user's intent. The user may be referring to entities mentioned earlier in the conversation.
-      `;
-    }
-
-    // Structure prompt to classify the intent
     const prompt = `
       Act as an intent classifier for a classroom management system.
       Classify the following message into one of these intents:
@@ -1440,7 +1420,25 @@ async function detectIntent(message, conversationHistory, conversationId) {
         .replace(/```\s*$/, '')     // Remove closing ```
         .trim();                    // Remove any extra whitespace
       
-      return JSON.parse(cleanedResponse);
+      const aiDetected = JSON.parse(cleanedResponse);
+
+      // Normalization: if message mentions teacher but AI returned STUDENT_JOIN_SUGGESTION, coerce to INVITE_TEACHERS
+      const mentionsTeacher = message.toLowerCase().includes('teacher') || message.toLowerCase().includes('professor') || message.toLowerCase().includes('instructor');
+      if (mentionsTeacher && aiDetected && aiDetected.intent === 'STUDENT_JOIN_SUGGESTION') {
+        const normalized = {
+          intent: 'INVITE_TEACHERS',
+          confidence: Math.max(0.85, aiDetected.confidence || 0.8),
+          parameters: {
+            ...(aiDetected.parameters || {}),
+            needsCourseName: true,
+            courseName: null
+          }
+        };
+        console.log('🔍 DEBUG: Normalized teacher-related message to INVITE_TEACHERS:', normalized);
+        return normalized;
+      }
+
+      return aiDetected;
     } catch (e) {
       console.error('Error parsing Gemini response as JSON:', e);
       console.log('Raw response:', responseText);
