@@ -2054,56 +2054,95 @@ async function makeApiCall(url, method, data, userToken, req) {
             console.log('DEBUG: Internal getEnrolledStudents call successful');
             return result.data.students || [];
             
-    } else {
+          } else if (method === 'POST' && /^\/[A-Za-z0-9_-]+\/invite-teachers$/.test(endpoint)) {
+            // Internal handling for inviting teachers to a course
+            // Endpoint format: /:courseId/invite-teachers
+            const parts = endpoint.split('/');
+            const courseId = parts[1];
+            const emails = (data && Array.isArray(data.emails)) ? data.emails : [];
+
+            if (!courseId) {
+              throw new Error('Missing courseId in path');
+            }
+            if (!emails.length) {
+              throw new Error('At least one teacher email is required');
+            }
+
+            const user = await getUserByEmail(req.user.email);
+            if (!user.access_token || !user.refresh_token) {
+              throw new Error('Missing required OAuth2 tokens');
+            }
+
+            const { getClassroomClient } = require('../../integrations/google.classroom');
+            const classroom = getClassroomClient({
+              access_token: user.access_token,
+              refresh_token: user.refresh_token
+            });
+
+            // Create invitations for all teachers
+            const invitationPromises = emails.map(email => classroom.invitations.create({
+              requestBody: {
+                courseId: courseId,
+                userId: email,
+                role: 'TEACHER'
+              }
+            }));
+
+            const results = await Promise.all(invitationPromises);
+            return {
+              message: `Successfully invited ${emails.length} teacher(s)`,
+              invitations: results.map(r => r.data)
+            };
+
+          } else {
             console.log('DEBUG: Unsupported internal endpoint, falling back to external call');
             // Fall through to external call
           }
-          
-        } catch (controllerError) {
-          console.error('DEBUG: Internal call error:', controllerError);
-          console.log('DEBUG: Falling back to external call due to internal error');
+        } catch (internalErr) {
+          console.log('DEBUG: Internal call failed, falling back to external call:', internalErr.message);
           // Fall through to external call
         }
       }
     }
     
-    // Fallback to external HTTP call for other endpoints or when internal call fails
-    console.log('DEBUG: Making external HTTP API call');
-    
-    // Clean the token - remove any existing Bearer prefix
-    const cleanToken = userToken.replace(/^Bearer\s+/i, '');
-    
-    const config = {
-      method,
-      url,
-      headers: {
-        'Authorization': `Bearer ${cleanToken}`,
-        'Content-Type': 'application/json'
+    // External HTTP call fallback
+    try {
+      // Normalize to HTTPS to avoid redirects changing POST to GET
+      const safeUrl = url.replace('http://class.xytek.ai', 'https://class.xytek.ai');
+      console.log('DEBUG: Making external HTTP API call');
+
+      const axios = require('axios');
+      const config = {
+        method: method,
+        url: safeUrl,
+        headers: {
+          Authorization: userToken,
+          'Content-Type': 'application/json'
+        },
+        data: data || undefined,
+        maxRedirects: 0
+      };
+      console.log('DEBUG: Making API call with config:', {
+        method: config.method,
+        url: config.url,
+        hasData: !!config.data,
+        headers: {
+          Authorization: config.headers.Authorization,
+          'Content-Type': config.headers['Content-Type']
+        }
+      });
+      console.log('DEBUG: Full axios config:', JSON.stringify(config, null, 2));
+
+      const response = await axios(config);
+      return response.data;
+    } catch (httpErr) {
+      console.log('DEBUG: API call failed:', httpErr.message);
+      if (httpErr.response) {
+        console.log('DEBUG: Error response status:', httpErr.response.status);
+        console.log('DEBUG: Error response data:', httpErr.response.data);
       }
-    };
-
-    if (data) {
-      config.data = data;
+      throw httpErr;
     }
-
-    console.log('DEBUG: Making API call with config:', {
-      method,
-      url,
-      hasData: !!config.data,
-      headers: config.headers
-    });
-    
-    // Log the actual request being sent
-    console.log('DEBUG: Full axios config:', JSON.stringify(config, null, 2));
-    
-    // Add a unique header to track this request
-    config.headers['X-Request-ID'] = `ai-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    
-    const response = await axios(config);
-    console.log('DEBUG: API call successful, response status:', response.status);
-    console.log('DEBUG: API response data:', response.data);
-    
-    return response.data;
   } catch (error) {
     console.error('DEBUG: API call failed:', error.message);
     if (error.response) {
@@ -2900,7 +2939,6 @@ async function executeAction(intentData, originalMessage, userToken, req) {
    • You may be automatically enrolled
 
 **Troubleshooting:**
-
 ❌ **"Class not found" error:**
 • Double-check the class code
 • Make sure you're using the correct Google account
