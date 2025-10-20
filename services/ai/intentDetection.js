@@ -9,7 +9,7 @@ const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
  * Simple intent detection based on keywords
  * This is a fallback when the Gemini API is not available
  */
-function detectIntentFallback(message, conversationId) {
+async function detectIntentFallback(message, conversationId) {
   console.log('🔍 DEBUG: detectIntentFallback called with message:', message);
   const lowerMessage = message.toLowerCase();
   const lastMessage = conversationId ? getLastMessage(conversationId) : null;
@@ -600,8 +600,15 @@ function detectIntentFallback(message, conversationId) {
     };
   }
   
-  // Create assignment
-  if (lowerMessage.includes('assignment') || lowerMessage.includes('homework')) {
+  // Create assignment (only when user is actually creating, not asking about existing)
+  if (
+    (lowerMessage.includes('create') && (lowerMessage.includes('assignment') || lowerMessage.includes('homework'))) ||
+    (lowerMessage.includes('make') && (lowerMessage.includes('assignment') || lowerMessage.includes('homework'))) ||
+    (lowerMessage.includes('add') && (lowerMessage.includes('assignment') || lowerMessage.includes('homework'))) ||
+    (lowerMessage.includes('new') && (lowerMessage.includes('assignment') || lowerMessage.includes('homework'))) ||
+    (lowerMessage.includes('titled') && (lowerMessage.includes('assignment') || lowerMessage.includes('homework'))) ||
+    (lowerMessage.includes('due') && (lowerMessage.includes('assignment') || lowerMessage.includes('homework')) && !lowerMessage.includes('what') && !lowerMessage.includes('show') && !lowerMessage.includes('list'))
+  ) {
     // Extract title
     const title = message.split('titled')[1]?.split('due')[0]?.trim();
 
@@ -719,7 +726,7 @@ function detectIntentFallback(message, conversationId) {
   }
   
   // Check assignment submissions (teacher/admin only)
-  if (
+  const isCheckSubmissions = (
     (lowerMessage.includes('check') && lowerMessage.includes('assignment')) ||
     lowerMessage.includes('assignment submissions') ||
     lowerMessage.includes('who submitted') ||
@@ -727,7 +734,10 @@ function detectIntentFallback(message, conversationId) {
     lowerMessage.includes('submission status') ||
     (lowerMessage.includes('today\'s assignment') && (lowerMessage.includes('who') || lowerMessage.includes('submitted'))) ||
     (lowerMessage.includes('todays assignment') && (lowerMessage.includes('who') || lowerMessage.includes('submitted')))
-  ) {
+  );
+  
+  
+  if (isCheckSubmissions) {
     // Try to extract assignment title and course name
     let assignmentTitle = '';
     let courseName = '';
@@ -765,7 +775,7 @@ function detectIntentFallback(message, conversationId) {
   }
 
   // List pending assignments across all courses (student-focused)
-  if (
+  const isListPending = (
     lowerMessage.includes('pending assignment') ||
     lowerMessage.includes('due assignment') ||
     lowerMessage.includes('my assignment') ||
@@ -781,12 +791,26 @@ function detectIntentFallback(message, conversationId) {
     lowerMessage.includes('assignments due') ||
     (lowerMessage.includes('today\'s assignment') && !lowerMessage.includes('who') && !lowerMessage.includes('submitted')) ||
     (lowerMessage.includes('todays assignment') && !lowerMessage.includes('who') && !lowerMessage.includes('submitted'))
-  ) {
+  );
+  
+  if (isListPending) {
     return {
       intent: 'LIST_PENDING_ASSIGNMENTS',
       confidence: 0.9,
       parameters: {}
     };
+  }
+
+  // AI-based intent detection for assignment queries (fallback for ambiguous cases)
+  if (lowerMessage.includes('assignment') || lowerMessage.includes('homework')) {
+    try {
+      const aiIntent = await detectAssignmentIntentWithAI(message, conversationId);
+      if (aiIntent) {
+        return aiIntent;
+      }
+    } catch (error) {
+      console.error('AI intent detection failed, falling back to pattern matching:', error);
+    }
   }
 
   // Show grades in specific courses
@@ -1355,7 +1379,61 @@ async function detectIntent(message, conversationHistory, conversationId) {
   }
 }
 
+// AI-based intent detection for assignment queries
+async function detectAssignmentIntentWithAI(message, conversationId) {
+  try {
+    const { generateResponse } = require('./openaiService');
+    
+    const prompt = `Analyze this user message about assignments and determine the intent. Respond with JSON only.
+
+User message: "${message}"
+
+Determine if this is:
+1. A student asking about their assignments (due dates, pending work, etc.) - return LIST_PENDING_ASSIGNMENTS
+2. A teacher asking about who submitted assignments - return CHECK_ASSIGNMENT_SUBMISSIONS  
+3. A teacher asking about who hasn't submitted - return CHECK_UNSUBMITTED_ASSIGNMENTS
+4. A teacher wanting to create a new assignment - return CREATE_ASSIGNMENT
+5. A teacher wanting to grade assignments - return GRADE_ASSIGNMENT
+6. Something else - return null
+
+Key indicators:
+- "What assignments are due today?" = LIST_PENDING_ASSIGNMENTS (student view)
+- "Who submitted today's assignment?" = CHECK_ASSIGNMENT_SUBMISSIONS (teacher view)
+- "Who hasn't submitted?" = CHECK_UNSUBMITTED_ASSIGNMENTS (teacher view)
+- "Create assignment titled X" = CREATE_ASSIGNMENT (teacher action)
+- "Grade assignment X for student Y" = GRADE_ASSIGNMENT (teacher action)
+
+Respond with JSON: {"intent": "INTENT_NAME", "confidence": 0.9, "parameters": {}}`;
+
+    const response = await generateResponse(prompt, conversationId);
+    
+    // Parse the JSON response
+    try {
+      const cleanedResponse = response
+        .replace(/```json\s*/, '')
+        .replace(/```\s*$/, '')
+        .trim();
+      
+      const result = JSON.parse(cleanedResponse);
+      
+      // Only return if it's a valid assignment-related intent
+      if (result.intent && ['LIST_PENDING_ASSIGNMENTS', 'CHECK_ASSIGNMENT_SUBMISSIONS', 'CHECK_UNSUBMITTED_ASSIGNMENTS', 'CREATE_ASSIGNMENT', 'GRADE_ASSIGNMENT'].includes(result.intent)) {
+        return result;
+      }
+      
+      return null;
+    } catch (parseError) {
+      console.error('Error parsing AI assignment intent response:', parseError);
+      return null;
+    }
+  } catch (error) {
+    console.error('Error in AI assignment intent detection:', error);
+    return null;
+  }
+}
+
 module.exports = {
   detectIntent,
-  detectIntentFallback
+  detectIntentFallback,
+  detectAssignmentIntentWithAI
 }; 
