@@ -4369,12 +4369,21 @@ Ask your teacher for the class code - they can find it in:
           };
         }
         
-        // Normalize email list from parameters (support teacherEmails or emails)
-        const inviteEmails = Array.isArray(parameters.emails)
+        // Normalize email list from parameters (support teacherEmail, teacherEmails, or emails)
+        let inviteEmails = Array.isArray(parameters.emails)
           ? parameters.emails
           : Array.isArray(parameters.teacherEmails)
             ? parameters.teacherEmails
             : [];
+        if (!inviteEmails.length && typeof parameters.teacherEmail === 'string' && parameters.teacherEmail.trim().length > 0) {
+          inviteEmails = [parameters.teacherEmail.trim()];
+        }
+        // Fallback: extract from the raw message if still empty
+        if (!inviteEmails.length && req?.body?.message) {
+          const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+          const found = req.body.message.match(emailRegex) || [];
+          if (found.length) inviteEmails = found;
+        }
         
         // Check if we need course name
         if (parameters.needsCourseName || !parameters.courseName) {
