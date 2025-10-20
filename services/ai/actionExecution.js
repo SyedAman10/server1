@@ -2937,7 +2937,6 @@ async function executeAction(intentData, originalMessage, userToken, req) {
    • If your teacher shared a Meet link
    • Click the link to join the class
    • You may be automatically enrolled
-
 **Troubleshooting:**
 ❌ **"Class not found" error:**
 • Double-check the class code
@@ -4370,11 +4369,18 @@ Ask your teacher for the class code - they can find it in:
           };
         }
         
+        // Normalize email list from parameters (support teacherEmails or emails)
+        const inviteEmails = Array.isArray(parameters.emails)
+          ? parameters.emails
+          : Array.isArray(parameters.teacherEmails)
+            ? parameters.teacherEmails
+            : [];
+        
         // Check if we need course name
         if (parameters.needsCourseName || !parameters.courseName) {
           // Start ongoing action to collect the course name for teacher invitation
           if (conversationId) {
-            startOngoingAction(conversationId, 'INVITE_TEACHERS', ['courseName'], { emails: parameters.emails || [] });
+            startOngoingAction(conversationId, 'INVITE_TEACHERS', ['courseName'], { emails: inviteEmails });
           }
           return {
             message: 'To invite a teacher, please provide the course name or use: "invite teacher TEACHER_EMAIL to CLASS_NAME".',
@@ -4382,7 +4388,7 @@ Ask your teacher for the class code - they can find it in:
             ongoingAction: {
               action: 'INVITE_TEACHERS',
               missingParameters: ['courseName'],
-              collectedParameters: { emails: parameters.emails || [] }
+              collectedParameters: { emails: inviteEmails }
             }
           };
         }
@@ -4424,13 +4430,13 @@ Ask your teacher for the class code - they can find it in:
           const response = await makeApiCall(
             `${baseUrl}/api/classroom/${courseId}/invite-teachers`,
             'POST',
-            { emails: parameters.emails },
+            { emails: inviteEmails },
             userToken,
             req
           );
 
           return {
-            message: `Successfully invited ${parameters.emails.length} teachers to ${teacherMatchingCourses[0].name}.`,
+            message: `Successfully invited ${inviteEmails.length} teacher(s) to ${teacherMatchingCourses[0].name}.`,
             conversationId: req.body.conversationId
           };
         } else {
@@ -4443,7 +4449,6 @@ Ask your teacher for the class code - they can find it in:
               name: course.name,
               section: course.section || "No section"
             })),
-            teacherEmails: parameters.emails,
             conversationId: req.body.conversationId
           };
         }
