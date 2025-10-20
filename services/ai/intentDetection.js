@@ -2,8 +2,8 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { getLastMessage, getLastMessages, getConversationHistory } = require('./conversationManager');
 
 // Initialize Gemini Flash
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
 
 /**
  * Simple intent detection based on keywords
@@ -1216,7 +1216,7 @@ async function detectIntent(message, conversationHistory, conversationId) {
 
     // Initialize Gemini client
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
     const chat = model.startChat({ history: [] });
 
     const prompt = `
