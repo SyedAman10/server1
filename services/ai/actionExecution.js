@@ -570,7 +570,6 @@ async function handleParameterCollection(intent, parameters, conversationId, ori
         if (!titleExtracted) {
           try {
             const aiExtractionPrompt = `Extract the assignment title from this user message. Return only the title, nothing else.
-
 User message: "${originalMessage}"
 
 Examples:
@@ -1126,7 +1125,6 @@ Extracted title:`;
         missingParameters
       });
       break;
-      
     case 'CHECK_ASSIGNMENT_SUBMISSIONS':
       // Handle course name collection for submission status check
       if (missingParameters.includes('courseName')) {
@@ -1823,7 +1821,6 @@ async function findMatchingCourse(courseName, userToken, req, baseUrl) {
     return { success: false, message: "Sorry, I encountered an error while searching for courses. Please try again.", error: error.message };
   }
 }
-
 /**
  * Helper function to make API calls to our backend endpoints
  */
@@ -2350,7 +2347,6 @@ async function executeAction(intentData, originalMessage, userToken, req) {
       parameters.emails = parameters.studentEmails;
       delete parameters.studentEmails;
     }
-
     switch (intent) {
       case 'PARAMETER_COLLECTION': {
         // This is a dummy intent used when there's an ongoing action
@@ -2895,7 +2891,6 @@ async function executeAction(intentData, originalMessage, userToken, req) {
 • Double-check the class code
 • Make sure you're using the correct Google account
 • Ask your teacher to verify the code
-
 ❌ **"You're already in this class" message:**
 • You're already enrolled
 • Check your Google Classroom homepage
@@ -3587,7 +3582,6 @@ Ask your teacher for the class code - they can find it in:
           };
         }
       }
-        
       case 'CREATE_ASSIGNMENT': {
         // Only allow teachers and super_admin to create assignments
         if (userRole !== 'teacher' && userRole !== 'super_admin') {
@@ -4317,7 +4311,6 @@ Ask your teacher for the class code - they can find it in:
             courseName: extractedCourse
           }
         };
-
       case 'INVITE_TEACHERS':
         // Only allow super_admin to invite teachers
         if (userRole !== 'super_admin') {
@@ -4329,9 +4322,18 @@ Ask your teacher for the class code - they can find it in:
         
         // Check if we need course name
         if (parameters.needsCourseName || !parameters.courseName) {
+          // Start ongoing action to collect the course name for teacher invitation
+          if (conversationId) {
+            startOngoingAction(conversationId, 'INVITE_TEACHERS', ['courseName'], { emails: parameters.emails || [] });
+          }
           return {
-            message: 'I\'d be happy to help you invite teachers! 😊 I need to know which specific course you\'re referring to. Could you please tell me the name of the class? For example: "Computer Science", "Math 101", or "AI". Once you tell me the course name, I can help you invite teachers to it!',
-            conversationId: req.body.conversationId
+            message: 'To invite a teacher, please provide the course name or use: "invite teacher TEACHER_EMAIL to CLASS_NAME".',
+            conversationId: req.body.conversationId,
+            ongoingAction: {
+              action: 'INVITE_TEACHERS',
+              missingParameters: ['courseName'],
+              collectedParameters: { emails: parameters.emails || [] }
+            }
           };
         }
         // Get all courses to find the matching one
@@ -4658,7 +4660,6 @@ Ask your teacher for the class code - they can find it in:
 
 4. **Get Help:**
    • "help" - Show this help message
-
 **Note:** Some features require specific permissions. Please contact your administrator if you need access to create or manage content.`;
         }
 
@@ -5377,7 +5378,6 @@ Ask your teacher for the class code - they can find it in:
           };
         }
       }
-      
       case 'GRADE_ASSIGNMENT': {
         // Only allow teachers and super_admin to grade assignments
         if (userRole !== 'teacher' && userRole !== 'super_admin') {
@@ -5992,7 +5992,6 @@ Ask your teacher for the class code - they can find it in:
           };
         }
       }
-
       case 'CHECK_UNSUBMITTED_ASSIGNMENTS': {
         // Only allow teachers and super_admin to check unsubmitted assignments
         if (userRole !== 'teacher' && userRole !== 'super_admin') {
@@ -6755,7 +6754,6 @@ Ask your teacher for the class code - they can find it in:
           };
         }
       }
-      
       case 'READ_EMAIL': {
         // Only allow authenticated users to read emails
         if (!userToken) {

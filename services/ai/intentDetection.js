@@ -1172,7 +1172,23 @@ async function detectIntent(message, conversationHistory, conversationId) {
       console.log('🔍 DEBUG: Found ongoing action context, checking if message provides parameters');
       
       // Check if this message provides parameters for the ongoing action
-      const { action, missingParameters } = context;
+      const { action, missingParameters, collectedParameters } = context;
+      
+      // If we're collecting course name for INVITE_TEACHERS and user sent a short text without emails
+      if (action === 'INVITE_TEACHERS' && missingParameters.includes('courseName')) {
+        const hasEmail = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/.test(message);
+        if (!hasEmail && message.trim().length > 0 && message.trim().length < 100) {
+          return {
+            intent: 'INVITE_TEACHERS',
+            confidence: 0.9,
+            parameters: {
+              courseName: message.trim(),
+              emails: (collectedParameters && collectedParameters.emails) ? collectedParameters.emails : [],
+              isParameterCollection: true
+            }
+          };
+        }
+      }
       
       // If we're waiting for student emails and this looks like an email
       if (action === 'INVITE_STUDENTS' && missingParameters.includes('studentEmails')) {
