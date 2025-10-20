@@ -577,7 +577,6 @@ Examples:
 - "Title: Final Project" → "Final Project"
 - "Intro to CS" → "Intro to CS"
 - "Homework 1" → "Homework 1"
-
 Extracted title:`;
 
             // Use the correct OpenAI API key instead of user token
@@ -2895,7 +2894,6 @@ async function executeAction(intentData, originalMessage, userToken, req) {
 • Make sure you're signed in
 • Try refreshing the page
 • Check if you're using the correct account
-
 **Important Tips:**
 • 🔐 Use your school Google account, not personal
 • 📱 You can also join using the Google Classroom mobile app
@@ -4307,92 +4305,77 @@ Ask your teacher for the class code - they can find it in:
             courseName: extractedCourse
           }
         };
-      case 'INVITE_TEACHERS':
-        // Only allow super_admin to invite teachers
-        if (userRole !== 'super_admin') {
-          return {
-            message: 'You are not authorized to invite teachers. Only super admins can invite teachers.',
-            conversationId: req.body.conversationId
-          };
-        }
-        
-        // Check if we need course name
-        if (parameters.needsCourseName || !parameters.courseName) {
-          // Start ongoing action to collect the course name for teacher invitation
-          if (conversationId) {
-            startOngoingAction(conversationId, 'INVITE_TEACHERS', ['courseName'], { emails: parameters.emails || [] });
-          }
-          return {
-            message: 'To invite a teacher, please provide the course name or use: "invite teacher TEACHER_EMAIL to CLASS_NAME".',
-            conversationId: req.body.conversationId,
-            ongoingAction: {
-              action: 'INVITE_TEACHERS',
-              missingParameters: ['courseName'],
-              collectedParameters: { emails: parameters.emails || [] }
-            }
-          };
-        }
-        // Get all courses to find the matching one
-        let teacherCoursesResponse = await makeApiCall(
-          `${baseUrl}/api/classroom`,
-          'GET',
-          null,
-          userToken,
-          req
-        );
+      case 'INVITE_TEACHERS': {
+        // We only require courseName; emails may be carried from collectedParameters or provided inline
+        const textRaw = originalMessage;
+        const text = (textRaw || '').trim();
+        const textClean = text.replace(/[“”"'\.]$/g, '').trim();
 
-        // Handle cases where coursesResponse might be directly an array
-        if (!teacherCoursesResponse || !teacherCoursesResponse.courses || !Array.isArray(teacherCoursesResponse.courses)) {
-          if (Array.isArray(teacherCoursesResponse)) {
-            console.log('DEBUG: teacherCoursesResponse is directly an array, wrapping it');
-            teacherCoursesResponse = { courses: teacherCoursesResponse };
-          } else {
+        // Extract any emails from the message to augment existing ones
+        const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+        const foundEmails = textClean.match(emailRegex) || [];
+        if (foundEmails.length > 0) {
+          newParameters.emails = Array.from(new Set([...(collectedParameters.emails || []), ...foundEmails]));
+          parametersFound = true;
+        }
+
+        // If courseName is missing, try to extract from common patterns or accept the whole message as name
+        if (missingParameters.includes('courseName')) {
+          let courseName = '';
+          const patterns = [
+            /class called\s+([^.!?]+)\s*$/i,
+            /course called\s+([^.!?]+)\s*$/i,
+            /to\s+(?:class\s+)?([^.!?]+)\s*$/i,
+            /in\s+(?:class\s+)?([^.!?]+)\s*$/i,
+            /(?:class|course)\s+([^.!?]+)\s*$/i
+          ];
+          for (const pattern of patterns) {
+            const m = textClean.match(pattern);
+            if (m && m[1]) {
+              courseName = m[1].trim();
+              break;
+            }
+          }
+          if (!courseName && foundEmails.length === 0 && textClean.length > 0) {
+            // Treat the whole message as the course name if it's a short reply
+            courseName = textClean;
+          }
+          if (courseName) {
+            newParameters.courseName = courseName;
+            parametersFound = true;
+          }
+        }
+
+        if (parametersFound) {
+          const allParameters = {
+            ...collectedParameters,
+            ...newParameters
+          };
+          const stillMissing = [];
+          if (!allParameters.courseName) stillMissing.push('courseName');
+
+          if (stillMissing.length === 0) {
+            // Mark action complete so execution can proceed with allParameters
+            completeOngoingAction(conversationId);
             return {
-              message: 'Failed to retrieve courses. Please try again.',
-              conversationId: req.body.conversationId
+              action: 'INVITE_TEACHERS',
+              actionComplete: true,
+              allParameters,
+              collectedParameters: allParameters,
+              missingParameters: []
             };
           }
-        }
-
-        // Find courses matching the name
-        const teacherMatchingCourses = teacherCoursesResponse.courses.filter(course =>
-          course.name.toLowerCase().includes(parameters.courseName.toLowerCase())
-        );
-
-        if (teacherMatchingCourses.length === 0) {
           return {
-            message: `I couldn't find any courses matching "${parameters.courseName}".`,
-            conversationId: req.body.conversationId
-          };
-        } else if (teacherMatchingCourses.length === 1) {
-          // Exact match - invite the teachers
-          const courseId = teacherMatchingCourses[0].id;
-          const response = await makeApiCall(
-            `${baseUrl}/api/classroom/${courseId}/invite-teachers`,
-            'POST',
-            { emails: parameters.emails },
-            userToken,
-            req
-          );
-
-          return {
-            message: `Successfully invited ${parameters.emails.length} teachers to ${teacherMatchingCourses[0].name}.`,
-            conversationId: req.body.conversationId
-          };
-        } else {
-          // Multiple matches - ask for clarification
-          return {
-            type: 'COURSE_DISAMBIGUATION_NEEDED',
-            message: `I found multiple courses matching "${parameters.courseName}". Which one would you like to invite the teachers to?`,
-            options: teacherMatchingCourses.map(course => ({
-              id: course.id,
-              name: course.name,
-              section: course.section || "No section"
-            })),
-            teacherEmails: parameters.emails,
-            conversationId: req.body.conversationId
+            action: 'INVITE_TEACHERS',
+            actionComplete: false,
+            nextMessage: 'I still need the course name. Please provide the exact class name.',
+            collectedParameters: allParameters,
+            missingParameters: stillMissing
           };
         }
+
+        return null;
+      }
 
       case 'PROVIDE_MATERIALS': {
         // Get the stored assignment data from the last message
@@ -4542,7 +4525,7 @@ Ask your teacher for the class code - they can find it in:
 
 5. **Meetings:**
    • "create meeting Study Group with john@email.com tomorrow at 3pm" - Schedule meetings
-   • "schedule call Project Discussion today at 7pm for 1 hour" - Set up calls
+   • "schedule call Project Discussion today at 7pm" - Set up calls
    • "reschedule my today's meeting which is on today at 5pm make it to 6pm tomorrow" - Update meetings
    • "change my meeting tomorrow at 9am to 10am" - Modify meeting times
    • "cancel my meeting tomorrow at 5pm" - Cancel meetings
