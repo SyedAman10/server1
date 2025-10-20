@@ -4326,6 +4326,14 @@ Ask your teacher for the class code - they can find it in:
             conversationId: req.body.conversationId
           };
         }
+        
+        // Check if we need course name
+        if (parameters.needsCourseName || !parameters.courseName) {
+          return {
+            message: 'I\'d be happy to help you invite teachers! 😊 I need to know which specific course you\'re referring to. Could you please tell me the name of the class? For example: "Computer Science", "Math 101", or "AI". Once you tell me the course name, I can help you invite teachers to it!',
+            conversationId: req.body.conversationId
+          };
+        }
         // Get all courses to find the matching one
         let teacherCoursesResponse = await makeApiCall(
           `${baseUrl}/api/classroom`,

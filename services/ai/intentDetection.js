@@ -655,9 +655,22 @@ async function detectIntentFallback(message, conversationId) {
     // Determine if it's a teacher invitation
     const isTeacherInvite = lowerMessage.includes('teacher') || lowerMessage.includes('professor') || lowerMessage.includes('instructor');
     
+    
     // Extract course name/identifier
     let courseName = '';
-    if (lowerMessage.includes('to')) {
+    
+    // Try different patterns to extract course name
+    if (lowerMessage.includes('class called')) {
+      const match = message.match(/class called\s+([^.!?]+)/i);
+      if (match && match[1]) {
+        courseName = match[1].trim();
+      }
+    } else if (lowerMessage.includes('course called')) {
+      const match = message.match(/course called\s+([^.!?]+)/i);
+      if (match && match[1]) {
+        courseName = match[1].trim();
+      }
+    } else if (lowerMessage.includes('to')) {
       const parts = message.split('to');
       if (parts.length >= 2) {
         courseName = parts[1].split(/\s+/).slice(0, -1).join(' ').trim(); // Remove the last word (usually "class" or "course")
@@ -667,7 +680,13 @@ async function detectIntentFallback(message, conversationId) {
       if (parts.length >= 2) {
         courseName = parts[1].split(/\s+/).slice(0, -1).join(' ').trim(); // Remove the last word (usually "class" or "course")
       }
+    } else if (lowerMessage.includes('in')) {
+      const parts = message.split('in');
+      if (parts.length >= 2) {
+        courseName = parts[1].split(/\s+/).slice(0, -1).join(' ').trim(); // Remove the last word (usually "class" or "course")
+      }
     }
+    
 
     // If no course name found, check conversation history
     if (!courseName && lastMessage) {
@@ -682,23 +701,38 @@ async function detectIntentFallback(message, conversationId) {
       }
     }
 
-    // Check for generic terms that should trigger clarification
-    const genericTerms = ['my class', 'my course', 'the class', 'the course', 'this class', 'this course', 'class', 'course'];
-    const isGenericTerm = genericTerms.some(term => 
-      courseName.toLowerCase().includes(term.toLowerCase()) || 
-      courseName.toLowerCase() === term.toLowerCase()
-    );
+    // Check for generic terms that should trigger clarification (only for student invitations)
+    if (!isTeacherInvite) {
+      const genericTerms = ['my class', 'my course', 'the class', 'the course', 'this class', 'this course', 'class', 'course'];
+      const isGenericTerm = genericTerms.some(term => 
+        courseName.toLowerCase().includes(term.toLowerCase()) || 
+        courseName.toLowerCase() === term.toLowerCase()
+      );
 
-    // If it's a generic term, treat as suggestion request
-    if (isGenericTerm) {
+      // If it's a generic term, treat as suggestion request
+      if (isGenericTerm) {
+        return {
+          intent: 'STUDENT_JOIN_SUGGESTION',
+          confidence: 0.9,
+          parameters: {
+            originalMessage: message,
+            extractedEmails: emails,
+            extractedCourse: courseName,
+            needsDisambiguation: true
+          }
+        };
+      }
+    }
+    
+    // For teacher invitations, if no specific course name is provided, ask for clarification
+    if (isTeacherInvite && (!courseName || courseName.toLowerCase() === 'class' || courseName.toLowerCase() === 'course')) {
       return {
-        intent: 'STUDENT_JOIN_SUGGESTION',
-        confidence: 0.9,
+        intent: 'INVITE_TEACHERS',
+        confidence: 0.8,
         parameters: {
-          originalMessage: message,
-          extractedEmails: emails,
-          extractedCourse: courseName,
-          needsDisambiguation: true
+          courseName: null,
+          emails: emails,
+          needsCourseName: true
         }
       };
     }
