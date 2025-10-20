@@ -172,6 +172,44 @@ async function detectIntentFallback(message, conversationId) {
     lowerMessage.includes('add student to class') ||
     lowerMessage.includes('add student to course')
   ) {
+    // If this is clearly about teachers, do NOT route to student suggestion
+    const mentionsTeacher = lowerMessage.includes('teacher') || lowerMessage.includes('professor') || lowerMessage.includes('instructor');
+    if (mentionsTeacher) {
+      // Extract any emails if present
+      const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+      const emails = message.match(emailRegex) || [];
+
+      // Attempt a lightweight course extraction
+      let courseName = '';
+      const coursePatterns = [
+        /class called\s+([^.!?]+)/i,
+        /course called\s+([^.!?]+)/i,
+        /(?:class|course)\s+([a-zA-Z0-9\s-]+)/i,
+        /(?:to|in)\s+([a-zA-Z0-9\s-]+?)(?:\s|$)/i,
+        /([a-zA-Z0-9\s-]+?)\s+(?:class|course)/i
+      ];
+      for (const pattern of coursePatterns) {
+        const match = message.match(pattern);
+        if (match && match[1]) {
+          courseName = match[1].trim();
+          break;
+        }
+      }
+
+      const genericTerms = ['my class', 'my course', 'the class', 'the course', 'this class', 'this course', 'class', 'course'];
+      const isGeneric = !courseName || genericTerms.includes(courseName.toLowerCase());
+
+      return {
+        intent: 'INVITE_TEACHERS',
+        confidence: 0.85,
+        parameters: {
+          emails,
+          courseName: isGeneric ? null : courseName,
+          needsCourseName: isGeneric
+        }
+      };
+    }
+
     // Check if this is a direct invitation request with email
     const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
     const emails = message.match(emailRegex) || [];
