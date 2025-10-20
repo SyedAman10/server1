@@ -571,7 +571,6 @@ async function handleParameterCollection(intent, parameters, conversationId, ori
           try {
             const aiExtractionPrompt = `Extract the assignment title from this user message. Return only the title, nothing else.
 User message: "${originalMessage}"
-
 Examples:
 - "The title should be Intro to CS" → "Intro to CS"
 - "Call it Math Homework" → "Math Homework" 
@@ -1370,7 +1369,6 @@ Extracted title:`;
         missingParameters
       });
       break;
-      
     case 'CHECK_UNSUBMITTED_ASSIGNMENTS':
       console.log('🔍 DEBUG: CHECK_UNSUBMITTED_ASSIGNMENTS parameter collection - missingParameters:', missingParameters);
       console.log('🔍 DEBUG: CHECK_UNSUBMITTED_ASSIGNMENTS collectedParameters:', collectedParameters);
@@ -2098,7 +2096,6 @@ async function makeApiCall(url, method, data, userToken, req) {
     throw error;
   }
 }
-
 /**
  * Execute the appropriate action based on the detected intent
  */
@@ -2894,7 +2891,6 @@ async function executeAction(intentData, originalMessage, userToken, req) {
 ❌ **"You're already in this class" message:**
 • You're already enrolled
 • Check your Google Classroom homepage
-
 ❌ **Can't find the "+" button:**
 • Make sure you're signed in
 • Try refreshing the page
