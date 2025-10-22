@@ -142,6 +142,7 @@ Determine if the user is:
 
 Examples:
 - "Math 101" → {"intent": "direct_name", "name": "Math 101"}
+- "industrial chemistry" → {"intent": "direct_name", "name": "Industrial Chemistry"}
 - "introduction to finance is ok" → {"intent": "direct_name", "name": "Introduction to Finance"}
 - "i'll go with calculus" → {"intent": "direct_name", "name": "Calculus"}
 - "calculus sounds good" → {"intent": "direct_name", "name": "Calculus"}
@@ -153,42 +154,36 @@ Examples:
 - "a different name" → {"intent": "more_suggestions", "needs_help": true}
 - "something else" → {"intent": "more_suggestions", "needs_help": true}
 
+IMPORTANT: If the user provides a subject name like "industrial chemistry", "computer science", "mathematics", "physics", etc., treat it as a direct course name and capitalize it properly.
+
 Respond with JSON only:`;
 
-    // Use the existing AI service to analyze intent
-    const response = await makeApiCall(
-      `${process.env.OPENAI_API_URL || 'https://api.openai.com/v1'}/chat/completions`,
-      'POST',
-      {
-        model: 'gpt-3.5-turbo',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are an AI assistant that analyzes user intent for course naming. Always respond with valid JSON only.'
-          },
-          {
-            role: 'user',
-            content: intentAnalysisPrompt
-          }
-        ],
-        max_tokens: 150,
-        temperature: 0.1
-      },
-      process.env.OPENAI_API_KEY,
-      null
-    );
-
-    if (response.choices && response.choices[0] && response.choices[0].message) {
-      const content = response.choices[0].message.content.trim();
-      try {
-        return JSON.parse(content);
-      } catch (parseError) {
-        console.error('Error parsing AI intent analysis:', parseError);
-        return { intent: 'uncertainty', needs_help: true };
-      }
-    }
+    // Use the internal AI service instead of external API
+    const { generateResponse } = require('./conversationManager');
+    const response = await generateResponse(intentAnalysisPrompt, conversationId);
     
-    return { intent: 'uncertainty', needs_help: true };
+    try {
+      // Try to parse the response as JSON
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]);
+      }
+      
+      // If no JSON found, try to extract intent from the response
+      const lowerResponse = response.toLowerCase();
+      if (lowerResponse.includes('direct_name') || lowerResponse.includes('provided_name') || lowerResponse.includes('selected_name')) {
+        // Extract the name from the response
+        const nameMatch = response.match(/"name":\s*"([^"]+)"/);
+        if (nameMatch) {
+          return { intent: 'direct_name', name: nameMatch[1] };
+        }
+      }
+      
+      return { intent: 'uncertainty', needs_help: true };
+    } catch (parseError) {
+      console.error('Error parsing AI intent analysis:', parseError);
+      return { intent: 'uncertainty', needs_help: true };
+    }
   } catch (error) {
     console.error('Error in AI intent analysis:', error);
     return { intent: 'uncertainty', needs_help: true };
@@ -263,9 +258,13 @@ function isValidCourseName(name) {
   // Check if it's just punctuation or numbers
   if (/^[^a-zA-Z]*$/.test(trimmedName)) return false;
   
-  // Check if it's too generic
+  // Check if it's too generic (but allow academic subjects)
   const tooGeneric = ['test', 'course', 'class', 'new', 'name', 'title'];
-  if (tooGeneric.includes(trimmedName.toLowerCase())) return false;
+  const academicSubjects = ['chemistry', 'physics', 'mathematics', 'biology', 'history', 'english', 'literature', 'computer science', 'engineering', 'medicine', 'psychology', 'sociology', 'economics', 'business', 'art', 'music', 'geography', 'philosophy', 'political science', 'industrial chemistry', 'organic chemistry', 'inorganic chemistry', 'analytical chemistry', 'physical chemistry', 'biochemistry'];
+  
+  if (tooGeneric.includes(trimmedName.toLowerCase()) && !academicSubjects.includes(trimmedName.toLowerCase())) {
+    return false;
+  }
   
   // Check for subject description patterns that shouldn't be treated as course names
   const subjectDescriptionPatterns = [
@@ -800,6 +799,16 @@ Extracted title:`;
               nextMessage: "No problem! What would you like the announcement to say instead?",
               actionComplete: false
             };
+        }
+        
+        // Fallback: If AI analysis failed but the message looks like a simple course name, accept it
+        if (!parametersFound && intentAnalysis.intent === 'uncertainty') {
+          const simpleName = originalMessage.trim();
+          if (simpleName.length > 2 && simpleName.length < 100 && isValidCourseName(simpleName)) {
+            newParameters.name = simpleName;
+            parametersFound = true;
+            console.log('🔍 DEBUG: Fallback accepted course name:', simpleName);
+          }
         }
       }
       break;
