@@ -127,9 +127,9 @@ const createCourse = async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Only teachers can create courses
-    if (user.role !== 'teacher') {
-      return res.status(403).json({ error: 'Only teachers can create courses' });
+    // Only teachers and super_admins can create courses
+    if (user.role !== 'teacher' && user.role !== 'super_admin') {
+      return res.status(403).json({ error: 'Only teachers and super admins can create courses' });
     }
     
     // Ensure we have valid tokens
