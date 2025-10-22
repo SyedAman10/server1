@@ -1968,16 +1968,21 @@ async function makeApiCall(url, method, data, userToken, req) {
             
             console.log('DEBUG: Course created successfully:', result.data);
             
-            // If successful, update to ACTIVE state
+            // Try to update to ACTIVE state, but don't fail if it's not allowed
             if (result.data.id) {
-              await classroom.courses.patch({
-                id: result.data.id,
-                updateMask: 'courseState',
-                requestBody: {
-                  courseState: 'ACTIVE'
-                }
-              });
-              console.log('DEBUG: Course state updated to ACTIVE');
+              try {
+                await classroom.courses.patch({
+                  id: result.data.id,
+                  updateMask: 'courseState',
+                  requestBody: {
+                    courseState: 'ACTIVE'
+                  }
+                });
+                console.log('DEBUG: Course state updated to ACTIVE');
+              } catch (stateError) {
+                console.log('DEBUG: Could not transition course to ACTIVE state (this is normal for some users):', stateError.message);
+                // Don't fail the entire operation - the course was created successfully
+              }
             }
             
             console.log('DEBUG: Internal createCourse call successful');

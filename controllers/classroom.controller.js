@@ -160,17 +160,25 @@ const createCourse = async (req, res) => {
     console.log('DEBUG: Creating course with data:', courseData);
     const result = await classroom.courses.create({
       requestBody: courseData
-    });    console.log('DEBUG: Course created successfully:', result.data);
-    // If successful, update to ACTIVE state
+    });
+    
+    console.log('DEBUG: Course created successfully:', result.data);
+    
+    // Try to update to ACTIVE state, but don't fail if it's not allowed
     if (result.data.id) {
-      await classroom.courses.patch({
-        id: result.data.id,
-        updateMask: 'courseState',
-        requestBody: {
-          courseState: 'ACTIVE'
-        }
-      });
-      console.log('DEBUG: Course state updated to ACTIVE');
+      try {
+        await classroom.courses.patch({
+          id: result.data.id,
+          updateMask: 'courseState',
+          requestBody: {
+            courseState: 'ACTIVE'
+          }
+        });
+        console.log('DEBUG: Course state updated to ACTIVE');
+      } catch (stateError) {
+        console.log('DEBUG: Could not transition course to ACTIVE state (this is normal for some users):', stateError.message);
+        // Don't fail the entire operation - the course was created successfully
+      }
     }
 
     res.status(201).json(result.data);
