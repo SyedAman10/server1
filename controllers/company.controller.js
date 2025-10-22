@@ -29,8 +29,11 @@ const updateCompanyInfo = async (req, res) => {
       });
     }
 
+    console.log('DEBUG: req.user object:', req.user);
+    console.log('DEBUG: req.user.sub:', req.user.sub);
+    
     const companyData = {
-      teacher_id: req.user.id,
+      teacher_id: req.user.sub, // Use sub (user ID) as string from JWT token
       company_name,
       company_email,
       company_phone,
@@ -39,7 +42,9 @@ const updateCompanyInfo = async (req, res) => {
       teacher_phone
     };
 
+    console.log('DEBUG: Creating/updating company info with data:', companyData);
     const result = await upsertCompanyInfo(companyData);
+    console.log('DEBUG: Company info upsert result:', result);
 
     res.json({
       success: true,
@@ -65,7 +70,9 @@ const getCompany = async (req, res) => {
       });
     }
 
-    const companyInfo = await getCompanyInfo(req.user.id);
+    console.log('DEBUG: Getting company info for teacher_id:', req.user.sub);
+    const companyInfo = await getCompanyInfo(req.user.sub);
+    console.log('DEBUG: Retrieved company info:', companyInfo);
 
     if (!companyInfo) {
       return res.status(404).json({
