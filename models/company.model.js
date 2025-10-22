@@ -33,7 +33,7 @@ createCompanyTable();
 // Migrate existing table structure if needed
 const migrateCompanyTable = async () => {
   try {
-    // Check if teacher_id column is BIGINT (old structure)
+    // Check if teacher_id column is BIGINT or INTEGER (old structure)
     const checkQuery = `
       SELECT data_type 
       FROM information_schema.columns 
@@ -42,19 +42,21 @@ const migrateCompanyTable = async () => {
     
     const result = await pool.query(checkQuery);
     
-    if (result.rows.length > 0 && result.rows[0].data_type === 'bigint') {
-      console.log('DEBUG: Migrating company table structure...');
+    if (result.rows.length > 0 && (result.rows[0].data_type === 'bigint' || result.rows[0].data_type === 'integer')) {
+      console.log('DEBUG: Migrating company table structure from', result.rows[0].data_type, 'to VARCHAR...');
       
       // Drop the foreign key constraint first
       await pool.query('ALTER TABLE companies DROP CONSTRAINT IF EXISTS companies_teacher_id_fkey;');
       
-      // Change column type from BIGINT to VARCHAR
-      await pool.query('ALTER TABLE companies ALTER COLUMN teacher_id TYPE VARCHAR(255);');
+      // Change column type from BIGINT/INTEGER to VARCHAR
+      await pool.query('ALTER TABLE companies ALTER COLUMN teacher_id TYPE VARCHAR(255) USING teacher_id::VARCHAR;');
       
       // Add unique constraint
       await pool.query('ALTER TABLE companies ADD CONSTRAINT companies_teacher_id_unique UNIQUE (teacher_id);');
       
       console.log('DEBUG: Company table migration completed');
+    } else if (result.rows.length > 0) {
+      console.log('DEBUG: Company table already has correct structure:', result.rows[0].data_type);
     }
   } catch (error) {
     console.error('Error migrating company table:', error);
@@ -111,6 +113,7 @@ const upsertCompanyInfo = async (companyData) => {
 
   try {
     console.log('DEBUG: Upserting company info with values:', values);
+    console.log('DEBUG: teacher_id value:', values[0], 'type:', typeof values[0]);
     const result = await pool.query(query, values);
     console.log('DEBUG: Upsert result:', result.rows[0]);
     return result.rows[0];
