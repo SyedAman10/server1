@@ -159,8 +159,14 @@ IMPORTANT: If the user provides a subject name like "industrial chemistry", "com
 Respond with JSON only:`;
 
     // Use the internal AI service instead of external API
-    const { generateResponse } = require('./conversationManager');
-    const response = await generateResponse(intentAnalysisPrompt, conversationId);
+    const { GoogleGenerativeAI } = require('@google/generative-ai');
+    
+    // Initialize Gemini
+    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
+    
+    const result = await model.generateContent(intentAnalysisPrompt);
+    const response = result.response.text();
     
     try {
       // Try to parse the response as JSON
@@ -351,39 +357,40 @@ Examples:
 Respond with JSON only:`;
 
     // Use the existing AI service to analyze intent
-    const response = await makeApiCall(
-      `${process.env.OPENAI_API_URL || 'https://api.openai.com/v1'}/chat/completions`,
-      'POST',
-      {
-        model: 'gpt-3.5-turbo',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are an AI assistant that analyzes user intent for announcement creation. Always respond with valid JSON only.'
-          },
-          {
-            role: 'user',
-            content: intentAnalysisPrompt
-          }
-        ],
-        max_tokens: 150,
-        temperature: 0.1
-      },
-      process.env.OPENAI_API_KEY,
-      null
-    );
-
-    if (response.choices && response.choices[0] && response.choices[0].message) {
-      const content = response.choices[0].message.content.trim();
-      try {
-        return JSON.parse(content);
-      } catch (parseError) {
-        console.error('Error parsing AI intent analysis:', parseError);
-        return { intent: 'uncertainty', needs_help: true };
-      }
-    }
+    const { GoogleGenerativeAI } = require('@google/generative-ai');
     
-    return { intent: 'uncertainty', needs_help: true };
+    // Initialize Gemini
+    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
+    
+    const result = await model.generateContent(intentAnalysisPrompt);
+    const response = result.response.text();
+
+    try {
+      // Try to parse the response as JSON
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        return JSON.parse(jsonMatch[0]);
+      }
+      
+      // If no JSON found, try to extract intent from the response
+      const lowerResponse = response.toLowerCase();
+      if (lowerResponse.includes('announcement_text') || lowerResponse.includes('course_name')) {
+        // Extract the relevant data from the response
+        const textMatch = response.match(/"text":\s*"([^"]+)"/);
+        const courseMatch = response.match(/"courseName":\s*"([^"]+)"/);
+        if (textMatch) {
+          return { intent: 'announcement_text', text: textMatch[1] };
+        } else if (courseMatch) {
+          return { intent: 'course_name', courseName: courseMatch[1] };
+        }
+      }
+      
+      return { intent: 'uncertainty', needs_help: true };
+    } catch (parseError) {
+      console.error('Error parsing AI intent analysis:', parseError);
+      return { intent: 'uncertainty', needs_help: true };
+    }
   } catch (error) {
     console.error('Error in AI intent analysis:', error);
     return { intent: 'uncertainty', needs_help: true };

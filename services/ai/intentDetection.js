@@ -1470,7 +1470,11 @@ async function detectIntent(message, conversationHistory, conversationId) {
 // AI-based intent detection for assignment queries
 async function detectAssignmentIntentWithAI(message, conversationId) {
   try {
-    const { generateResponse } = require('./openaiService');
+    const { GoogleGenerativeAI } = require('@google/generative-ai');
+    
+    // Initialize Gemini
+    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
     
     const prompt = `Analyze this user message about assignments and determine the intent. Respond with JSON only.
 
@@ -1493,7 +1497,8 @@ Key indicators:
 
 Respond with JSON: {"intent": "INTENT_NAME", "confidence": 0.9, "parameters": {}}`;
 
-    const response = await generateResponse(prompt, conversationId);
+    const result = await model.generateContent(prompt);
+    const response = result.response.text();
     
     // Parse the JSON response
     try {
