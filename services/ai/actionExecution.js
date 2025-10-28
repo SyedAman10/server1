@@ -843,7 +843,9 @@ Extracted title:`;
             /(?:it'?s|it\s+is)\s+(.+)/i,
             /(?:actually\s+)?(?:it'?s|it\s+is)\s+(.+)/i,
             /(?:correct\s+)?course\s+name\s+is\s+(.+)/i,
-            /(?:the\s+)?correct\s+name\s+is\s+(.+)/i
+            /(?:the\s+)?correct\s+name\s+is\s+(.+)/i,
+            /sorry\s+it\s+is\s+(.+)/i,
+            /sorry\s+(.+)/i
           ];
           
           // Try to extract course name from correction patterns
@@ -3260,6 +3262,10 @@ Ask your teacher for the class code - they can find it in:
         // Check if we need disambiguation for generic course names - THIS MUST BE FIRST
         if (parameters.needsDisambiguation) {
           console.log('🔍 DEBUG: Disambiguation needed for generic course name');
+          
+          // Start ongoing action for parameter collection
+          startOngoingAction(conversationId, 'CREATE_ANNOUNCEMENT', ['courseName'], {});
+          
           return {
             message: `I need to know which specific class you're referring to. Could you please tell me the name of the class? For example: "Grade Islamiat class" or "Math 101".`,
             conversationId: conversationId,
