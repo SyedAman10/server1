@@ -142,6 +142,24 @@ function getOngoingActionContext(conversationId) {
     return null;
   }
   
+  // Check if the action has timed out (15 minutes)
+  const actionStartTime = conversation.context.actionStartTime;
+  if (actionStartTime) {
+    const now = new Date();
+    const fifteenMinutes = 15 * 60 * 1000; // 15 minutes in milliseconds
+    
+    if (now - actionStartTime > fifteenMinutes) {
+      console.log(`⏰ Action ${conversation.context.ongoingAction} timed out after 15 minutes. Auto-resetting context.`);
+      // Auto-reset the context
+      conversation.context.ongoingAction = null;
+      conversation.context.requiredParameters = [];
+      conversation.context.collectedParameters = {};
+      conversation.context.actionStartTime = null;
+      conversation.updatedAt = new Date();
+      return null;
+    }
+  }
+  
   return {
     action: conversation.context.ongoingAction,
     requiredParameters: conversation.context.requiredParameters,
@@ -334,6 +352,27 @@ function getLastMessages(conversationId, count = 5) {
 }
 
 /**
+ * Reset conversation context (clear ongoing actions without deleting history)
+ */
+function resetConversationContext(conversationId) {
+  const conversation = getConversation(conversationId);
+  
+  // Clear ongoing action context but keep messages
+  conversation.context.ongoingAction = null;
+  conversation.context.requiredParameters = [];
+  conversation.context.collectedParameters = {};
+  conversation.context.actionStartTime = null;
+  conversation.context.lastAction = null;
+  conversation.context.lastParameters = null;
+  
+  conversation.updatedAt = new Date();
+  
+  console.log(`🔄 Reset conversation context for: ${conversationId}`);
+  
+  return conversation;
+}
+
+/**
  * Clear a conversation
  */
 function clearConversation(conversationId) {
@@ -383,5 +422,6 @@ module.exports = {
   getOngoingActionContext,
   completeOngoingAction,
   isNewActionAttempt,
-  getContextAwareMessage
+  getContextAwareMessage,
+  resetConversationContext
 }; 

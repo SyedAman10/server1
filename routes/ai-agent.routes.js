@@ -5,7 +5,8 @@ const {
   getConversationHistory, 
   clearConversationHistory,
   saveContext,
-  getContext
+  getContext,
+  resetConversation
 } = require('../controllers/ai-agent.controller');
 
 const router = express.Router();
@@ -17,6 +18,7 @@ router.use(authenticate);
 router.post('/message', handleMessage);
 router.get('/conversations/:conversationId', getConversationHistory);
 router.delete('/conversations/:conversationId', clearConversationHistory);
+router.post('/reset', resetConversation); // Reset ongoing actions without deleting history
 
 // Context management
 router.post('/context', saveContext);

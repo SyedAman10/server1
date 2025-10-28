@@ -7,7 +7,8 @@ const {
   getConversation,
   addMessage,
   updateContext,
-  getFormattedHistory
+  getFormattedHistory,
+  resetConversationContext
 } = require('../services/ai/conversationManager');
 
 // Initialize Gemini Flash
@@ -468,6 +469,20 @@ async function handleMessage(req, res) {
     // Get conversation history
     const history = getFormattedHistory(conversation.id);
 
+    // Check for reset/cancel commands (case-insensitive)
+    const lowerMessage = message.toLowerCase().trim();
+    const resetCommands = ['reset', 'cancel', 'stop', 'clear', 'start over', 'forget', 'abort', 'quit'];
+    const isResetCommand = resetCommands.some(cmd => lowerMessage === cmd || lowerMessage.includes(cmd));
+    
+    if (isResetCommand) {
+      resetConversationContext(conversation.id);
+      return res.json({
+        conversationId: conversation.id,
+        message: '✅ Conversation context has been reset. Ongoing actions have been cleared. How can I help you?',
+        ongoingAction: null
+      });
+    }
+
     // Check if there's an ongoing action first
     const { getOngoingActionContext } = require('../services/ai/conversationManager');
     const ongoingAction = getOngoingActionContext(conversation.id);
@@ -577,6 +592,32 @@ function clearConversationHistory(req, res) {
   }
 }
 
+/**
+ * Reset conversation context (clear ongoing actions without deleting history)
+ */
+function resetConversation(req, res) {
+  try {
+    const { conversationId } = req.body;
+    
+    if (!conversationId) {
+      return res.status(400).json({ error: 'Conversation ID is required' });
+    }
+
+    resetConversationContext(conversationId);
+    
+    res.json({
+      message: 'Conversation context reset successfully. Ongoing actions have been cleared.',
+      conversationId
+    });
+  } catch (error) {
+    console.error('Error in resetConversation:', error);
+    res.status(500).json({
+      error: 'An error occurred while resetting conversation context',
+      details: error.message
+    });
+  }
+}
+
 // Add error handlers for uncaught exceptions
 process.on('uncaughtException', (error) => {
   console.error('Uncaught Exception:', error);
@@ -595,5 +636,6 @@ module.exports = {
   getContext,
   handleMessage,
   getConversationHistory,
-  clearConversationHistory
+  clearConversationHistory,
+  resetConversation
 };
