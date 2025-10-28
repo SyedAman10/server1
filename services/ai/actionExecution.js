@@ -5917,11 +5917,42 @@ Need specific help? Just ask! For example:
         console.log('🔍 DEBUG: parameters:', JSON.stringify(parameters, null, 2));
         
         // All users can create meetings
-        if (!parameters.title && !parameters.attendees) {
-          console.log('❌ DEBUG: Missing title or attendees');
+        
+        // Check for missing parameters and start ongoing action if needed
+        const missingParams = [];
+        if (!parameters.title) missingParams.push('title');
+        if (!parameters.attendees || !Array.isArray(parameters.attendees) || parameters.attendees.length === 0) missingParams.push('attendees');
+        if (!parameters.dateExpr) missingParams.push('dateExpr');
+        if (!parameters.timeExpr) missingParams.push('timeExpr');
+        
+        console.log('🔍 DEBUG: Missing parameters for meeting:', missingParams);
+        
+        if (missingParams.length > 0) {
+          // Start ongoing action for parameter collection
+          startOngoingAction(conversationId, 'CREATE_MEETING', missingParams, parameters);
+          
+          // Provide helpful message based on what's missing
+          let message = '';
+          if (missingParams.includes('dateExpr') && missingParams.includes('timeExpr')) {
+            message = "I need to know when to schedule the meeting. Could you please provide the date and time? For example: 'tomorrow at 3 PM' or 'next Friday at 10 AM'.";
+          } else if (missingParams.includes('dateExpr')) {
+            message = "I need to know the date for the meeting. When should I schedule it? For example: 'tomorrow', 'next Friday', or 'December 15th'.";
+          } else if (missingParams.includes('timeExpr')) {
+            message = "I need to know the time for the meeting. What time should I schedule it for? For example: '3 PM', '9:30 AM', or 'noon'.";
+          } else if (missingParams.includes('attendees')) {
+            message = "Who should I invite to this meeting? Please provide at least one email address.";
+          } else if (missingParams.includes('title')) {
+            message = "What should I call this meeting?";
+          }
+          
           return {
-            message: "I need more information to create a meeting. Please provide a title and at least one attendee email.",
-            conversationId: req.body.conversationId
+            message: message || "I need more information to create the meeting. Please provide the missing details.",
+            conversationId: conversationId,
+            ongoingAction: {
+              action: 'CREATE_MEETING',
+              missingParameters: missingParams,
+              collectedParameters: parameters
+            }
           };
         }
 
@@ -6024,10 +6055,25 @@ Need specific help? Just ask! For example:
             };
           }
           
+          // Check for specific error types and provide helpful messages
+          if (error.message.includes('Date and time are required')) {
+            return {
+              message: "I need both the date and time to schedule the meeting. Please provide both. For example: 'tomorrow at 3 PM' or 'next Friday at 10 AM'.",
+              error: error.message,
+              conversationId: conversationId
+            };
+          } else if (error.message.includes('date') || error.message.includes('time')) {
+            return {
+              message: `There was an issue with the date or time you provided. Please check and try again with a format like "tomorrow at 3 PM" or "next Friday at 10 AM". Error: ${error.message}`,
+              error: error.message,
+              conversationId: conversationId
+            };
+          }
+          
           return {
-            message: "Sorry, I encountered an error while trying to create the meeting. Please try again.",
+            message: `I encountered an error while creating the meeting: ${error.message}. Please check your meeting details and try again. If the problem persists, try providing the date and time again in a format like "tomorrow at 3 PM".`,
             error: error.message,
-            conversationId: req.body.conversationId
+            conversationId: conversationId
           };
         }
       }
