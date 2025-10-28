@@ -5038,7 +5038,7 @@ Need specific help? Just ask! For example:
             throw new Error('Missing required OAuth2 tokens');
           }
 
-          const { getClassroomClient } = require('../integrations/google.classroom');
+          const { getClassroomClient } = require('../../integrations/google.classroom');
           const classroom = getClassroomClient({
             access_token: user.access_token,
             refresh_token: user.refresh_token
