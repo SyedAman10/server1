@@ -4866,6 +4866,144 @@ Ask your teacher for the class code - they can find it in:
         // Handle educational/academic questions
         return await handleEducationalQuestion(originalMessage, conversationId);
 
+      case 'HELP': {
+        // Provide comprehensive help based on what the user might need
+        const helpMessage = `I'm here to help you with your classroom management! Here are some examples of what you can do:
+
+📚 **Course Management:**
+- "List my courses" - See all your courses
+- "Create a course called Biology 101" - Create a new course
+- "Show me the course details for Math 101" - Get course information
+
+📝 **Assignments:**
+- "Create assignment titled 'Homework 1' for Computer Science due next Friday at 5 PM" - Create an assignment
+- "What assignments are due today?" - See pending assignments
+- "Who submitted the tire pressure essay?" - Check submissions (teachers)
+- "Grade assignment 'Essay 1' for student@email.com and give them 85" - Grade an assignment
+
+📢 **Announcements:**
+- "Post announcement 'Class is cancelled tomorrow' to AI class" - Create an announcement
+- "Show announcements for Physics 101" - View announcements
+
+👥 **Student Management:**
+- "Invite student john@email.com to Computer Science class" - Invite students
+- "Show enrolled students in Math 101" - View enrolled students
+
+🗓️ **Meetings:**
+- "Schedule a meeting with john@email.com for tomorrow at 3 PM" - Create a meeting
+- "List my upcoming meetings" - View meetings
+- "Reschedule my meeting from today 5pm to tomorrow 3pm" - Update a meeting
+
+Need specific help? Just ask! For example:
+- "How do I create an assignment?"
+- "Can you tell me how to invite students?"
+- "What's the best way to post an announcement?"`;
+        
+        return {
+          message: helpMessage,
+          conversationId: conversationId
+        };
+      }
+
+      case 'HOW_TO_CREATE_ASSIGNMENT':
+        return {
+          message: `Here's how to create an assignment:
+
+**Option 1 - Full command (recommended):**
+"Create assignment titled 'Midterm Exam' for Computer Science due next Friday at 3 PM"
+
+**Option 2 - Step by step:**
+1. Say: "Create an assignment" or "I want to create an assignment"
+2. Tell me the course name when I ask
+3. Tell me the assignment title when I ask
+4. Tell me the due date when I ask
+
+**Tips:**
+- You can include the assignment title, course name, and due date in one message
+- Use natural language for dates like "tomorrow", "next Friday", "December 15th"
+- Specify the time like "5 PM", "9:30 AM", or "midnight"`,
+          conversationId: conversationId
+        };
+
+      case 'HOW_TO_CREATE_ANNOUNCEMENT':
+        return {
+          message: `Here's how to create an announcement:
+
+**Option 1 - Full command (recommended):**
+"Post announcement 'Homework is due tomorrow' to AI class"
+
+**Option 2 - Step by step:**
+1. Say: "Create an announcement" or "Post an announcement"
+2. Tell me the course name when I ask
+3. Tell me what you want to announce when I ask
+
+**Tips:**
+- You can include both the announcement text and course in one message
+- You can use quotes around your announcement text for clarity
+- Example: "Announce 'Class cancelled tomorrow' in Physics 101"`,
+          conversationId: conversationId
+        };
+
+      case 'HOW_TO_INVITE_STUDENTS':
+        return {
+          message: `Here's how to invite students to a class:
+
+**Option 1 - Full command (recommended):**
+"Invite student john@email.com to Computer Science class"
+
+**Option 2 - Multiple students:**
+"Invite students john@email.com and jane@email.com to Math 101"
+
+**Option 3 - Step by step:**
+1. Say: "Invite a student" or "Add a student to class"
+2. Tell me the student's email address
+3. Tell me the course name
+
+**Tips:**
+- You can invite multiple students at once by separating emails with "and" or commas
+- Make sure to provide the exact course name
+- Students will receive an invitation email to join the class`,
+          conversationId: conversationId
+        };
+
+      case 'HOW_TO_CREATE_COURSE':
+        return {
+          message: `Here's how to create a new course:
+
+**Full command (recommended):**
+"Create a course called Biology 101"
+
+**Step by step:**
+1. Say: "Create a course" or "I want to create a new class"
+2. Tell me the course name when I ask
+
+**Tips:**
+- You just need to provide the course name
+- Examples: "Create course Math 101", "Make a class called Physics 201"
+- The course will be created in Google Classroom and you'll be the teacher`,
+          conversationId: conversationId
+        };
+
+      case 'HOW_TO_SCHEDULE_MEETING':
+        return {
+          message: `Here's how to schedule a meeting:
+
+**Full command (recommended):**
+"Schedule a meeting with john@email.com for tomorrow at 3 PM"
+
+**Step by step:**
+1. Say: "Create a meeting" or "Schedule a meeting"
+2. Tell me who to invite when I ask
+3. Tell me when it should be when I ask
+
+**Tips:**
+- You can invite multiple people: "Schedule meeting with john@email.com and jane@email.com"
+- Use natural language for dates: "tomorrow", "next Friday", "December 15th"
+- Specify time clearly: "3 PM", "9:30 AM", "noon", "midnight"
+- Example: "Schedule meeting with john@email.com tomorrow at 2 PM"`,
+          conversationId: conversationId
+        };
+
       case 'UNKNOWN':
         // Handle unknown intents gracefully
         return {

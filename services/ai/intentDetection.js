@@ -1275,6 +1275,11 @@ async function detectIntent(message, conversationHistory, conversationId) {
       - EDUCATIONAL_QUESTION: User is asking a study-related or academic question (extract the subject/topic and question details)
         Examples: "Explain what SQL is", "What is photosynthesis?", "How does machine learning work?", "Define calculus", "Explain the water cycle", "What are the laws of thermodynamics?"
       - HELP: User needs help or instructions
+      - HOW_TO_CREATE_ASSIGNMENT: User is asking how to create an assignment
+      - HOW_TO_CREATE_ANNOUNCEMENT: User is asking how to create an announcement
+      - HOW_TO_INVITE_STUDENTS: User is asking how to invite students
+      - HOW_TO_CREATE_COURSE: User is asking how to create a course
+      - HOW_TO_SCHEDULE_MEETING: User is asking how to schedule a meeting
       - UNKNOWN: None of the above
       
       ${historyContext}
