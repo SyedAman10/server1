@@ -2016,10 +2016,55 @@ async function makeApiCall(url, method, data, userToken, req) {
             };
             
             console.log('DEBUG: Creating announcement with data:', announcementData);
-            const result = await classroom.courses.announcements.create({
-              courseId: courseId,
-              requestBody: announcementData
-            });
+            
+            // Try to create the announcement
+            let result;
+            try {
+              result = await classroom.courses.announcements.create({
+                courseId: courseId,
+                requestBody: announcementData
+              });
+            } catch (createError) {
+              // Check if it's a precondition error (course not in ACTIVE state)
+              if (createError.code === 400 && createError.message && createError.message.includes('Precondition check failed')) {
+                console.log('DEBUG: Precondition check failed - Course is likely in PROVISIONED state instead of ACTIVE. Attempting to activate...');
+                
+                try {
+                  // Try to update the course to ACTIVE state
+                  await classroom.courses.patch({
+                    id: courseId,
+                    updateMask: 'courseState',
+                    requestBody: {
+                      courseState: 'ACTIVE'
+                    }
+                  });
+                  
+                  console.log('DEBUG: Course activated, retrying announcement creation...');
+                  
+                  // Retry announcement creation
+                  result = await classroom.courses.announcements.create({
+                    courseId: courseId,
+                    requestBody: announcementData
+                  });
+                } catch (stateError) {
+                  console.error('DEBUG: Could not activate course:', stateError.message);
+                  
+                  // Provide detailed error message based on the error type
+                  if (stateError.code === 403 || stateError.message.includes('Permission')) {
+                    throw new Error('You do not have permission to activate this course. The course is currently in PROVISIONED state and needs to be activated before announcements can be posted. Please contact your Google Workspace administrator to activate the course.');
+                  }
+                  
+                  if (stateError.code === 400 && stateError.message && stateError.message.includes('CourseStateDenied')) {
+                    throw new Error('This course is currently in PROVISIONED state and cannot be automatically activated. The Google Classroom API does not allow changing the course state. Announcements can only be posted to ACTIVE courses. Please activate the course manually in Google Classroom first.');
+                  }
+                  
+                  throw new Error(`This course is currently in PROVISIONED state instead of ACTIVE state. Google Classroom requires courses to be in ACTIVE state before announcements can be posted. Error: ${stateError.message}`);
+                }
+              } else {
+                // Re-throw if it's a different error
+                throw createError;
+              }
+            }
             
             console.log('DEBUG: Announcement created successfully:', result.data);
             console.log('DEBUG: Internal createAnnouncement call successful');

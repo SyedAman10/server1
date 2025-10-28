@@ -368,14 +368,69 @@ const createAnnouncement = async (req, res) => {
       throw err;
     }
 
-    const result = await classroom.courses.announcements.create({
-      courseId,
-      requestBody: {
-        text: req.body.text,
-        materials: req.body.materials || [],
-        state: req.body.state || 'PUBLISHED'
+    // Try to create the announcement
+    let result;
+    try {
+      result = await classroom.courses.announcements.create({
+        courseId,
+        requestBody: {
+          text: req.body.text,
+          materials: req.body.materials || [],
+          state: req.body.state || 'PUBLISHED'
+        }
+      });
+    } catch (createError) {
+      // Check if it's a precondition error (course not in ACTIVE state)
+      if (createError.code === 400 && createError.message && createError.message.includes('Precondition check failed')) {
+        console.log('DEBUG: Precondition check failed - Course is likely in PROVISIONED state instead of ACTIVE. Attempting to activate...');
+        
+        try {
+          // Try to update the course to ACTIVE state
+          await classroom.courses.patch({
+            id: courseId,
+            updateMask: 'courseState',
+            requestBody: {
+              courseState: 'ACTIVE'
+            }
+          });
+          
+          console.log('DEBUG: Course activated, retrying announcement creation...');
+          
+          // Retry announcement creation
+          result = await classroom.courses.announcements.create({
+            courseId,
+            requestBody: {
+              text: req.body.text,
+              materials: req.body.materials || [],
+              state: req.body.state || 'PUBLISHED'
+            }
+          });
+        } catch (stateError) {
+          console.error('DEBUG: Could not activate course:', stateError.message);
+          
+          // Check if it's a permission error
+          if (stateError.code === 403 || stateError.message.includes('Permission')) {
+            return res.status(403).json({ 
+              error: 'You do not have permission to activate this course. The course is currently in PROVISIONED state and needs to be activated before announcements can be posted. Please contact your Google Workspace administrator to activate the course.' 
+            });
+          }
+          
+          // Check if it's a state transition error
+          if (stateError.code === 400 && stateError.message && stateError.message.includes('CourseStateDenied')) {
+            return res.status(400).json({ 
+              error: 'This course is currently in PROVISIONED state and cannot be automatically activated. The Google Classroom API does not allow changing the course state. Announcements can only be posted to ACTIVE courses. Please activate the course manually in Google Classroom first.' 
+            });
+          }
+          
+          return res.status(400).json({ 
+            error: `This course is currently in PROVISIONED state instead of ACTIVE state. Google Classroom requires courses to be in ACTIVE state before announcements can be posted. Error: ${stateError.message}` 
+          });
+        }
+      } else {
+        // Re-throw if it's a different error
+        throw createError;
       }
-    });
+    }
 
     res.status(201).json(result.data);
   } catch (err) {
