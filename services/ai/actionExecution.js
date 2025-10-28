@@ -2551,6 +2551,12 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           };
         }
 
+        // Normalize courseName to name if provided
+        if (parameters.courseName && !parameters.name) {
+          parameters.name = parameters.courseName;
+          console.log('🔍 DEBUG: Normalized courseName to name:', parameters.name);
+        }
+
         if (!parameters.name) {
           // 🚀 START TRACKING: Start tracking this action for parameter collection
           startOngoingAction(conversationId, 'CREATE_COURSE', ['name'], {});
