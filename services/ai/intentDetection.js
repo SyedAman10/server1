@@ -797,6 +797,36 @@ async function detectIntentFallback(message, conversationId) {
     };
   }
   
+  // Send reminder about upcoming assignments or quizzes
+  if (
+    (lowerMessage.includes('send reminder') || 
+    (lowerMessage.includes('remind') && lowerMessage.includes('students'))) && 
+    (lowerMessage.includes('quiz') || lowerMessage.includes('assignment') || lowerMessage.includes('tomorrow') || lowerMessage.includes('upcoming'))
+  ) {
+    // Extract course name if specified
+    let courseName = '';
+    const coursePatterns = [
+      /(?:for|in|to)\s+(?:the\s+)?(?:course\s+)?(?:of\s+)?([^.!?,]+?)(?:\s+(?:quiz|assignment|tomorrow|students|class))?/i,
+      /(?:all)\s+students\s+(?:in|for)\s+([^.!?,]+)/i
+    ];
+    
+    for (const pattern of coursePatterns) {
+      const match = message.match(pattern);
+      if (match && match[1]) {
+        courseName = match[1].trim();
+        break;
+      }
+    }
+    
+    return {
+      intent: 'SEND_REMINDER',
+      confidence: 0.9,
+      parameters: {
+        ...(courseName ? { courseName } : {})
+      }
+    };
+  }
+  
   // Check assignment submissions (teacher/admin only)
   const isCheckSubmissions = (
     (lowerMessage.includes('check') && lowerMessage.includes('assignment')) ||
@@ -1280,6 +1310,7 @@ async function detectIntent(message, conversationHistory, conversationId) {
       - HOW_TO_INVITE_STUDENTS: User is asking how to invite students
       - HOW_TO_CREATE_COURSE: User is asking how to create a course
       - HOW_TO_SCHEDULE_MEETING: User is asking how to schedule a meeting
+      - SEND_REMINDER: User wants to send a reminder about upcoming assignments or quizzes (extract courseName if specified)
       - UNKNOWN: None of the above
       
       ${historyContext}

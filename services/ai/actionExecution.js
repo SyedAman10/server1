@@ -5017,8 +5017,182 @@ Need specific help? Just ask! For example:
           conversationId: conversationId
         };
 
+      case 'SEND_REMINDER': {
+        console.log('🎯 DEBUG: SEND_REMINDER case executed!');
+        
+        // Only teachers and super_admin can send reminders
+        if (userRole !== 'teacher' && userRole !== 'super_admin') {
+          return {
+            message: 'You are not authorized to send reminders. Only teachers and super admins can send reminders.',
+            conversationId: conversationId
+          };
+        }
+
+        try {
+          // Extract user from JWT token
+          const token = userToken.split(' ')[1];
+          const decoded = jwt.verify(token, process.env.JWT_SECRET);
+          const user = await getUserByEmail(decoded.email);
+          
+          if (!user.access_token || !user.refresh_token) {
+            throw new Error('Missing required OAuth2 tokens');
+          }
+
+          const { getClassroomClient } = require('../integrations/google.classroom');
+          const classroom = getClassroomClient({
+            access_token: user.access_token,
+            refresh_token: user.refresh_token
+          });
+
+          // Get all courses
+          const coursesResult = await classroom.courses.list({
+            pageSize: 30,
+            teacherId: 'me'
+          });
+          const courses = coursesResult.data.courses || [];
+          
+          if (courses.length === 0) {
+            return {
+              message: "You don't have any courses yet. Please create a course first.",
+              conversationId: conversationId
+            };
+          }
+
+          let coursesToCheck = courses;
+          
+          // If a specific course is mentioned, filter to that course only
+          if (parameters.courseName) {
+            const courseMatch = await findMatchingCourse(parameters.courseName, userToken, req, baseUrl);
+            if (courseMatch.success && courseMatch.exactMatch) {
+              coursesToCheck = [courseMatch.exactMatch];
+            }
+          }
+
+          // Find upcoming assignments (tomorrow or next 2 days)
+          const tomorrow = new Date();
+          tomorrow.setDate(tomorrow.getDate() + 1);
+          const dayAfterTomorrow = new Date();
+          dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 2);
+          
+          const upcomingAssignments = [];
+          
+          for (const course of coursesToCheck) {
+            try {
+              const assignmentsResult = await classroom.courses.courseWork.list({
+                courseId: course.id,
+                pageSize: 30,
+                orderBy: 'dueDate asc'
+              });
+              
+              const assignments = assignmentsResult.data.courseWork || [];
+              
+              for (const assignment of assignments) {
+                if (assignment.dueDate) {
+                  const dueDate = new Date(assignment.dueDate.year, assignment.dueDate.month - 1, assignment.dueDate.day);
+                  const today = new Date();
+                  today.setHours(0, 0, 0, 0);
+                  dueDate.setHours(0, 0, 0, 0);
+                  
+                  // Check if due date is tomorrow or in the next 2 days
+                  const daysDiff = Math.floor((dueDate - today) / (1000 * 60 * 60 * 24));
+                  if (daysDiff >= 0 && daysDiff <= 2) {
+                    upcomingAssignments.push({
+                      ...assignment,
+                      courseName: course.name,
+                      courseId: course.id,
+                      daysUntilDue: daysDiff
+                    });
+                  }
+                }
+              }
+            } catch (err) {
+              console.error(`Error getting assignments for course ${course.id}:`, err);
+            }
+          }
+
+          if (upcomingAssignments.length === 0) {
+            return {
+              message: "I couldn't find any assignments or quizzes due tomorrow or in the next few days.",
+              conversationId: conversationId
+            };
+          }
+
+          // Generate AI-powered reminder announcement
+          const { GoogleGenerativeAI } = require('@google/generative-ai');
+          const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY);
+          const model = genAI.getGenerativeModel({ model: "gemini-2.5-pro" });
+          
+          const assignmentsList = upcomingAssignments.map(a => {
+            const dueDate = a.dueDate ? `${a.dueDate.month}/${a.dueDate.day}/${a.dueDate.year}` : 'No due date';
+            return `- ${a.title} in ${a.courseName} (Due: ${dueDate})`;
+          }).join('\n');
+          
+          const reminderPrompt = `Create a friendly and encouraging reminder announcement for students about upcoming assignments/quizzes. The announcement should:
+1. Be warm and supportive
+2. Clearly list the upcoming assignments
+3. Encourage students to prepare
+4. Be concise (2-3 sentences max)
+
+Assignments coming up:
+${assignmentsList}
+
+Create only the announcement text, without any introductory text or markdown formatting:`;
+
+          const result = await model.generateContent(reminderPrompt);
+          const reminderText = result.response.text().trim();
+          
+          // Group assignments by course
+          const assignmentsByCourse = {};
+          for (const assignment of upcomingAssignments) {
+            if (!assignmentsByCourse[assignment.courseId]) {
+              assignmentsByCourse[assignment.courseId] = [];
+            }
+            assignmentsByCourse[assignment.courseId].push(assignment);
+          }
+          
+          // Post one reminder per course
+          const postedReminders = [];
+          
+          for (const [courseId, courseAssignments] of Object.entries(assignmentsByCourse)) {
+            try {
+              // Create course-specific reminder text
+              const courseAssignmentsList = courseAssignments.map(a => 
+                `• ${a.title} (Due in ${a.daysUntilDue} day${a.daysUntilDue !== 1 ? 's' : ''})`
+              ).join('\n');
+              
+              const courseReminderText = `Don't forget about these upcoming assignments:\n${courseAssignmentsList}\n\nPlease prepare accordingly and submit on time. Good luck! 🍀`;
+              
+              await classroom.courses.announcements.create({
+                courseId: courseId,
+                requestBody: {
+                  text: courseReminderText,
+                  state: 'PUBLISHED'
+                }
+              });
+              postedReminders.push({
+                course: courseAssignments[0].courseName,
+                assignmentsCount: courseAssignments.length
+              });
+            } catch (err) {
+              console.error(`Error posting reminder to ${courseAssignments[0].courseName}:`, err);
+            }
+          }
+          
+          return {
+            message: `✅ I've sent reminder announcements for upcoming assignments!\n\n📋 **Reminders Posted To:**\n${postedReminders.map(c => `• ${c.course} (${c.assignmentsCount} assignment${c.assignmentsCount !== 1 ? 's' : ''})`).join('\n')}\n\n📝 **Total Upcoming Assignments:** ${upcomingAssignments.length}\n${upcomingAssignments.map(a => `• ${a.title} in ${a.courseName} (Due in ${a.daysUntilDue} day${a.daysUntilDue !== 1 ? 's' : ''})`).join('\n')}\n\n🎉 Students in these courses have been notified!`,
+            conversationId: conversationId
+          };
+        } catch (error) {
+          console.error('Error in SEND_REMINDER:', error);
+          return {
+            message: `Sorry, I encountered an error while trying to send the reminder: ${error.message}`,
+            conversationId: conversationId
+          };
+        }
+      }
+
       case 'UNKNOWN':
-        // Handle unknown intents gracefully
+        // Handle unknown intents gracefully的处理
         return {
           message: `I didn't understand that. Could you please rephrase it? I can help you with creating courses, assignments, announcements, scheduling meetings, and managing your classroom. Say "help" to see all available commands.`,
           conversationId: conversationId
