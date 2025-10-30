@@ -741,24 +741,24 @@ async function detectIntentFallback(message, conversationId) {
 
     // Check for generic terms that should trigger clarification (only for student invitations)
     if (!isTeacherInvite) {
-      const genericTerms = ['my class', 'my course', 'the class', 'the course', 'this class', 'this course', 'class', 'course'];
-      const isGenericTerm = genericTerms.some(term => 
-        courseName.toLowerCase().includes(term.toLowerCase()) || 
-        courseName.toLowerCase() === term.toLowerCase()
-      );
+    const genericTerms = ['my class', 'my course', 'the class', 'the course', 'this class', 'this course', 'class', 'course'];
+    const isGenericTerm = genericTerms.some(term => 
+      courseName.toLowerCase().includes(term.toLowerCase()) || 
+      courseName.toLowerCase() === term.toLowerCase()
+    );
 
-      // If it's a generic term, treat as suggestion request
-      if (isGenericTerm) {
-        return {
-          intent: 'STUDENT_JOIN_SUGGESTION',
-          confidence: 0.9,
-          parameters: {
-            originalMessage: message,
-            extractedEmails: emails,
-            extractedCourse: courseName,
-            needsDisambiguation: true
-          }
-        };
+    // If it's a generic term, treat as suggestion request
+    if (isGenericTerm) {
+      return {
+        intent: 'STUDENT_JOIN_SUGGESTION',
+        confidence: 0.9,
+        parameters: {
+          originalMessage: message,
+          extractedEmails: emails,
+          extractedCourse: courseName,
+          needsDisambiguation: true
+        }
+      };
       }
     }
     
@@ -1276,7 +1276,7 @@ async function detectIntent(message, conversationHistory, conversationId) {
       - DELETE_COURSE: User wants to delete a course (extract courseId)
       - ARCHIVE_COURSE: User wants to archive a course (extract courseId)
       - INVITE_STUDENTS: User wants to invite students to a course (extract courseId and student emails) - ONLY if the course name is specific (not generic terms like "my class", "the class", "this class")
-      - CREATE_ANNOUNCEMENT: User wants to create an announcement in a course (extract courseId and announcement text) - ONLY if there is actual announcement content, not just the command
+      - CREATE_ANNOUNCEMENT: User wants to create an announcement in a course (extract courseName/courseId and announcement text). Extract course names from patterns like "to [COURSE_NAME] class", "in [COURSE_NAME] class", "for [COURSE_NAME] class". If a specific course name is extracted, set needsDisambiguation: false. Only set needsDisambiguation: true if no course name is provided or it's a generic term like "class", "my class", etc.
       - AI_ASSISTED_ANNOUNCEMENT: User wants AI help to create an announcement (e.g., "can you help me announce", "help me make an announcement", "I need help with an announcement")
       - GET_ANNOUNCEMENTS: User wants to view/list announcements for a course (extract courseId/courseName)
       - CREATE_ASSIGNMENT: User wants to create an assignment in a course (extract courseId, title, description, due date, and materials)
@@ -1412,9 +1412,23 @@ async function detectIntent(message, conversationHistory, conversationId) {
       Do not try to convert the expressions yourself - just pass them as is in the parameters.
       
       If the user doesn't provide an explicit course ID but refers to a course by name or other identifier, please:
-      1. Extract the name or identifying phrase they used
-      2. Include it in the parameters as "courseName" or "courseIdentifier"
-      3. Set a flag "needsDisambiguation": true if you think the system will need to ask the user which specific course they mean
+      1. Extract the course name using AI-based natural language understanding
+      2. Look for patterns like "to [COURSE_NAME] class", "in [COURSE_NAME] class", "for [COURSE_NAME] class", "[COURSE_NAME] class"
+      3. Extract the specific course name (e.g., from "post announcement to psychology class" → extract "psychology")
+      4. Include it in the parameters as "courseName"
+      5. ONLY set "needsDisambiguation": true if:
+         - No course name could be extracted at all, OR
+         - The extracted course name is a generic term like "my class", "the class", "this class", "class", "course", "it", "this", "that", etc.
+      6. DO NOT set "needsDisambiguation": true if a specific course name was extracted (even if it might be misspelled like "physchology" instead of "psychology")
+      
+      Examples of correct extraction:
+      - "post an announcement to psychology class" → courseName: "psychology", needsDisambiguation: false (or omit the flag)
+      - "post announcement to physchology class" → courseName: "physchology", needsDisambiguation: false (extract as-is, misspelling handled later)
+      - "create announcement for math 101" → courseName: "math 101", needsDisambiguation: false
+      - "post announcement to class" → courseName: null or "class", needsDisambiguation: true (generic term)
+      - "post announcement to my class" → courseName: null, needsDisambiguation: true (generic term)
+      
+      CRITICAL: When you extract a specific, non-generic course name (like subject names, course codes, or descriptive names), NEVER set needsDisambiguation to true. Only set it for missing or generic terms.
       
       IMPORTANT: 
       1. For course creation, use CREATE_COURSE intent for phrases like "create a new class", "create new class", "make a class", "new course", "create course"
@@ -1431,14 +1445,17 @@ async function detectIntent(message, conversationHistory, conversationId) {
       - "invite student john@email.com to Computer Science" → INVITE_STUDENTS (specific course name)
       - "add teacher to class" → INVITE_TEACHERS with { courseName: null, needsCourseName: true }
       
-      For course name extraction, when you see patterns like "my class [COURSE_NAME]", "the class [COURSE_NAME]", "this class [COURSE_NAME]", extract only the specific course name part:
-      - "post announcement to my class ai" → courseName: "ai" (not "my class ai")
-      - "create assignment in my class Computer Science" → courseName: "Computer Science" (not "my class Computer Science")
-      - "show students in the class Math 101" → courseName: "Math 101" (not "the class Math 101")
-      - "announcement for this class Physics" → courseName: "Physics" (not "this class Physics")
+      For course name extraction, when you see patterns like "my class [COURSE_NAME]", "the class [COURSE_NAME]", "this class [COURSE_NAME]", "to [COURSE_NAME] class", "in [COURSE_NAME] class", extract only the specific course name part:
+      - "post announcement to my class ai" → courseName: "ai", needsDisambiguation: false
+      - "post an announcement to psychology class" → courseName: "psychology", needsDisambiguation: false
+      - "post announcement to physchology class" → courseName: "physchology", needsDisambiguation: false (extract as-is, even with misspellings)
+      - "create assignment in my class Computer Science" → courseName: "Computer Science", needsDisambiguation: false
+      - "show students in the class Math 101" → courseName: "Math 101", needsDisambiguation: false
+      - "announcement for this class Physics" → courseName: "Physics", needsDisambiguation: false
       
       For announcement content extraction, distinguish between commands and actual content:
-      - "post announcement to my class ai" → CREATE_ANNOUNCEMENT with courseName: "ai", announcementText: null (no content provided)
+      - "post announcement to my class ai" → CREATE_ANNOUNCEMENT with courseName: "ai", announcementText: null, needsDisambiguation: false
+      - "post an announcement to psychology class" → CREATE_ANNOUNCEMENT with courseName: "psychology", announcementText: null, needsDisambiguation: false
       - "post 'Homework is due tomorrow' to my class ai" → CREATE_ANNOUNCEMENT with courseName: "ai", announcementText: "Homework is due tomorrow"
       - "announce 'Class cancelled today' in Computer Science" → CREATE_ANNOUNCEMENT with courseName: "Computer Science", announcementText: "Class cancelled today"
       - "create announcement for Math 101" → CREATE_ANNOUNCEMENT with courseName: "Math 101", announcementText: null (no content provided)

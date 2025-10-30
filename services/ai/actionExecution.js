@@ -182,10 +182,10 @@ Respond with JSON only:`;
         const nameMatch = response.match(/"name":\s*"([^"]+)"/);
         if (nameMatch) {
           return { intent: 'direct_name', name: nameMatch[1] };
-        }
       }
-      
-      return { intent: 'uncertainty', needs_help: true };
+    }
+    
+    return { intent: 'uncertainty', needs_help: true };
     } catch (parseError) {
       console.error('Error parsing AI intent analysis:', parseError);
       return { intent: 'uncertainty', needs_help: true };
@@ -383,10 +383,10 @@ Respond with JSON only:`;
           return { intent: 'announcement_text', text: textMatch[1] };
         } else if (courseMatch) {
           return { intent: 'course_name', courseName: courseMatch[1] };
-        }
       }
-      
-      return { intent: 'uncertainty', needs_help: true };
+    }
+    
+    return { intent: 'uncertainty', needs_help: true };
     } catch (parseError) {
       console.error('Error parsing AI intent analysis:', parseError);
       return { intent: 'uncertainty', needs_help: true };
@@ -821,8 +821,8 @@ Extracted title:`;
       break;
       
       case 'CREATE_ANNOUNCEMENT':
-        // Check if this is a disambiguation request first
-        if (collectedParameters.needsDisambiguation) {
+        // Check if this is a disambiguation request first, but only if no courseName is provided
+        if (collectedParameters.needsDisambiguation && !collectedParameters.courseName && !intentData.parameters.courseName) {
           return {
             action: 'CREATE_ANNOUNCEMENT',
             missingParameters: ['courseName'],
@@ -830,6 +830,12 @@ Extracted title:`;
             nextMessage: `I need to know which specific class you're referring to. Could you please tell me the name of the class? For example: "Grade Islamiat class" or "Math 101".`,
             actionComplete: false
           };
+        }
+        
+        // If courseName was provided in intentData but needsDisambiguation was incorrectly set, ignore it
+        if (intentData.parameters.courseName && !collectedParameters.courseName) {
+          collectedParameters.courseName = intentData.parameters.courseName;
+          collectedParameters.needsDisambiguation = false; // Clear the flag since we have a course name
         }
         
         // If we're waiting for a course name, treat the user's response as a course name
@@ -1973,14 +1979,14 @@ async function makeApiCall(url, method, data, userToken, req) {
             // Try to update to ACTIVE state, but don't fail if it's not allowed
             if (result.data.id) {
               try {
-                await classroom.courses.patch({
-                  id: result.data.id,
-                  updateMask: 'courseState',
-                  requestBody: {
-                    courseState: 'ACTIVE'
-                  }
-                });
-                console.log('DEBUG: Course state updated to ACTIVE');
+              await classroom.courses.patch({
+                id: result.data.id,
+                updateMask: 'courseState',
+                requestBody: {
+                  courseState: 'ACTIVE'
+                }
+              });
+              console.log('DEBUG: Course state updated to ACTIVE');
               } catch (stateError) {
                 console.log('DEBUG: Could not transition course to ACTIVE state (this is normal for some users):', stateError.message);
                 // Don't fail the entire operation - the course was created successfully
@@ -2023,9 +2029,9 @@ async function makeApiCall(url, method, data, userToken, req) {
             let result;
             try {
               result = await classroom.courses.announcements.create({
-                courseId: courseId,
-                requestBody: announcementData
-              });
+              courseId: courseId,
+              requestBody: announcementData
+            });
             } catch (createError) {
               // Check if it's a precondition error (course not in ACTIVE state)
               if (createError.code === 400 && createError.message && createError.message.includes('Precondition check failed')) {
@@ -2161,8 +2167,8 @@ async function makeApiCall(url, method, data, userToken, req) {
               message: `Successfully invited ${emails.length} teacher(s)`,
               invitations: results.map(r => r.data)
             };
-
-          } else {
+            
+    } else {
             console.log('DEBUG: Unsupported internal endpoint, falling back to external call');
             // Fall through to external call
           }
@@ -2177,32 +2183,32 @@ async function makeApiCall(url, method, data, userToken, req) {
     try {
       // Normalize to HTTPS to avoid redirects changing POST to GET
       const safeUrl = url.replace('http://class.xytek.ai', 'https://class.xytek.ai');
-      console.log('DEBUG: Making external HTTP API call');
-
+    console.log('DEBUG: Making external HTTP API call');
+    
       const axios = require('axios');
-      const config = {
+    const config = {
         method: method,
         url: safeUrl,
-        headers: {
+      headers: {
           Authorization: userToken,
-          'Content-Type': 'application/json'
+        'Content-Type': 'application/json'
         },
         data: data || undefined,
         maxRedirects: 0
-      };
-      console.log('DEBUG: Making API call with config:', {
+    };
+    console.log('DEBUG: Making API call with config:', {
         method: config.method,
         url: config.url,
-        hasData: !!config.data,
+      hasData: !!config.data,
         headers: {
           Authorization: config.headers.Authorization,
           'Content-Type': config.headers['Content-Type']
         }
-      });
-      console.log('DEBUG: Full axios config:', JSON.stringify(config, null, 2));
-
-      const response = await axios(config);
-      return response.data;
+    });
+    console.log('DEBUG: Full axios config:', JSON.stringify(config, null, 2));
+    
+    const response = await axios(config);
+    return response.data;
     } catch (httpErr) {
       console.log('DEBUG: API call failed:', httpErr.message);
       if (httpErr.response) {
@@ -3936,7 +3942,7 @@ Ask your teacher for the class code - they can find it in:
               const minutes = parameters.dueTime.minutes || 0;
               dueTimeStr = `\n• Due Time: ${parameters.dueTime.hours}:${minutes.toString().padStart(2, '0')}`;
             }
-            
+
             return {
               message: `Great! I've successfully created your assignment "${parameters.title}" in ${selectedCourse.name}. 😊\n\nAssignment Details:\n• Title: ${parameters.title}${parameters.description ? `\n• Description: ${parameters.description}` : ''}${parameters.dueDate ? `\n• Due Date: ${parameters.dueDate}` : ''}${dueTimeStr}${parameters.maxPoints ? `\n• Max Points: ${parameters.maxPoints}` : ''}\n\nYour assignment is now live in Google Classroom and students can start working on it.\n\nNext steps:\n• Review student submissions\n• Grade completed assignments\n• Provide feedback to students`,
               assignment: response,
@@ -4501,10 +4507,10 @@ Ask your teacher for the class code - they can find it in:
             console.log('DEBUG: teacherCoursesResponse is directly an array, wrapping it');
             teacherCoursesResponse = { courses: teacherCoursesResponse };
           } else {
-            return {
-              message: 'Failed to retrieve courses. Please try again.',
-              conversationId: req.body.conversationId
-            };
+          return {
+            message: 'Failed to retrieve courses. Please try again.',
+            conversationId: req.body.conversationId
+          };
           }
         }
 
@@ -6231,9 +6237,9 @@ Create only the announcement text, without any introductory text or markdown for
           
           // Check for specific error types and provide helpful messages
           if (error.message.includes('Date and time are required')) {
-            return {
+          return {
               message: "I need both the date and time to schedule the meeting. Please provide both. For example: 'tomorrow at 3 PM' or 'next Friday at 10 AM'.",
-              error: error.message,
+            error: error.message,
               conversationId: conversationId
             };
           } else if (error.message.includes('date') || error.message.includes('time')) {
