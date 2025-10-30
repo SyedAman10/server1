@@ -821,23 +821,6 @@ Extracted title:`;
       break;
       
       case 'CREATE_ANNOUNCEMENT':
-        // Check if this is a disambiguation request first, but only if no courseName is provided
-        if (collectedParameters.needsDisambiguation && !collectedParameters.courseName && !intentData.parameters.courseName) {
-          return {
-            action: 'CREATE_ANNOUNCEMENT',
-            missingParameters: ['courseName'],
-            collectedParameters: {},
-            nextMessage: `I need to know which specific class you're referring to. Could you please tell me the name of the class? For example: "Grade Islamiat class" or "Math 101".`,
-            actionComplete: false
-          };
-        }
-        
-        // If courseName was provided in intentData but needsDisambiguation was incorrectly set, ignore it
-        if (intentData.parameters.courseName && !collectedParameters.courseName) {
-          collectedParameters.courseName = intentData.parameters.courseName;
-          collectedParameters.needsDisambiguation = false; // Clear the flag since we have a course name
-        }
-        
         // If we're waiting for a course name, treat the user's response as a course name
         if (missingParameters.includes('courseName')) {
           let courseName = originalMessage.trim();
@@ -3272,7 +3255,8 @@ Ask your teacher for the class code - they can find it in:
         }
 
         // Check if we need disambiguation for generic course names - THIS MUST BE FIRST
-        if (parameters.needsDisambiguation) {
+        // Only trigger disambiguation if needsDisambiguation is true AND no courseName was provided
+        if (parameters.needsDisambiguation && !parameters.courseName && !parameters.courseIdentifier) {
           console.log('🔍 DEBUG: Disambiguation needed for generic course name');
           
           // Start ongoing action for parameter collection
