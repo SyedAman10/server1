@@ -1192,21 +1192,27 @@ async function detectIntentFallback(message, conversationId) {
  * Detect corrections using AI
  */
 async function detectCorrection(message, conversationId) {
-  console.log('🔍 DEBUG: detectCorrection called');
+  console.log('🔍 DEBUG: detectCorrection called with conversationId:', conversationId);
   
   if (!conversationId) {
+    console.log('🔍 DEBUG: No conversationId provided, skipping correction detection');
     return null;
   }
   
   const conversation = getConversation(conversationId);
   if (!conversation || conversation.messages.length === 0) {
+    console.log('🔍 DEBUG: No conversation history found, skipping correction detection');
     return null;
   }
+  
+  console.log('🔍 DEBUG: Conversation has', conversation.messages.length, 'messages');
   
   // Check if the message contains correction indicators
   const correctionIndicators = ['sorry', 'actually', 'i meant', 'correction', 'no wait', 'oops', 'my bad', 'mistake', 'change that to', 'it should be', 'instead'];
   const lowerMessage = message.toLowerCase();
   const hasCorrectionIndicator = correctionIndicators.some(indicator => lowerMessage.includes(indicator));
+  
+  console.log('🔍 DEBUG: Has correction indicator?', hasCorrectionIndicator);
   
   if (!hasCorrectionIndicator) {
     return null;
@@ -1259,26 +1265,35 @@ Examples:
 
 Respond with JSON only:`;
 
+    console.log('🔍 DEBUG: Calling Gemini AI for correction detection...');
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
     const result = await model.generateContent(prompt);
     const response = result.response.text();
+    
+    console.log('🔍 DEBUG: Gemini AI response:', response);
     
     const cleanedResponse = response
       .replace(/```json\s*/, '')
       .replace(/```\s*$/, '')
       .trim();
     
+    console.log('🔍 DEBUG: Cleaned response:', cleanedResponse);
+    
     const correctionData = JSON.parse(cleanedResponse);
     
+    console.log('🔍 DEBUG: Parsed correction data:', JSON.stringify(correctionData, null, 2));
+    
     if (correctionData.isCorrection) {
-      console.log('🔍 DEBUG: Correction detected:', correctionData);
+      console.log('✅ DEBUG: Correction detected by AI:', correctionData);
       return correctionData;
     }
     
+    console.log('🔍 DEBUG: AI says this is NOT a correction');
     return null;
   } catch (error) {
-    console.error('Error detecting correction:', error);
+    console.error('❌ Error detecting correction:', error);
+    console.error('Error stack:', error.stack);
     return null;
   }
 }
@@ -1292,7 +1307,9 @@ async function detectIntent(message, conversationHistory, conversationId) {
   // First, check if this is a correction to a previous request
   const correctionData = await detectCorrection(message, conversationId);
   if (correctionData && correctionData.isCorrection) {
-    console.log('🔍 DEBUG: User is making a correction, applying corrected parameters');
+    console.log('✅ DEBUG: CORRECTION DETECTED by AI!');
+    console.log('✅ DEBUG: Correction data:', JSON.stringify(correctionData, null, 2));
+    console.log('✅ DEBUG: User is making a correction, applying corrected parameters');
     
     // Extract the corrected parameters
     const correctedParams = {};
@@ -1303,21 +1320,27 @@ async function detectIntent(message, conversationHistory, conversationId) {
       const emails = message.match(emailRegex) || [];
       if (emails.length > 0) {
         correctedParams.studentEmails = emails;
+        console.log('✅ DEBUG: Extracted corrected emails:', emails);
       }
     }
     
     if (correctionData.corrections.courseName && correctionData.corrections.courseName.to) {
       correctedParams.courseName = correctionData.corrections.courseName.to;
+      console.log('✅ DEBUG: Extracted corrected course name:', correctionData.corrections.courseName.to);
     }
     
-    // Return the original intent with corrected parameters
-    return {
+    const result = {
       intent: correctionData.originalIntent,
       confidence: 0.95,
       parameters: correctedParams,
       isCorrection: true,
       correctionExplanation: correctionData.explanation
     };
+    
+    console.log('✅ DEBUG: Returning correction result:', JSON.stringify(result, null, 2));
+    
+    // Return the original intent with corrected parameters
+    return result;
   }
   
   // First check if there's an ongoing action that needs parameter collection

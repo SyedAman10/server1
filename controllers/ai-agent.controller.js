@@ -490,7 +490,8 @@ async function handleMessage(req, res) {
     let intentData;
     if (ongoingAction) {
       // Check if the message is a new intent that should override the ongoing action
-      const newIntentData = await detectIntent(message, history);
+      // IMPORTANT: Pass conversationId for correction detection to work!
+      const newIntentData = await detectIntent(message, history, conversation.id);
       
       // Allow certain intents to override ongoing actions
       const overrideIntents = ['CHECK_UNSUBMITTED_ASSIGNMENTS', 'CHECK_ASSIGNMENT_SUBMISSIONS', 'HIGHLIGHT_MISSING_WORK_STUDENTS', 'INVITE_STUDENTS', 'CREATE_ANNOUNCEMENT', 'CREATE_ASSIGNMENT', 'EDUCATIONAL_QUESTION', 'LIST_PENDING_ASSIGNMENTS', 'SHOW_COURSE_GRADES', 'ASSIGNMENT_SUBMISSION_HELP', 'JOIN_CLASS_HELP'];
@@ -509,7 +510,8 @@ async function handleMessage(req, res) {
       }
     } else {
       // Detect intent only if no ongoing action
-      intentData = await detectIntent(message, history);
+      // IMPORTANT: Pass conversationId for correction detection to work!
+      intentData = await detectIntent(message, history, conversation.id);
     }
 
     // Execute action based on intent
