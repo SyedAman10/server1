@@ -1,5 +1,5 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-const { getLastMessage, getLastMessages, getConversationHistory } = require('./conversationManager');
+const { getLastMessage, getLastMessages, getFormattedHistory, getConversation } = require('./conversationManager');
 
 // Initialize Gemini Flash
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY);
@@ -1189,10 +1189,136 @@ async function detectIntentFallback(message, conversationId) {
 }
 
 /**
+ * Detect corrections using AI
+ */
+async function detectCorrection(message, conversationId) {
+  console.log('🔍 DEBUG: detectCorrection called');
+  
+  if (!conversationId) {
+    return null;
+  }
+  
+  const conversation = getConversation(conversationId);
+  if (!conversation || conversation.messages.length === 0) {
+    return null;
+  }
+  
+  // Check if the message contains correction indicators
+  const correctionIndicators = ['sorry', 'actually', 'i meant', 'correction', 'no wait', 'oops', 'my bad', 'mistake', 'change that to', 'it should be', 'instead'];
+  const lowerMessage = message.toLowerCase();
+  const hasCorrectionIndicator = correctionIndicators.some(indicator => lowerMessage.includes(indicator));
+  
+  if (!hasCorrectionIndicator) {
+    return null;
+  }
+  
+  try {
+    // Get the last few messages for context
+    const recentHistory = conversation.messages.slice(-5).map(msg => {
+      const content = typeof msg.content === 'object' ? (msg.content.text || JSON.stringify(msg.content)) : msg.content;
+      return `${msg.role}: ${content}`;
+    }).join('\n');
+    
+    const prompt = `Analyze if the user is making a CORRECTION to their previous request.
+
+Conversation History:
+${recentHistory}
+
+Current Message: "${message}"
+
+Determine if this is a correction and extract BOTH the original and corrected parameters.
+
+Respond with JSON only in this exact format:
+{
+  "isCorrection": true/false,
+  "originalIntent": "INTENT_NAME" (e.g., "INVITE_STUDENTS"),
+  "corrections": {
+    "email": {
+      "from": "original@email.com",
+      "to": "corrected@email.com"
+    },
+    "courseName": {
+      "from": "original name",
+      "to": "corrected name"
+    }
+  },
+  "explanation": "Brief explanation of what was corrected"
+}
+
+Examples:
+1. User: "invite john@email.com to teaching 1"
+   User: "sorry invite sarah@email.com and the class is math 101"
+   → {"isCorrection": true, "originalIntent": "INVITE_STUDENTS", "corrections": {"email": {"from": "john@email.com", "to": "sarah@email.com"}, "courseName": {"from": "teaching 1", "to": "math 101"}}}
+
+2. User: "add student to physics"
+   User: "actually it's chemistry"
+   → {"isCorrection": true, "originalIntent": "INVITE_STUDENTS", "corrections": {"courseName": {"from": "physics", "to": "chemistry"}}}
+
+3. User: "how are you?"
+   → {"isCorrection": false}
+
+Respond with JSON only:`;
+
+    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
+    const result = await model.generateContent(prompt);
+    const response = result.response.text();
+    
+    const cleanedResponse = response
+      .replace(/```json\s*/, '')
+      .replace(/```\s*$/, '')
+      .trim();
+    
+    const correctionData = JSON.parse(cleanedResponse);
+    
+    if (correctionData.isCorrection) {
+      console.log('🔍 DEBUG: Correction detected:', correctionData);
+      return correctionData;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error detecting correction:', error);
+    return null;
+  }
+}
+
+/**
  * Detect the user's intent using Google's Gemini Flash API
  */
 async function detectIntent(message, conversationHistory, conversationId) {
   console.log('🔍 DEBUG: detectIntent called with message:', message);
+  
+  // First, check if this is a correction to a previous request
+  const correctionData = await detectCorrection(message, conversationId);
+  if (correctionData && correctionData.isCorrection) {
+    console.log('🔍 DEBUG: User is making a correction, applying corrected parameters');
+    
+    // Extract the corrected parameters
+    const correctedParams = {};
+    
+    if (correctionData.corrections.email && correctionData.corrections.email.to) {
+      // Extract email from the message to ensure we get the exact format
+      const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+      const emails = message.match(emailRegex) || [];
+      if (emails.length > 0) {
+        correctedParams.studentEmails = emails;
+      }
+    }
+    
+    if (correctionData.corrections.courseName && correctionData.corrections.courseName.to) {
+      correctedParams.courseName = correctionData.corrections.courseName.to;
+    }
+    
+    // Return the original intent with corrected parameters
+    return {
+      intent: correctionData.originalIntent,
+      confidence: 0.95,
+      parameters: correctedParams,
+      isCorrection: true,
+      correctionExplanation: correctionData.explanation
+    };
+  }
   
   // First check if there's an ongoing action that needs parameter collection
   if (conversationId) {
@@ -1257,7 +1383,7 @@ async function detectIntent(message, conversationHistory, conversationId) {
   
   try {
     // Format conversation history for Gemini
-    const history = conversationId ? getConversationHistory(conversationId) : [];
+    const history = conversationId ? getFormattedHistory(conversationId) : [];
     const historyContext = history && history.length > 0 ? `Conversation history (last ${Math.min(history.length, 5)} messages):\n` + history.slice(-5).map(h => `- ${typeof h.content === 'object' ? JSON.stringify(h.content) : h.content}`).join('\n') : '';
 
     // Initialize Gemini client
@@ -1267,6 +1393,25 @@ async function detectIntent(message, conversationHistory, conversationId) {
 
     const prompt = `
       Act as an intent classifier for a classroom management system.
+      
+      IMPORTANT: Pay attention to conversation history to detect when users are CORRECTING or CHANGING their previous requests.
+      
+      Correction Detection Examples:
+      1. User: "invite john@email.com to teaching 1"
+         System: "I couldn't find teaching 1"
+         User: "oh sorry invite sarah@email.com and the class would be math 101"
+         → This is INVITE_STUDENTS with CORRECTED email (sarah@email.com) and courseName (math 101)
+      
+      2. User: "add student to physics class"
+         System: "Which student?"
+         User: "rimal@email.com actually make it chemistry class"
+         → This is INVITE_STUDENTS with email (rimal@email.com) and CORRECTED courseName (chemistry)
+      
+      When you detect a correction (user says "sorry", "actually", "no wait", etc. OR provides new information after an error):
+      - Extract ALL new parameters from the current message
+      - Return the ORIGINAL intent with the CORRECTED parameters
+      - Set confidence to 0.95
+      
       Classify the following message into one of these intents:
       - LIST_COURSES: User wants to see their courses
       - GET_COURSE: User wants details about a specific course (extract courseId if possible)
@@ -1581,5 +1726,6 @@ Respond with JSON: {"intent": "INTENT_NAME", "confidence": 0.9, "parameters": {}
 module.exports = {
   detectIntent,
   detectIntentFallback,
-  detectAssignmentIntentWithAI
+  detectAssignmentIntentWithAI,
+  detectCorrection
 }; 
