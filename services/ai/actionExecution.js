@@ -2235,7 +2235,23 @@ async function executeAction(intentData, originalMessage, userToken, req) {
     // 🔍 PRIORITY CHECK: If there's an ongoing action, force parameter collection first
     const context = getOngoingActionContext(conversationId);
     console.log('🔍 DEBUG: Checking for ongoing action context:', context);
-    if (context) {
+    
+    // ✅ CORRECTION DETECTION: If this is a correction, skip parameter collection and use corrected params
+    if (intentData.isCorrection) {
+      console.log('✅ DEBUG: This is a CORRECTION - using corrected parameters directly');
+      console.log('✅ DEBUG: Corrected parameters:', intentData.parameters);
+      
+      // Clear the ongoing action since we have the corrected info
+      if (conversationId) {
+        completeOngoingAction(conversationId);
+      }
+      
+      // Use the corrected parameters directly
+      intent = intentData.intent;
+      parameters = intentData.parameters;
+      
+      console.log('✅ DEBUG: Skipping parameter collection, proceeding with corrected data');
+    } else if (context) {
       console.log('🔍 DEBUG: Found ongoing action, forcing parameter collection');
       console.log('🔍 DEBUG: Ongoing action context:', context);
       console.log('🔍 DEBUG: Missing parameters:', context.missingParameters);
