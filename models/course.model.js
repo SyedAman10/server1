@@ -2,6 +2,7 @@ const db = require('../utils/db');
 
 // Check if courses.id is VARCHAR or INTEGER (cache the result)
 let courseIdType = null;
+let ownerIdType = null;
 
 async function getCourseIdType() {
   if (courseIdType) return courseIdType;
@@ -21,6 +22,24 @@ async function getCourseIdType() {
   }
 }
 
+async function getOwnerIdType() {
+  if (ownerIdType) return ownerIdType;
+  
+  try {
+    const result = await db.query(`
+      SELECT data_type 
+      FROM information_schema.columns 
+      WHERE table_name = 'courses' AND column_name = 'owner_id';
+    `);
+    
+    ownerIdType = (result.rows[0]?.data_type === 'character varying') ? 'VARCHAR' : 'INTEGER';
+    return ownerIdType;
+  } catch (error) {
+    console.error('Error checking owner_id type:', error);
+    return 'INTEGER'; // Default to INTEGER
+  }
+}
+
 // Generate a random course ID (for VARCHAR type)
 function generateCourseId() {
   // Generate a random ID similar to Google Classroom format
@@ -35,26 +54,34 @@ function generateCourseId() {
 // Create a new course
 async function createCourse({ name, description = null, section = null, room = null, teacherId }) {
   const idType = await getCourseIdType();
+  const ownerType = await getOwnerIdType();
   
   let query, values;
+  
+  // Prepare owner_id value based on its type
+  let ownerId = teacherId;
+  if (ownerType === 'VARCHAR') {
+    // If owner_id is VARCHAR, convert teacherId to string
+    ownerId = String(teacherId);
+  }
   
   if (idType === 'VARCHAR') {
     // If id is VARCHAR, we need to generate an ID
     const courseId = generateCourseId();
     query = `
       INSERT INTO courses (id, name, description, section, room, teacher_id, owner_id)
-      VALUES ($1, $2, $3, $4, $5, $6, $6)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
       RETURNING *;
     `;
-    values = [courseId, name, description, section, room, teacherId];
+    values = [courseId, name, description, section, room, teacherId, ownerId];
   } else {
     // If id is INTEGER (SERIAL), let it auto-increment
     query = `
       INSERT INTO courses (name, description, section, room, teacher_id, owner_id)
-      VALUES ($1, $2, $3, $4, $5, $5)
+      VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING *;
     `;
-    values = [name, description, section, room, teacherId];
+    values = [name, description, section, room, teacherId, ownerId];
   }
   
   const result = await db.query(query, values);
