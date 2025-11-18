@@ -1,6 +1,6 @@
 const { google } = require('googleapis');
 const jwt = require('jsonwebtoken');
-const { upsertUser } = require('../models/user.model');
+const { upsertUser, createUser, getUserByEmail, verifyPassword } = require('../models/user.model');
 
 // Dynamic URLs based on environment
 const getBackendUrl = () => {
@@ -820,11 +820,203 @@ const testDeepLink = (req, res) => {
   }
 };
 
+// Signup endpoint
+const signup = async (req, res) => {
+  try {
+    const { email, password, name, role = 'student' } = req.body;
+
+    // Validate input
+    if (!email || !password || !name) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email, password, and name are required'
+      });
+    }
+
+    // Validate role
+    if (!VALID_ROLES.includes(role)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid role. Must be either "teacher", "student", or "super_admin"'
+      });
+    }
+
+    // Check if user already exists
+    const existingUser = await getUserByEmail(email);
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        error: 'User with this email already exists'
+      });
+    }
+
+    // Validate password strength
+    if (password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        error: 'Password must be at least 6 characters long'
+      });
+    }
+
+    // Create user
+    const user = await createUser({
+      email,
+      password,
+      name,
+      role
+    });
+
+    // Generate JWT token
+    const token = jwt.sign(
+      {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        iat: Math.floor(Date.now() / 1000),
+      },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: '7d',
+        algorithm: 'HS256'
+      }
+    );
+
+    console.log('✅ User registered successfully:', {
+      email: user.email,
+      name: user.name,
+      role: user.role
+    });
+
+    res.status(201).json({
+      success: true,
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        picture: user.picture
+      },
+      message: 'User registered successfully'
+    });
+  } catch (error) {
+    console.error('Signup error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to create user',
+      message: error.message
+    });
+  }
+};
+
+// Login endpoint
+const login = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    // Validate input
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email and password are required'
+      });
+    }
+
+    // Get user by email
+    const user = await getUserByEmail(email);
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid email or password'
+      });
+    }
+
+    // Verify password
+    const isValidPassword = await verifyPassword(password, user.password);
+    if (!isValidPassword) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid email or password'
+      });
+    }
+
+    // Generate JWT token
+    const token = jwt.sign(
+      {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        iat: Math.floor(Date.now() / 1000),
+      },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: '7d',
+        algorithm: 'HS256'
+      }
+    );
+
+    console.log('✅ User logged in successfully:', {
+      email: user.email,
+      name: user.name,
+      role: user.role
+    });
+
+    res.json({
+      success: true,
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        picture: user.picture
+      },
+      message: 'Login successful'
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Login failed',
+      message: error.message
+    });
+  }
+};
+
+// Get current user (verify token)
+const getCurrentUser = async (req, res) => {
+  try {
+    // User is already attached to req by the authenticate middleware
+    res.json({
+      success: true,
+      user: {
+        id: req.user.id,
+        email: req.user.email,
+        name: req.user.name,
+        role: req.user.role,
+        picture: req.user.picture
+      }
+    });
+  } catch (error) {
+    console.error('Get current user error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get user',
+      message: error.message
+    });
+  }
+};
+
 module.exports = {
   getAuthUrl,
   handleWebAuth,
   handleMobileAuth,
   handleMobileCallback,
   logDeepLinkInteraction,
-  testDeepLink
+  testDeepLink,
+  signup,
+  login,
+  getCurrentUser
 };

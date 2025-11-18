@@ -448,7 +448,7 @@ const createAnnouncement = async (req, res) => {
 const inviteStudents = async (req, res) => {
   try {
     const { courseId } = req.params;
-    const { email, role = 'STUDENT', sendCustomEmail = false } = req.body;
+    const { email, role = 'STUDENT' } = req.body;
     
     if (!email) {
       return res.status(400).json({ error: 'Email is required' });
@@ -489,13 +489,6 @@ const inviteStudents = async (req, res) => {
       throw err;
     }
 
-    // Get course details for the custom email
-    let courseDetails = null;
-    if (sendCustomEmail) {
-      const courseResponse = await classroom.courses.get({ id: courseId });
-      courseDetails = courseResponse.data;
-    }
-
     // Create an invitation for the user
     const result = await classroom.invitations.create({
       requestBody: {
@@ -505,42 +498,7 @@ const inviteStudents = async (req, res) => {
       }
     });
 
-    // Send custom Xytek branded email if requested
-    let customEmailResult = null;
-    if (sendCustomEmail && courseDetails) {
-      try {
-        const { sendXytekClassroomInviteHTML } = require('../services/emailService');
-        
-        customEmailResult = await sendXytekClassroomInviteHTML(
-          {
-            access_token: user.access_token,
-            refresh_token: user.refresh_token
-          },
-          email,
-          {
-            name: courseDetails.name,
-            section: courseDetails.section,
-            description: courseDetails.descriptionHeading,
-            link: courseDetails.alternateLink || `https://classroom.google.com/c/${courseId}`
-          },
-          {
-            name: user.name || user.email,
-            email: user.email
-          }
-        );
-        
-        console.log('Custom Xytek email sent successfully:', customEmailResult);
-      } catch (emailErr) {
-        console.error('Failed to send custom email (invitation still created):', emailErr);
-        // Don't fail the entire request if custom email fails
-      }
-    }
-
-    res.status(201).json({
-      invitation: result.data,
-      customEmailSent: !!customEmailResult,
-      note: 'Google Classroom automatically sent its own invitation email. This cannot be disabled via API.'
-    });
+    res.status(201).json(result.data);
   } catch (err) {
     console.error('Error inviting user:', err);
     if (err.response && err.response.data && err.response.data.error) {
@@ -556,7 +514,7 @@ const inviteStudents = async (req, res) => {
 const inviteTeachers = async (req, res) => {
   try {
     const { courseId } = req.params;
-    const { emails, sendCustomEmail = false } = req.body;
+    const { emails } = req.body;
     
     if (!emails || !Array.isArray(emails) || emails.length === 0) {
       return res.status(400).json({ error: 'At least one teacher email is required' });
@@ -593,13 +551,6 @@ const inviteTeachers = async (req, res) => {
       throw err;
     }
 
-    // Get course details for the custom email
-    let courseDetails = null;
-    if (sendCustomEmail) {
-      const courseResponse = await classroom.courses.get({ id: courseId });
-      courseDetails = courseResponse.data;
-    }
-
     // Create invitations for all teachers
     const invitationPromises = emails.map(email => 
       classroom.invitations.create({
@@ -613,44 +564,9 @@ const inviteTeachers = async (req, res) => {
 
     try {
       const results = await Promise.all(invitationPromises);
-      
-      // Send custom emails if requested
-      const customEmailResults = [];
-      if (sendCustomEmail && courseDetails) {
-        const { sendXytekClassroomInviteHTML } = require('../services/emailService');
-        
-        for (const email of emails) {
-          try {
-            const emailResult = await sendXytekClassroomInviteHTML(
-              {
-                access_token: user.access_token,
-                refresh_token: user.refresh_token
-              },
-              email,
-              {
-                name: courseDetails.name,
-                section: courseDetails.section,
-                description: courseDetails.descriptionHeading,
-                link: courseDetails.alternateLink || `https://classroom.google.com/c/${courseId}`
-              },
-              {
-                name: user.name || user.email,
-                email: user.email
-              }
-            );
-            customEmailResults.push({ email, success: true, messageId: emailResult.messageId });
-          } catch (emailErr) {
-            console.error(`Failed to send custom email to ${email}:`, emailErr);
-            customEmailResults.push({ email, success: false, error: emailErr.message });
-          }
-        }
-      }
-      
       return res.status(201).json({
         message: `Successfully invited ${emails.length} teachers`,
-        invitations: results.map(r => r.data),
-        customEmailsSent: customEmailResults.length > 0 ? customEmailResults : undefined,
-        note: 'Google Classroom automatically sent its own invitation emails. This cannot be disabled via API.'
+        invitations: results.map(r => r.data)
       });
     } catch (apiErr) {
       // Surface clearer errors for common Classroom API failures

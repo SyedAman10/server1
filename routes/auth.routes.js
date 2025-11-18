@@ -1,13 +1,29 @@
 const express = require('express');
-const { getAuthUrl, handleWebAuth, handleMobileAuth, handleMobileCallback, logDeepLinkInteraction, testDeepLink } = require('../controllers/auth.controller');
+const { 
+  getAuthUrl, 
+  handleWebAuth, 
+  handleMobileAuth, 
+  handleMobileCallback, 
+  logDeepLinkInteraction, 
+  testDeepLink,
+  signup,
+  login,
+  getCurrentUser
+} = require('../controllers/auth.controller');
+const { authenticate } = require('../middleware/auth.middleware');
 
 const router = express.Router();
 
-// Web flow endpoints
+// Authentication endpoints (email/password)
+router.post('/signup', signup);
+router.post('/login', login);
+router.get('/me', authenticate, getCurrentUser);
+
+// Web flow endpoints (OAuth)
 router.get('/google', getAuthUrl);
 router.get('/google/callback', handleWebAuth);
 
-// Mobile flow endpoints
+// Mobile flow endpoints (OAuth)
 router.post('/google/mobile', handleMobileAuth);
 router.get('/google/mobile-callback', handleMobileCallback);
 

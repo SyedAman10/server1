@@ -2531,18 +2531,43 @@ async function executeAction(intentData, originalMessage, userToken, req) {
       }
       
       case 'LIST_COURSES':
-        // All users can view courses, but with different messaging
-        if (userRole === 'student') {
-          // Students can view courses they're enrolled in
-          const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken, req);
-          return formatCoursesResponse(coursesResponse, 'student', conversationId);
-        } else if (userRole === 'teacher' || userRole === 'super_admin') {
-          // Teachers and admins can view all courses
-          const coursesResponse = await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken, req);
-          return formatCoursesResponse(coursesResponse, 'teacher', conversationId);
-        } else {
+        try {
+          // Use the course service to get courses from Neon DB
+          const courseService = require('../courseService');
+          const result = await courseService.getCourses(req.user.id, userRole);
+          
+          if (result.courses.length === 0) {
+            const noCoursesMessage = userRole === 'teacher' 
+              ? "You haven't created any courses yet. Would you like to create one?"
+              : "You're not enrolled in any courses yet. Please contact your teacher to get enrolled.";
+            
+            return {
+              message: noCoursesMessage,
+              courses: [],
+              conversationId: conversationId
+            };
+          }
+          
+          // Format the courses list
+          const coursesList = result.courses.map((course, index) => {
+            const studentCount = course.student_count || 0;
+            return `${index + 1}. **${course.name}**${course.section ? ` (Section: ${course.section})` : ''}\n   👥 ${studentCount} student${studentCount !== 1 ? 's' : ''}${course.teacher_name ? `\n   👨‍🏫 Teacher: ${course.teacher_name}` : ''}`;
+          }).join('\n\n');
+          
+          const roleMessage = userRole === 'teacher' 
+            ? 'Here are your courses:'
+            : 'Here are your enrolled courses:';
+          
           return {
-            message: 'You are not authorized to view courses. Please contact your administrator.',
+            message: `📚 ${roleMessage}\n\n${coursesList}\n\nTotal: ${result.count} course${result.count !== 1 ? 's' : ''}`,
+            courses: result.courses,
+            conversationId: conversationId
+          };
+        } catch (error) {
+          console.error('Error in LIST_COURSES:', error);
+          return {
+            message: 'Sorry, I encountered an error while trying to get your courses. Please try again.',
+            error: error.message,
             conversationId: conversationId
           };
         }
@@ -2601,28 +2626,27 @@ async function executeAction(intentData, originalMessage, userToken, req) {
 
         const courseData = {
           name: parameters.name,
-          section: parameters.section || '',
-          descriptionHeading: parameters.descriptionHeading || '',
           description: parameters.description || '',
+          section: parameters.section || '',
           room: parameters.room || ''
         };
 
-        console.log('DEBUG: CREATE_COURSE - baseUrl:', baseUrl);
-        console.log('DEBUG: CREATE_COURSE - Full URL being called:', `${baseUrl}/api/classroom`);
+        console.log('DEBUG: CREATE_COURSE - Creating course in Neon DB');
         console.log('DEBUG: CREATE_COURSE - courseData:', courseData);
-        console.log('DEBUG: CREATE_COURSE - req.protocol:', req.protocol);
-        console.log('DEBUG: CREATE_COURSE - req.get("host"):', req.get('host'));
+        console.log('DEBUG: CREATE_COURSE - User ID:', req.user.id);
 
         try {
-          const response = await makeApiCall(
-            `${baseUrl}/api/classroom`,
-            'POST',
-            courseData,
-            userToken,
-            req
-          );
+          // Use the course service to create course in Neon DB
+          const courseService = require('../courseService');
+          const result = await courseService.createCourse({
+            name: courseData.name,
+            description: courseData.description,
+            section: courseData.section,
+            room: courseData.room,
+            teacherId: req.user.id
+          });
 
-          console.log('DEBUG: CREATE_COURSE - makeApiCall response:', response);
+          console.log('DEBUG: CREATE_COURSE - Course created successfully:', result);
 
           // ✅ COMPLETE ACTION: Mark the ongoing action as completed
           if (conversationId) {
@@ -2630,8 +2654,8 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           }
 
           return {
-            message: `Great! I've successfully created your course "${parameters.name}". Your course is now live in Google Classroom and ready for students to join. You can start posting announcements, creating assignments, and adding course materials right away.`,
-            course: response.course,
+            message: `Great! I've successfully created your course "${parameters.name}". Your course is now live and ready for students to join. You can start enrolling students, creating assignments, and managing your course content right away.`,
+            course: result.course,
             conversationId: conversationId
           };
         } catch (error) {
@@ -2643,7 +2667,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           }
           
           return {
-            message: "I'm sorry, but I couldn't create the course right now. Please try again in a moment.",
+            message: `I'm sorry, but I couldn't create the course: ${error.message}. Please try again.`,
             error: error.message,
             conversationId: conversationId
           };
