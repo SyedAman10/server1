@@ -12,22 +12,48 @@ async function initDatabase() {
   try {
     console.log('🚀 Starting database initialization...');
     
-    // Create users table with roles
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        email VARCHAR(255) UNIQUE NOT NULL,
-        password VARCHAR(255) NOT NULL,
-        name VARCHAR(255) NOT NULL,
-        picture VARCHAR(500),
-        role VARCHAR(50) NOT NULL CHECK (role IN ('student', 'teacher', 'super_admin')),
-        access_token TEXT,
-        refresh_token TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
+    // Check if users table exists and has the correct structure
+    const checkUsersTable = await pool.query(`
+      SELECT column_name, data_type 
+      FROM information_schema.columns 
+      WHERE table_name = 'users';
     `);
-    console.log('✅ Users table created successfully');
+    
+    if (checkUsersTable.rows.length > 0) {
+      console.log('⚠️  Users table already exists. Checking structure...');
+      const columns = checkUsersTable.rows.map(row => row.column_name);
+      
+      // Add missing columns if needed
+      if (!columns.includes('password')) {
+        console.log('➕ Adding password column to users table...');
+        await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password VARCHAR(255) DEFAULT 'changeme';`);
+      }
+      
+      if (!columns.includes('role')) {
+        console.log('➕ Adding role column to users table...');
+        await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(50) DEFAULT 'student';`);
+        await pool.query(`ALTER TABLE users ADD CONSTRAINT check_role CHECK (role IN ('student', 'teacher', 'super_admin'));`);
+      }
+      
+      console.log('✅ Users table structure verified');
+    } else {
+      // Create users table with roles
+      await pool.query(`
+        CREATE TABLE users (
+          id SERIAL PRIMARY KEY,
+          email VARCHAR(255) UNIQUE NOT NULL,
+          password VARCHAR(255) NOT NULL,
+          name VARCHAR(255) NOT NULL,
+          picture VARCHAR(500),
+          role VARCHAR(50) NOT NULL CHECK (role IN ('student', 'teacher', 'super_admin')),
+          access_token TEXT,
+          refresh_token TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      console.log('✅ Users table created successfully');
+    }
     
     // Create index on email for faster lookups
     await pool.query(`
@@ -35,22 +61,43 @@ async function initDatabase() {
     `);
     console.log('✅ Users email index created');
     
-    // Create courses table
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS courses (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-        description TEXT,
-        section VARCHAR(100),
-        room VARCHAR(100),
-        teacher_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
+    // Check if courses table exists
+    const checkCoursesTable = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'courses';
     `);
-    console.log('✅ Courses table created successfully');
     
-    // Create index on teacher_id
+    if (checkCoursesTable.rows.length > 0) {
+      console.log('⚠️  Courses table already exists. Checking structure...');
+      const columns = checkCoursesTable.rows.map(row => row.column_name);
+      
+      // Add teacher_id if it doesn't exist
+      if (!columns.includes('teacher_id')) {
+        console.log('➕ Adding teacher_id column to courses table...');
+        await pool.query(`ALTER TABLE courses ADD COLUMN teacher_id INTEGER;`);
+        await pool.query(`ALTER TABLE courses ADD CONSTRAINT fk_teacher FOREIGN KEY (teacher_id) REFERENCES users(id) ON DELETE CASCADE;`);
+      }
+      
+      console.log('✅ Courses table structure verified');
+    } else {
+      // Create courses table
+      await pool.query(`
+        CREATE TABLE courses (
+          id SERIAL PRIMARY KEY,
+          name VARCHAR(255) NOT NULL,
+          description TEXT,
+          section VARCHAR(100),
+          room VARCHAR(100),
+          teacher_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      console.log('✅ Courses table created successfully');
+    }
+    
+    // Create index on teacher_id only if the column exists
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_courses_teacher_id ON courses(teacher_id);
     `);
