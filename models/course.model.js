@@ -1,13 +1,62 @@
 const db = require('../utils/db');
 
+// Check if courses.id is VARCHAR or INTEGER (cache the result)
+let courseIdType = null;
+
+async function getCourseIdType() {
+  if (courseIdType) return courseIdType;
+  
+  try {
+    const result = await db.query(`
+      SELECT data_type 
+      FROM information_schema.columns 
+      WHERE table_name = 'courses' AND column_name = 'id';
+    `);
+    
+    courseIdType = (result.rows[0]?.data_type === 'character varying') ? 'VARCHAR' : 'INTEGER';
+    return courseIdType;
+  } catch (error) {
+    console.error('Error checking course ID type:', error);
+    return 'INTEGER'; // Default to INTEGER
+  }
+}
+
+// Generate a random course ID (for VARCHAR type)
+function generateCourseId() {
+  // Generate a random ID similar to Google Classroom format
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let id = '';
+  for (let i = 0; i < 12; i++) {
+    id += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return id;
+}
+
 // Create a new course
 async function createCourse({ name, description = null, section = null, room = null, teacherId }) {
-  const query = `
-    INSERT INTO courses (name, description, section, room, teacher_id)
-    VALUES ($1, $2, $3, $4, $5)
-    RETURNING *;
-  `;
-  const values = [name, description, section, room, teacherId];
+  const idType = await getCourseIdType();
+  
+  let query, values;
+  
+  if (idType === 'VARCHAR') {
+    // If id is VARCHAR, we need to generate an ID
+    const courseId = generateCourseId();
+    query = `
+      INSERT INTO courses (id, name, description, section, room, teacher_id)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING *;
+    `;
+    values = [courseId, name, description, section, room, teacherId];
+  } else {
+    // If id is INTEGER (SERIAL), let it auto-increment
+    query = `
+      INSERT INTO courses (name, description, section, room, teacher_id)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING *;
+    `;
+    values = [name, description, section, room, teacherId];
+  }
+  
   const result = await db.query(query, values);
   return result.rows[0];
 }

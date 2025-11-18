@@ -103,39 +103,76 @@ async function initDatabase() {
     `);
     console.log('✅ Courses teacher_id index created');
     
-    // Create course_enrollments table for student-course relationships
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS course_enrollments (
-        id SERIAL PRIMARY KEY,
-        course_id INTEGER REFERENCES courses(id) ON DELETE CASCADE,
-        student_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-        enrolled_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(course_id, student_id)
-      );
+    // Check the data type of courses.id to match foreign keys
+    const courseIdType = await pool.query(`
+      SELECT data_type 
+      FROM information_schema.columns 
+      WHERE table_name = 'courses' AND column_name = 'id';
     `);
-    console.log('✅ Course enrollments table created successfully');
     
-    // Create indexes for course_enrollments
-    await pool.query(`
-      CREATE INDEX IF NOT EXISTS idx_enrollments_course_id ON course_enrollments(course_id);
-      CREATE INDEX IF NOT EXISTS idx_enrollments_student_id ON course_enrollments(student_id);
-    `);
-    console.log('✅ Course enrollments indexes created');
+    let courseIdDataType = 'INTEGER';
+    if (courseIdType.rows.length > 0 && courseIdType.rows[0].data_type === 'character varying') {
+      courseIdDataType = 'VARCHAR(255)';
+      console.log('⚠️  Detected courses.id as VARCHAR, adapting foreign keys...');
+    } else {
+      console.log('✅ Detected courses.id as INTEGER');
+    }
     
-    // Create assignments table
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS assignments (
-        id SERIAL PRIMARY KEY,
-        course_id INTEGER REFERENCES courses(id) ON DELETE CASCADE,
-        title VARCHAR(255) NOT NULL,
-        description TEXT,
-        due_date TIMESTAMP,
-        max_points INTEGER DEFAULT 100,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
+    // Check if course_enrollments table exists
+    const checkEnrollmentsTable = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'course_enrollments';
     `);
-    console.log('✅ Assignments table created successfully');
+    
+    if (checkEnrollmentsTable.rows.length === 0) {
+      // Create course_enrollments table with appropriate data type
+      await pool.query(`
+        CREATE TABLE course_enrollments (
+          id SERIAL PRIMARY KEY,
+          course_id ${courseIdDataType} REFERENCES courses(id) ON DELETE CASCADE,
+          student_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+          enrolled_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(course_id, student_id)
+        );
+      `);
+      console.log('✅ Course enrollments table created successfully');
+      
+      // Create indexes for course_enrollments
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_enrollments_course_id ON course_enrollments(course_id);
+        CREATE INDEX IF NOT EXISTS idx_enrollments_student_id ON course_enrollments(student_id);
+      `);
+      console.log('✅ Course enrollments indexes created');
+    } else {
+      console.log('✅ Course enrollments table already exists');
+    }
+    
+    // Check if assignments table exists
+    const checkAssignmentsTable = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'assignments';
+    `);
+    
+    if (checkAssignmentsTable.rows.length === 0) {
+      // Create assignments table with appropriate data type
+      await pool.query(`
+        CREATE TABLE assignments (
+          id SERIAL PRIMARY KEY,
+          course_id ${courseIdDataType} REFERENCES courses(id) ON DELETE CASCADE,
+          title VARCHAR(255) NOT NULL,
+          description TEXT,
+          due_date TIMESTAMP,
+          max_points INTEGER DEFAULT 100,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      console.log('✅ Assignments table created successfully');
+    } else {
+      console.log('✅ Assignments table already exists');
+    }
     
     // Create index on course_id for assignments
     await pool.query(`
