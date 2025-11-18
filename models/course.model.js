@@ -42,16 +42,16 @@ async function createCourse({ name, description = null, section = null, room = n
     // If id is VARCHAR, we need to generate an ID
     const courseId = generateCourseId();
     query = `
-      INSERT INTO courses (id, name, description, section, room, teacher_id)
-      VALUES ($1, $2, $3, $4, $5, $6)
+      INSERT INTO courses (id, name, description, section, room, teacher_id, owner_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $6)
       RETURNING *;
     `;
     values = [courseId, name, description, section, room, teacherId];
   } else {
     // If id is INTEGER (SERIAL), let it auto-increment
     query = `
-      INSERT INTO courses (name, description, section, room, teacher_id)
-      VALUES ($1, $2, $3, $4, $5)
+      INSERT INTO courses (name, description, section, room, teacher_id, owner_id)
+      VALUES ($1, $2, $3, $4, $5, $5)
       RETURNING *;
     `;
     values = [name, description, section, room, teacherId];

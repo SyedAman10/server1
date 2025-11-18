@@ -79,6 +79,13 @@ async function initDatabase() {
         await pool.query(`ALTER TABLE courses ADD CONSTRAINT fk_teacher FOREIGN KEY (teacher_id) REFERENCES users(id) ON DELETE CASCADE;`);
       }
       
+      // If owner_id exists but teacher_id doesn't have values, sync them
+      if (columns.includes('owner_id') && columns.includes('teacher_id')) {
+        console.log('🔄 Syncing owner_id and teacher_id columns...');
+        await pool.query(`UPDATE courses SET teacher_id = owner_id WHERE teacher_id IS NULL;`);
+        await pool.query(`UPDATE courses SET owner_id = teacher_id WHERE owner_id IS NULL;`);
+      }
+      
       console.log('✅ Courses table structure verified');
     } else {
       // Create courses table
