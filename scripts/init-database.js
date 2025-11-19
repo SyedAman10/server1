@@ -270,6 +270,16 @@ async function initDatabase() {
       const invColumns = checkInvitationsTable.rows.map(row => row.column_name);
       
       // Add missing columns if needed
+      if (!invColumns.includes('token')) {
+        console.log('➕ Adding token column to invitations table...');
+        await pool.query(`ALTER TABLE invitations ADD COLUMN token VARCHAR(255) UNIQUE;`);
+      }
+      
+      if (!invColumns.includes('status')) {
+        console.log('➕ Adding status column to invitations table...');
+        await pool.query(`ALTER TABLE invitations ADD COLUMN status VARCHAR(50) DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'rejected', 'expired'));`);
+      }
+      
       if (!invColumns.includes('invitee_email')) {
         console.log('➕ Adding invitee_email column to invitations table...');
         await pool.query(`ALTER TABLE invitations ADD COLUMN invitee_email VARCHAR(255);`);
