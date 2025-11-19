@@ -14,7 +14,7 @@ const {
   getContextAwareMessage,
   getConversation
 } = require('./conversationManager');
-const { createAssignment, listAssignments } = require('../assignmentService');
+// Assignment service is now loaded dynamically when needed (database-based)
 const { createMeeting, findMeetingByDateTime, updateMeeting, deleteMeeting, listUpcomingMeetings } = require('../meetingService');
 
 // Initialize OpenAI
@@ -3844,41 +3844,41 @@ Ask your teacher for the class code - they can find it in:
             };
           }
           
-          // Exact match - create the assignment immediately using internal service
+          // Exact match - create the assignment using database system
           const courseId = selectedCourse.id;
           
           try {
-            // Extract user from JWT token
-            const token = userToken.split(' ')[1]; // Remove 'Bearer ' prefix
-            const decoded = jwt.verify(token, process.env.JWT_SECRET);
-            const user = await getUserByEmail(decoded.email);
-            
-            if (!user.access_token || !user.refresh_token) {
-              throw new Error('Missing required OAuth2 tokens');
+            // Prepare due date - convert from dueDate object to ISO string if needed
+            let dueDateTime = null;
+            if (parameters.dueDate) {
+              // If dueDate is an object {year, month, day}, convert to Date
+              if (typeof parameters.dueDate === 'object' && parameters.dueDate.year) {
+                const year = parameters.dueDate.year;
+                const month = parameters.dueDate.month - 1; // JS months are 0-indexed
+                const day = parameters.dueDate.day;
+                const hours = parameters.dueTime?.hours || 18;
+                const minutes = parameters.dueTime?.minutes || 0;
+                dueDateTime = new Date(year, month, day, hours, minutes, 0, 0).toISOString();
+              } else if (typeof parameters.dueDate === 'string') {
+                // If already a string, use it directly
+                dueDateTime = parameters.dueDate;
+              }
             }
             
-            // Prepare assignment data for internal service
-            console.log('🔍 DEBUG: Preparing assignment data with dueDate:', parameters.dueDate, 'dueTime:', parameters.dueTime);
-            const assignmentData = {
+            console.log('🔍 DEBUG: Creating assignment with database system');
+            console.log('🔍 DEBUG: courseId:', courseId, 'teacherId:', req.user.id);
+            console.log('🔍 DEBUG: dueDateTime:', dueDateTime);
+            
+            // Use the new database assignment service
+            const newAssignmentService = require('../../services/newAssignmentService');
+            const response = await newAssignmentService.createAssignment({
+              courseId,
+              teacherId: req.user.id,
               title: parameters.title,
               description: parameters.description || '',
-              materials: parameters.materials || [],
-              state: 'PUBLISHED',
-              maxPoints: parameters.maxPoints || 100,
-              dueDate: parameters.dueDate,
-              dueTime: parameters.dueTime
-            };
-            console.log('🔍 DEBUG: Final assignmentData:', assignmentData);
-            
-            // Use internal service function instead of external API call
-            const response = await createAssignment(
-              {
-                access_token: user.access_token,
-                refresh_token: user.refresh_token
-              },
-              courseId,
-              assignmentData
-            );
+              dueDate: dueDateTime,
+              maxPoints: parameters.maxPoints || 100
+            });
 
             // ✅ COMPLETE ACTION: Mark the ongoing action as completed
             if (conversationId) {
@@ -3887,14 +3887,14 @@ Ask your teacher for the class code - they can find it in:
 
             // Format due time safely
             let dueTimeStr = '';
-            if (parameters.dueTime) {
-              const minutes = parameters.dueTime.minutes || 0;
-              dueTimeStr = `\n• Due Time: ${parameters.dueTime.hours}:${minutes.toString().padStart(2, '0')}`;
+            if (dueDateTime) {
+              const dueDateObj = new Date(dueDateTime);
+              dueTimeStr = `\n• Due Date: ${dueDateObj.toLocaleDateString()} at ${dueDateObj.toLocaleTimeString()}`;
             }
 
             return {
-              message: `Great! I've successfully created your assignment "${parameters.title}" in ${selectedCourse.name}. 😊\n\nAssignment Details:\n• Title: ${parameters.title}${parameters.description ? `\n• Description: ${parameters.description}` : ''}${parameters.dueDate ? `\n• Due Date: ${parameters.dueDate}` : ''}${dueTimeStr}${parameters.maxPoints ? `\n• Max Points: ${parameters.maxPoints}` : ''}\n\nYour assignment is now live in Google Classroom and students can start working on it.\n\nNext steps:\n• Review student submissions\n• Grade completed assignments\n• Provide feedback to students`,
-              assignment: response,
+              message: `Great! I've successfully created your assignment "${parameters.title}" in ${selectedCourse.name}. 😊\n\nAssignment Details:\n• Title: ${parameters.title}${parameters.description ? `\n• Description: ${parameters.description}` : ''}${dueTimeStr}${parameters.maxPoints ? `\n• Max Points: ${parameters.maxPoints}` : ''}\n\n${response.message}\n\nNext steps:\n• Students have been notified via email\n• Review student submissions\n• Grade completed assignments\n• Provide feedback to students`,
+              assignment: response.assignment,
               conversationId: req.body.conversationId || generateConversationId()
             };
           } catch (error) {

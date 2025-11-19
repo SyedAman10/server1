@@ -191,6 +191,7 @@ async function initDatabase() {
         CREATE TABLE assignments (
           id SERIAL PRIMARY KEY,
           course_id ${courseIdDataType} REFERENCES courses(id) ON DELETE CASCADE,
+          teacher_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
           title VARCHAR(255) NOT NULL,
           description TEXT,
           due_date TIMESTAMP,
@@ -201,14 +202,24 @@ async function initDatabase() {
       `);
       console.log('✅ Assignments table created successfully');
     } else {
-      console.log('✅ Assignments table already exists');
+      console.log('⚠️  Assignments table already exists. Checking structure...');
+      const assignmentColumns = checkAssignmentsTable.rows.map(row => row.column_name);
+      
+      // Add teacher_id if missing
+      if (!assignmentColumns.includes('teacher_id')) {
+        console.log('➕ Adding teacher_id column to assignments table...');
+        await pool.query(`ALTER TABLE assignments ADD COLUMN teacher_id INTEGER REFERENCES users(id) ON DELETE SET NULL;`);
+      }
+      
+      console.log('✅ Assignments table structure verified');
     }
     
-    // Create index on course_id for assignments
+    // Create indexes on course_id and teacher_id for assignments
     await pool.query(`
       CREATE INDEX IF NOT EXISTS idx_assignments_course_id ON assignments(course_id);
+      CREATE INDEX IF NOT EXISTS idx_assignments_teacher_id ON assignments(teacher_id);
     `);
-    console.log('✅ Assignments course_id index created');
+    console.log('✅ Assignments indexes created');
     
     // Create assignment_submissions table
     await pool.query(`

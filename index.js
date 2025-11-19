@@ -7,7 +7,7 @@ const authRoutes = require('./routes/auth.routes');
 const classroomRoutes = require('./routes/classroom.routes');
 const companyRoutes = require('./routes/company.routes');
 const aiAgentRoutes = require('./routes/ai-agent.routes'); // New AI agent routes
-const assignmentRoutes = require('./routes/assignment.routes'); // New assignment routes
+const assignmentRoutes = require('./routes/newAssignment.routes'); // Database-based assignment routes
 const audioRoutes = require('./routes/audio.routes'); // New audio routes
 const calendarRoutes = require('./routes/calendar.routes'); // New calendar routes
 const courseRoutes = require('./routes/course.routes'); // New course routes
@@ -59,7 +59,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/classroom', classroomRoutes);
 app.use('/api/company', companyRoutes);
 app.use('/api/ai', aiAgentRoutes); // Mount AI agent routes
-app.use('/api', assignmentRoutes); // Add assignment routes
+app.use('/api/assignments', assignmentRoutes); // Add database-based assignment routes
 app.use('/api/audio', audioRoutes); // Mount audio routes
 app.use('/api/calendar', calendarRoutes); // Mount calendar routes
 app.use('/api/courses', courseRoutes); // Mount course routes
