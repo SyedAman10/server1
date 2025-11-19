@@ -4973,6 +4973,88 @@ Create only the announcement text, without any introductory text or markdown for
           };
         }
 
+        // If user is asking for "today's assignment", fetch all assignments due/created today
+        if (parameters.isTodaysAssignment && !parameters.courseName) {
+          console.log('🔍 DEBUG: Fetching all assignments for today');
+          
+          try {
+            // Get today's date range
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            
+            // Query database for assignments due today or created today
+            const assignmentModel = require('../../models/assignment.model');
+            const db = require('../../utils/db');
+            
+            const query = `
+              SELECT a.*, 
+                c.name as course_name,
+                u.name as teacher_name,
+                (SELECT COUNT(*) FROM course_enrollments ce WHERE ce.course_id = a.course_id) as total_students
+              FROM assignments a
+              JOIN courses c ON a.course_id = c.id
+              JOIN users u ON a.teacher_id = u.id
+              WHERE a.teacher_id = $1 
+                AND (
+                  (a.due_date >= $2 AND a.due_date < $3)
+                  OR (a.created_at >= $2 AND a.created_at < $3)
+                )
+              ORDER BY a.due_date ASC NULLS LAST, a.created_at DESC;
+            `;
+            
+            const result = await db.query(query, [req.user.id, today, tomorrow]);
+            const todaysAssignments = result.rows;
+            
+            if (todaysAssignments.length === 0) {
+              return {
+                message: "You don't have any assignments due or created today. 📅\n\nWould you like to:\n• Create a new assignment\n• Check assignments for a specific course\n• View all your assignments",
+                conversationId: conversationId
+              };
+            }
+            
+            // Format the response with all today's assignments
+            let message = `📝 **Assignments for Today** (${today.toLocaleDateString()})\n\n`;
+            message += `Found ${todaysAssignments.length} assignment${todaysAssignments.length !== 1 ? 's' : ''}:\n\n`;
+            
+            todaysAssignments.forEach((assignment, index) => {
+              const dueDate = assignment.due_date ? new Date(assignment.due_date).toLocaleString() : 'No due date';
+              const createdDate = new Date(assignment.created_at).toLocaleString();
+              
+              message += `${index + 1}. **${assignment.title}**\n`;
+              message += `   📚 Course: ${assignment.course_name}\n`;
+              message += `   📅 Due: ${dueDate}\n`;
+              message += `   ✍️ Created: ${createdDate}\n`;
+              message += `   👥 Enrolled Students: ${assignment.total_students || 0}\n`;
+              message += `   📊 Points: ${assignment.max_points}\n`;
+              if (assignment.description) {
+                message += `   📝 Description: ${assignment.description.substring(0, 100)}${assignment.description.length > 100 ? '...' : ''}\n`;
+              }
+              message += `\n`;
+            });
+            
+            message += `\n💡 **Note:** Submission tracking will be added in a future update. Currently showing assignment details only.`;
+            
+            // Mark action as complete
+            if (conversationId) {
+              completeOngoingAction(conversationId);
+            }
+            
+            return {
+              message,
+              assignments: todaysAssignments,
+              conversationId: conversationId
+            };
+          } catch (error) {
+            console.error('Error fetching today\'s assignments:', error);
+            return {
+              message: `Sorry, I encountered an error while fetching today's assignments: ${error.message}`,
+              conversationId: conversationId
+            };
+          }
+        }
+
         // Check if this action was completed through parameter collection
         // If so, skip parameter validation and go directly to execution
         if (parameters.selectedAssignments && parameters.assignmentTitle) {
@@ -4981,7 +5063,7 @@ Create only the announcement text, without any introductory text or markdown for
         } else {
           // Check what parameters are missing and start tracking if needed
         const missingParams = [];
-        if (!parameters.courseName && !parameters.courseIdentifier) {
+        if (!parameters.courseName && !parameters.courseIdentifier && !parameters.isTodaysAssignment) {
           missingParams.push('courseName');
         }
         if (!parameters.isTodaysAssignment && !parameters.assignmentTitle) {
