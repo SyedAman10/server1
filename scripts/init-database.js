@@ -317,6 +317,18 @@ async function initDatabase() {
         }
       }
       
+      // Drop old user_id column if it exists (from Google Classroom schema)
+      if (invColumns.includes('user_id')) {
+        console.log('🗑️  Dropping old user_id column from invitations table...');
+        await pool.query(`ALTER TABLE invitations DROP COLUMN IF EXISTS user_id;`);
+      }
+      
+      // Drop old course_work_id column if it exists (from Google Classroom schema)
+      if (invColumns.includes('course_work_id')) {
+        console.log('🗑️  Dropping old course_work_id column from invitations table...');
+        await pool.query(`ALTER TABLE invitations DROP COLUMN IF EXISTS course_work_id;`);
+      }
+      
       // Add missing columns if needed
       if (!invColumns.includes('token')) {
         console.log('➕ Adding token column to invitations table...');
