@@ -13,7 +13,12 @@ const { authenticate, requireRole } = require('../middleware/auth.middleware');
 const router = express.Router();
 
 // Accept invitation via GET (from email link) - may not be authenticated yet
-router.get('/accept/:token', acceptInvitation);
+// This route MUST be before the authenticate middleware
+router.get('/accept/:token', (req, res, next) => {
+  console.log('🔗 Invitation accept route hit:', req.params.token);
+  console.log('🔑 User authenticated?', !!req.user);
+  next();
+}, acceptInvitation);
 
 // All other routes require authentication
 router.use(authenticate);

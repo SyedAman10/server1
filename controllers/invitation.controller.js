@@ -78,13 +78,22 @@ const acceptInvitation = async (req, res) => {
   try {
     const { token } = req.params;
     
+    if (!token) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invitation token is required'
+      });
+    }
+    
     // Check if user is authenticated
     if (!req.user || !req.user.id) {
-      // Redirect to signup/login with invitation token
+      // Redirect to frontend signup/login with invitation token
       const frontendUrl = process.env.FRONTEND_URL || 'https://xytek-classroom-assistant.vercel.app';
-      return res.redirect(`${frontendUrl}/accept-invitation?token=${token}`);
+      console.log(`Redirecting unauthenticated user to: ${frontendUrl}/accept-invitation?token=${token}`);
+      return res.redirect(302, `${frontendUrl}/accept-invitation?token=${token}`);
     }
 
+    // User is authenticated, accept the invitation
     const result = await invitationService.acceptInvitation({
       token,
       userId: req.user.id,
@@ -94,11 +103,12 @@ const acceptInvitation = async (req, res) => {
 
     // Redirect to course page
     const frontendUrl = process.env.FRONTEND_URL || 'https://xytek-classroom-assistant.vercel.app';
-    res.redirect(`${frontendUrl}/courses/${result.course.id}?accepted=true`);
+    console.log(`Redirecting to course: ${frontendUrl}/courses/${result.course.id}?accepted=true`);
+    res.redirect(302, `${frontendUrl}/courses/${result.course.id}?accepted=true`);
   } catch (error) {
     console.error('Accept invitation error:', error);
     const frontendUrl = process.env.FRONTEND_URL || 'https://xytek-classroom-assistant.vercel.app';
-    res.redirect(`${frontendUrl}/error?message=${encodeURIComponent(error.message)}`);
+    res.redirect(302, `${frontendUrl}/error?message=${encodeURIComponent(error.message)}`);
   }
 };
 

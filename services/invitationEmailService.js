@@ -76,7 +76,7 @@ const getInvitationEmailTemplate = ({ inviterName, courseName, role, invitationL
             display: inline-block;
             padding: 15px 30px;
             background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);
-            color: white;
+            color: #ffffff !important;
             text-decoration: none;
             border-radius: 8px;
             font-weight: 600;
@@ -114,7 +114,7 @@ const getInvitationEmailTemplate = ({ inviterName, courseName, role, invitationL
         <div class="container">
           <div class="header">
             <div class="icon">🎓</div>
-            <h1>Course Invitation</h1>
+            <h1>XYTEK Classroom Assistant</h1>
           </div>
           
           <div class="content">
@@ -129,7 +129,7 @@ const getInvitationEmailTemplate = ({ inviterName, courseName, role, invitationL
             </div>
             
             <p style="text-align: center;">
-              <a href="${invitationLink}" class="button">
+              <a href="${invitationLink}" class="button" style="color: #ffffff !important;">
                 ✅ Accept Invitation
               </a>
             </p>
@@ -189,7 +189,7 @@ async function sendInvitationEmail({
     });
     
     const mailOptions = {
-      from: `"${process.env.EMAIL_FROM_NAME || 'Classroom Platform'}" <${process.env.EMAIL_USER}>`,
+      from: `"${process.env.EMAIL_FROM_NAME || 'XYTEK Classroom Assistant'}" <${process.env.EMAIL_USER}>`,
       to: toEmail,
       subject: emailTemplate.subject,
       html: emailTemplate.html,
@@ -214,40 +214,82 @@ async function sendInvitationEmail({
   }
 }
 
+// Get welcome email template
+const getWelcomeEmailTemplate = ({ userName, courseName, role }) => {
+  return {
+    subject: `Welcome to ${courseName}!`,
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Welcome to ${courseName}</title>
+        <style>
+          body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+          }
+          .container {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+          }
+          .header {
+            text-align: center;
+            margin-bottom: 30px;
+          }
+          .header h1 {
+            color: #4299e1;
+            margin: 0;
+            font-size: 28px;
+          }
+          .icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <div class="icon">🎉</div>
+            <h1>XYTEK Classroom Assistant</h1>
+          </div>
+          <div class="content">
+            <p>Hi ${userName}!</p>
+            <p>Welcome to <strong>${courseName}</strong>! You've successfully joined as a ${role}.</p>
+            <p>You can now access all course materials, assignments, and collaborate with your classmates.</p>
+            <p>Happy learning!</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `,
+    text: `Welcome to ${courseName}! You've successfully joined as a ${role}.`
+  };
+};
+
 // Send welcome email after accepting invitation
 async function sendWelcomeEmail({ toEmail, userName, courseName, role }) {
   try {
     const transporter = createTransporter();
     const roleText = role === 'teacher' ? 'a teacher' : 'a student';
     
+    const emailTemplate = getWelcomeEmailTemplate({ userName, courseName, role });
+    
     const mailOptions = {
-      from: `"${process.env.EMAIL_FROM_NAME || 'Classroom Platform'}" <${process.env.EMAIL_USER}>`,
+      from: `"${process.env.EMAIL_FROM_NAME || 'XYTEK Classroom Assistant'}" <${process.env.EMAIL_USER}>`,
       to: toEmail,
-      subject: `Welcome to ${courseName}!`,
-      html: `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
-            .container { background: white; padding: 40px; border-radius: 10px; }
-            h1 { color: #4299e1; }
-            .icon { font-size: 48px; text-align: center; margin: 20px 0; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="icon">🎉</div>
-            <h1>Welcome to ${courseName}!</h1>
-            <p>Hi ${userName},</p>
-            <p>You've successfully joined <strong>${courseName}</strong> as ${roleText}!</p>
-            <p>You can now access all course materials, assignments, and collaborate with other members.</p>
-            <p>Happy learning!</p>
-          </div>
-        </body>
-        </html>
-      `
+      subject: emailTemplate.subject,
+      html: emailTemplate.html,
+      text: emailTemplate.text
     };
     
     await transporter.sendMail(mailOptions);
