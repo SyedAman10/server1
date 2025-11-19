@@ -91,11 +91,22 @@ async function initDatabase() {
         await pool.query(`ALTER TABLE courses ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`);
       }
       
-      // If owner_id exists but teacher_id doesn't have values, sync them
+      // If owner_id exists but teacher_id doesn't have values, sync them with type casting
       if (columns.includes('owner_id') && columns.includes('teacher_id')) {
         console.log('🔄 Syncing owner_id and teacher_id columns...');
-        await pool.query(`UPDATE courses SET teacher_id = owner_id WHERE teacher_id IS NULL;`);
-        await pool.query(`UPDATE courses SET owner_id = teacher_id WHERE owner_id IS NULL;`);
+        // Only sync if owner_id is numeric (can be cast to integer)
+        await pool.query(`
+          UPDATE courses 
+          SET teacher_id = CAST(owner_id AS INTEGER) 
+          WHERE teacher_id IS NULL 
+          AND owner_id ~ '^[0-9]+$';
+        `);
+        await pool.query(`
+          UPDATE courses 
+          SET owner_id = CAST(teacher_id AS VARCHAR) 
+          WHERE owner_id IS NULL;
+        `);
+        console.log('✅ Synced teacher_id and owner_id columns');
       }
       
       console.log('✅ Courses table structure verified');
