@@ -64,6 +64,7 @@ app.use('/api/audio', audioRoutes); // Mount audio routes
 app.use('/api/calendar', calendarRoutes); // Mount calendar routes
 app.use('/api/courses', courseRoutes); // Mount course routes
 app.use('/api/invitations', invitationRoutes); // Mount invitation routes
+app.use('/api/announcements', require('./routes/announcement.routes')); // Mount announcement routes
 
 // OAuth callback route for mobile apps
 app.get('/auth/callback', (req, res) => {

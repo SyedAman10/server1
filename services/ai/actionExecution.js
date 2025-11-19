@@ -1979,112 +1979,43 @@ async function makeApiCall(url, method, data, userToken, req) {
             console.log('DEBUG: Internal createCourse call successful');
             return result.data;
             
-          } else if (method === 'POST' && endpoint.includes('/announcements')) {
-            // For createAnnouncement, extract courseId and create announcement
-            const courseId = endpoint.split('/')[1]; // Extract courseId from /{courseId}/announcements
-            console.log('DEBUG: Creating announcement for courseId:', courseId);
-            
-            const user = await getUserByEmail(req.user.email);
-            if (!user.access_token || !user.refresh_token) {
-              throw new Error('Missing required OAuth2 tokens');
-            }
-            
-            const { getClassroomClient } = require('../../integrations/google.classroom');
-            const classroom = getClassroomClient({
-              access_token: user.access_token,
-              refresh_token: user.refresh_token
-            });
-            
-            // Validate required fields
-            if (!data.text) {
-              throw new Error('Announcement text is required');
-            }
-            
-            const announcementData = {
-              text: data.text,
-              materials: data.materials || [],
-              state: data.state || 'PUBLISHED'
-            };
-            
-            console.log('DEBUG: Creating announcement with data:', announcementData);
-            
-            // Try to create the announcement
-            let result;
-            try {
-              result = await classroom.courses.announcements.create({
-              courseId: courseId,
-              requestBody: announcementData
-            });
-            } catch (createError) {
-              // Check if it's a precondition error (course not in ACTIVE state)
-              if (createError.code === 400 && createError.message && createError.message.includes('Precondition check failed')) {
-                console.log('DEBUG: Precondition check failed - Course is likely in PROVISIONED state instead of ACTIVE. Attempting to activate...');
-                
-                try {
-                  // Try to update the course to ACTIVE state
-                  await classroom.courses.patch({
-                    id: courseId,
-                    updateMask: 'courseState',
-                    requestBody: {
-                      courseState: 'ACTIVE'
-                    }
-                  });
-                  
-                  console.log('DEBUG: Course activated, retrying announcement creation...');
-                  
-                  // Retry announcement creation
-                  result = await classroom.courses.announcements.create({
-                    courseId: courseId,
-                    requestBody: announcementData
-                  });
-                } catch (stateError) {
-                  console.error('DEBUG: Could not activate course:', stateError.message);
-                  
-                  // Provide detailed error message based on the error type
-                  if (stateError.code === 403 || stateError.message.includes('Permission')) {
-                    throw new Error('You do not have permission to activate this course. The course is currently in PROVISIONED state and needs to be activated before announcements can be posted. Please contact your Google Workspace administrator to activate the course.');
-                  }
-                  
-                  if (stateError.code === 400 && stateError.message && stateError.message.includes('CourseStateDenied')) {
-                    throw new Error('This course is currently in PROVISIONED state and cannot be automatically activated. The Google Classroom API does not allow changing the course state. Announcements can only be posted to ACTIVE courses. Please activate the course manually in Google Classroom first.');
-                  }
-                  
-                  throw new Error(`This course is currently in PROVISIONED state instead of ACTIVE state. Google Classroom requires courses to be in ACTIVE state before announcements can be posted. Error: ${stateError.message}`);
-                }
-              } else {
-                // Re-throw if it's a different error
-                throw createError;
-              }
-            }
-            
-            console.log('DEBUG: Announcement created successfully:', result.data);
-            console.log('DEBUG: Internal createAnnouncement call successful');
-            return result.data;
-            
-          } else if (method === 'GET' && endpoint.includes('/announcements')) {
-            // For getAnnouncements, extract courseId and get announcements
-            const courseId = endpoint.split('/')[1]; // Extract courseId from /{courseId}/announcements
-            console.log('DEBUG: Getting announcements for courseId:', courseId);
-            
-            const user = await getUserByEmail(req.user.email);
-            if (!user.access_token || !user.refresh_token) {
-              throw new Error('Missing required OAuth2 tokens');
-            }
-            
-            const { getClassroomClient } = require('../../integrations/google.classroom');
-            const classroom = getClassroomClient({
-              access_token: user.access_token,
-              refresh_token: user.refresh_token
-            });
-            
-            const result = await classroom.courses.announcements.list({
-              courseId: courseId,
-              pageSize: 20
-            });
-            
-            console.log('DEBUG: Announcements retrieved successfully');
-            console.log('DEBUG: Internal getAnnouncements call successful');
-            return result.data.announcements || [];
+        } else if (method === 'POST' && endpoint.includes('/announcements')) {
+          // For createAnnouncement, use our database system
+          console.log('DEBUG: Creating announcement with new database system');
+          
+          // Validate required fields
+          if (!data.content && !data.text) {
+            throw new Error('Announcement content is required');
+          }
+          
+          const announcementData = {
+            courseId: data.courseId,
+            teacherId: req.user.id,
+            title: data.title || null,
+            content: data.content || data.text
+          };
+          
+          console.log('DEBUG: Creating announcement with data:', announcementData);
+          
+          // Use the announcement service
+          const announcementService = require('../../services/announcementService');
+          const result = await announcementService.createAnnouncement(announcementData);
+          
+          console.log('DEBUG: Announcement created successfully:', result);
+          return result;
+          
+        } else if (method === 'GET' && endpoint.includes('/announcements')) {
+          // For getAnnouncements, use our database system
+          console.log('DEBUG: Getting announcements with new database system');
+          
+          const courseId = endpoint.split('/')[1]; // Extract courseId from /{courseId}/announcements
+          
+          // Use the announcement model
+          const announcementModel = require('../../models/announcement.model');
+          const announcements = await announcementModel.getAnnouncementsByCourse(courseId);
+          
+          console.log('DEBUG: Announcements retrieved successfully:', announcements.length);
+          return announcements;
             
           } else if (method === 'GET' && endpoint.includes('/students')) {
             // For getEnrolledStudents, extract courseId and get students
@@ -3543,35 +3474,32 @@ Ask your teacher for the class code - they can find it in:
             };
           }
           
-          // Create the announcement using internal service
-          const response = await createAnnouncement(
-            selectedCourse.id,
-            {
-              text: parameters.announcementText,
-              materials: [],
-              state: 'PUBLISHED'
-            },
-            userToken,
-            req
-          );
-          
-          if (!response || response.error) {
-            return {
-              message: `Sorry, I couldn't create the announcement. ${response?.error || 'Please try again.'}`,
-              conversationId: req.body.conversationId
-            };
-          }
-          
-          // ✅ COMPLETE ACTION: Mark the ongoing action as completed
-          if (conversationId) {
-            completeOngoingAction(conversationId);
-          }
-
+        // Create the announcement using our database system
+        const announcementService = require('../../services/announcementService');
+        const response = await announcementService.createAnnouncement({
+          courseId: selectedCourse.id,
+          teacherId: req.user.id,
+          title: null,
+          content: parameters.announcementText
+        });
+        
+        if (!response || !response.success) {
           return {
-            message: `Perfect! I've posted your announcement "${parameters.announcementText}" in ${selectedCourse.name}. Your students will now see this announcement in their Google Classroom.`,
-            announcement: response.announcement,
-            conversationId: conversationId
+            message: `Sorry, I couldn't create the announcement. ${response?.message || 'Please try again.'}`,
+            conversationId: req.body.conversationId
           };
+        }
+        
+        // ✅ COMPLETE ACTION: Mark the ongoing action as completed
+        if (conversationId) {
+          completeOngoingAction(conversationId);
+        }
+
+        return {
+          message: `Perfect! I've posted your announcement "${parameters.announcementText}" in ${selectedCourse.name}. ${response.message}`,
+          announcement: response.announcement,
+          conversationId: conversationId
+        };
         } catch (error) {
           console.error('Error in AI_ASSISTED_ANNOUNCEMENT:', error);
           
@@ -3644,33 +3572,29 @@ Ask your teacher for the class code - they can find it in:
             };
           }
           
-          // Exact match - get the announcements
-          const courseId = selectedCourse.id;
-          const announcements = await makeApiCall(
-            `${baseUrl}/api/classroom/${courseId}/announcements`,
-            'GET',
-            null,
-            userToken,
-            req
-          );
-          
-          if (!announcements || announcements.length === 0) {
-            return {
-              message: `📢 **${selectedCourse.name}**\n\nNo announcements found yet. This course is ready for your first announcement!`,
-              conversationId: req.body.conversationId
-            };
-          }
-          
-          const announcementList = announcements.map((announcement, index) => {
-            const date = new Date(announcement.updateTime || announcement.creationTime).toLocaleDateString();
-            return `${index + 1}. **${announcement.text}**\n   📅 ${date}`;
-          }).join('\n\n');
-          
+        // Exact match - get the announcements using our database system
+        const courseId = selectedCourse.id;
+        const announcementModel = require('../../models/announcement.model');
+        const announcements = await announcementModel.getAnnouncementsByCourse(courseId);
+        
+        if (!announcements || announcements.length === 0) {
           return {
-            message: `📢 **${selectedCourse.name} - Announcements**\n\n${announcementList}\n\nTotal: ${announcements.length} announcement${announcements.length !== 1 ? 's' : ''}`,
-            announcements: announcements,
+            message: `📢 **${selectedCourse.name}**\n\nNo announcements found yet. This course is ready for your first announcement!`,
             conversationId: req.body.conversationId
           };
+        }
+        
+        const announcementList = announcements.map((announcement, index) => {
+          const date = new Date(announcement.created_at).toLocaleDateString();
+          const titleText = announcement.title ? `**${announcement.title}**\n   ` : '';
+          return `${index + 1}. ${titleText}${announcement.content}\n   📅 ${date} • By ${announcement.teacher_name}`;
+        }).join('\n\n');
+        
+        return {
+          message: `📢 **${selectedCourse.name} - Announcements**\n\n${announcementList}\n\nTotal: ${announcements.length} announcement${announcements.length !== 1 ? 's' : ''}`,
+          announcements: announcements,
+          conversationId: req.body.conversationId
+        };
         } catch (error) {
           console.error('Error in GET_ANNOUNCEMENTS:', error);
           return {
@@ -5001,13 +4925,15 @@ Create only the announcement text, without any introductory text or markdown for
               
               const courseReminderText = `Don't forget about these upcoming assignments:\n${courseAssignmentsList}\n\nPlease prepare accordingly and submit on time. Good luck! 🍀`;
               
-              await classroom.courses.announcements.create({
+              // Use our database system for announcements
+              const announcementService = require('../../services/announcementService');
+              await announcementService.createAnnouncement({
                 courseId: courseId,
-                requestBody: {
-                  text: courseReminderText,
-                  state: 'PUBLISHED'
-                }
+                teacherId: req.user.id,
+                title: '📚 Upcoming Assignment Reminders',
+                content: courseReminderText
               });
+              
               postedReminders.push({
                 course: courseAssignments[0].courseName,
                 assignmentsCount: courseAssignments.length

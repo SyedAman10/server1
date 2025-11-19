@@ -388,6 +388,37 @@ async function initDatabase() {
       console.log('✅ Invitations table structure verified');
     }
     
+    // Create announcements table
+    const checkAnnouncementsTable = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'announcements';
+    `);
+    
+    if (checkAnnouncementsTable.rows.length === 0) {
+      await pool.query(`
+        CREATE TABLE announcements (
+          id SERIAL PRIMARY KEY,
+          course_id ${courseIdDataType} REFERENCES courses(id) ON DELETE CASCADE,
+          teacher_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          title VARCHAR(255),
+          content TEXT NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      console.log('✅ Announcements table created successfully');
+      
+      // Create indexes for announcements
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_announcements_course_id ON announcements(course_id);
+        CREATE INDEX IF NOT EXISTS idx_announcements_teacher_id ON announcements(teacher_id);
+      `);
+      console.log('✅ Announcements indexes created');
+    } else {
+      console.log('✅ Announcements table already exists');
+    }
+    
     console.log('🎉 Database initialization completed successfully!');
     
   } catch (error) {
