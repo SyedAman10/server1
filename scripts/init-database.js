@@ -416,7 +416,42 @@ async function initDatabase() {
       `);
       console.log('✅ Announcements indexes created');
     } else {
-      console.log('✅ Announcements table already exists');
+      console.log('⚠️  Announcements table already exists. Checking structure...');
+      const announcementColumns = checkAnnouncementsTable.rows.map(row => row.column_name);
+      
+      // Add missing columns if needed
+      if (!announcementColumns.includes('teacher_id')) {
+        console.log('➕ Adding teacher_id column to announcements table...');
+        await pool.query(`ALTER TABLE announcements ADD COLUMN teacher_id INTEGER REFERENCES users(id) ON DELETE SET NULL;`);
+      }
+      
+      if (!announcementColumns.includes('title')) {
+        console.log('➕ Adding title column to announcements table...');
+        await pool.query(`ALTER TABLE announcements ADD COLUMN title VARCHAR(255);`);
+      }
+      
+      if (!announcementColumns.includes('content')) {
+        console.log('➕ Adding content column to announcements table...');
+        await pool.query(`ALTER TABLE announcements ADD COLUMN content TEXT;`);
+      }
+      
+      if (!announcementColumns.includes('created_at')) {
+        console.log('➕ Adding created_at column to announcements table...');
+        await pool.query(`ALTER TABLE announcements ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`);
+      }
+      
+      if (!announcementColumns.includes('updated_at')) {
+        console.log('➕ Adding updated_at column to announcements table...');
+        await pool.query(`ALTER TABLE announcements ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`);
+      }
+      
+      // Create indexes for announcements if they don't exist
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_announcements_course_id ON announcements(course_id);
+        CREATE INDEX IF NOT EXISTS idx_announcements_teacher_id ON announcements(teacher_id);
+      `);
+      
+      console.log('✅ Announcements table structure verified');
     }
     
     console.log('🎉 Database initialization completed successfully!');
