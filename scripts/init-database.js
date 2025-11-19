@@ -286,6 +286,27 @@ async function initDatabase() {
         
         if (!checkIdSequence.rows[0]?.column_default?.includes('nextval')) {
           console.log('🔧 Converting id column to SERIAL (auto-increment)...');
+          
+          // Get the data type of the id column
+          const idTypeResult = await pool.query(`
+            SELECT data_type 
+            FROM information_schema.columns 
+            WHERE table_name = 'invitations' AND column_name = 'id';
+          `);
+          
+          const idDataType = idTypeResult.rows[0]?.data_type;
+          
+          // If id is not integer type, we need to convert it
+          if (idDataType && !['integer', 'bigint', 'smallint'].includes(idDataType)) {
+            console.log(`🔧 Converting id column from ${idDataType} to INTEGER...`);
+            
+            // Drop any existing data (since we're migrating from old schema)
+            await pool.query(`TRUNCATE TABLE invitations;`);
+            
+            // Change column type to INTEGER
+            await pool.query(`ALTER TABLE invitations ALTER COLUMN id TYPE INTEGER USING id::integer;`);
+          }
+          
           // Create a sequence for the id column
           await pool.query(`CREATE SEQUENCE IF NOT EXISTS invitations_id_seq;`);
           await pool.query(`ALTER TABLE invitations ALTER COLUMN id SET DEFAULT nextval('invitations_id_seq');`);
