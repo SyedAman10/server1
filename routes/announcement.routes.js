@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const announcementController = require('../controllers/announcement.controller');
-const authMiddleware = require('../middleware/auth.middleware');
+const { authenticate } = require('../middleware/auth.middleware');
 
 // All routes require authentication
-router.use(authMiddleware);
+router.use(authenticate);
 
 // Create announcement (teachers and super_admin only)
 router.post('/', announcementController.createAnnouncement);
