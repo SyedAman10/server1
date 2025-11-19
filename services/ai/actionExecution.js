@@ -1709,8 +1709,8 @@ Extracted title:`;
  */
 async function findMatchingCourse(courseName, userToken, req, baseUrl) {
   try {
-    // Get all courses to find the matching one
-    let coursesResponse = await makeApiCall(`${baseUrl}/api/classroom`, 'GET', null, userToken, req);
+    // Get all courses from database (not Google Classroom)
+    let coursesResponse = await makeApiCall(`${baseUrl}/api/courses`, 'GET', null, userToken, req);
     
     if (!coursesResponse || !coursesResponse.courses || !Array.isArray(coursesResponse.courses)) {
       // Handle cases where coursesResponse might be directly an array
