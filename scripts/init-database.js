@@ -317,16 +317,13 @@ async function initDatabase() {
         }
       }
       
-      // Drop old user_id column if it exists (from Google Classroom schema)
-      if (invColumns.includes('user_id')) {
-        console.log('🗑️  Dropping old user_id column from invitations table...');
-        await pool.query(`ALTER TABLE invitations DROP COLUMN IF EXISTS user_id;`);
-      }
-      
-      // Drop old course_work_id column if it exists (from Google Classroom schema)
-      if (invColumns.includes('course_work_id')) {
-        console.log('🗑️  Dropping old course_work_id column from invitations table...');
-        await pool.query(`ALTER TABLE invitations DROP COLUMN IF EXISTS course_work_id;`);
+      // Drop old columns from Google Classroom schema that conflict with new schema
+      const oldColumns = ['user_id', 'course_work_id', 'role'];
+      for (const oldCol of oldColumns) {
+        if (invColumns.includes(oldCol)) {
+          console.log(`🗑️  Dropping old ${oldCol} column from invitations table...`);
+          await pool.query(`ALTER TABLE invitations DROP COLUMN IF EXISTS ${oldCol};`);
+        }
       }
       
       // Add missing columns if needed
