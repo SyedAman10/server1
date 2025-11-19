@@ -1981,7 +1981,8 @@ async function makeApiCall(url, method, data, userToken, req) {
             
         } else if (method === 'POST' && endpoint.includes('/announcements')) {
           // For createAnnouncement, use our database system
-          console.log('DEBUG: Creating announcement with new database system');
+          const courseId = endpoint.split('/')[1]; // Extract courseId from /{courseId}/announcements
+          console.log('DEBUG: Creating announcement with new database system for courseId:', courseId);
           
           // Validate required fields
           if (!data.content && !data.text) {
@@ -1989,7 +1990,7 @@ async function makeApiCall(url, method, data, userToken, req) {
           }
           
           const announcementData = {
-            courseId: data.courseId,
+            courseId: courseId,
             teacherId: req.user.id,
             title: data.title || null,
             content: data.content || data.text
