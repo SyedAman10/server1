@@ -269,6 +269,33 @@ async function initDatabase() {
       console.log('⚠️  Invitations table already exists. Checking structure...');
       const invColumns = checkInvitationsTable.rows.map(row => row.column_name);
       
+      // Check if id column exists and is SERIAL
+      if (!invColumns.includes('id')) {
+        console.log('➕ Adding id column to invitations table...');
+        await pool.query(`
+          ALTER TABLE invitations 
+          ADD COLUMN id SERIAL PRIMARY KEY;
+        `);
+      } else {
+        // Check if id column has a sequence (is auto-incrementing)
+        const checkIdSequence = await pool.query(`
+          SELECT column_default 
+          FROM information_schema.columns 
+          WHERE table_name = 'invitations' AND column_name = 'id';
+        `);
+        
+        if (!checkIdSequence.rows[0]?.column_default?.includes('nextval')) {
+          console.log('🔧 Converting id column to SERIAL (auto-increment)...');
+          // Create a sequence for the id column
+          await pool.query(`CREATE SEQUENCE IF NOT EXISTS invitations_id_seq;`);
+          await pool.query(`ALTER TABLE invitations ALTER COLUMN id SET DEFAULT nextval('invitations_id_seq');`);
+          await pool.query(`ALTER TABLE invitations ALTER COLUMN id SET NOT NULL;`);
+          await pool.query(`SELECT setval('invitations_id_seq', COALESCE((SELECT MAX(id) FROM invitations), 0) + 1, false);`);
+          await pool.query(`ALTER SEQUENCE invitations_id_seq OWNED BY invitations.id;`);
+          console.log('✅ Converted id column to auto-incrementing SERIAL');
+        }
+      }
+      
       // Add missing columns if needed
       if (!invColumns.includes('token')) {
         console.log('➕ Adding token column to invitations table...');
