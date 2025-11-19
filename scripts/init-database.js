@@ -79,6 +79,18 @@ async function initDatabase() {
         await pool.query(`ALTER TABLE courses ADD CONSTRAINT fk_teacher FOREIGN KEY (teacher_id) REFERENCES users(id) ON DELETE CASCADE;`);
       }
       
+      // Add created_at if it doesn't exist
+      if (!columns.includes('created_at')) {
+        console.log('➕ Adding created_at column to courses table...');
+        await pool.query(`ALTER TABLE courses ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`);
+      }
+      
+      // Add updated_at if it doesn't exist
+      if (!columns.includes('updated_at')) {
+        console.log('➕ Adding updated_at column to courses table...');
+        await pool.query(`ALTER TABLE courses ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`);
+      }
+      
       // If owner_id exists but teacher_id doesn't have values, sync them
       if (columns.includes('owner_id') && columns.includes('teacher_id')) {
         console.log('🔄 Syncing owner_id and teacher_id columns...');
