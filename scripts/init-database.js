@@ -208,6 +208,44 @@ async function initDatabase() {
     `);
     console.log('✅ Assignment submissions indexes created');
     
+    // Create invitations table with appropriate course_id type
+    const checkInvitationsTable = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'invitations';
+    `);
+    
+    if (checkInvitationsTable.rows.length === 0) {
+      await pool.query(`
+        CREATE TABLE invitations (
+          id SERIAL PRIMARY KEY,
+          course_id ${courseIdDataType} REFERENCES courses(id) ON DELETE CASCADE,
+          inviter_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          invitee_email VARCHAR(255) NOT NULL,
+          invitee_role VARCHAR(50) NOT NULL CHECK (invitee_role IN ('student', 'teacher')),
+          token VARCHAR(255) UNIQUE NOT NULL,
+          status VARCHAR(50) DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'rejected', 'expired')),
+          accepted_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          accepted_at TIMESTAMP,
+          expires_at TIMESTAMP NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      console.log('✅ Invitations table created successfully');
+      
+      // Create indexes for invitations
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_invitations_token ON invitations(token);
+        CREATE INDEX IF NOT EXISTS idx_invitations_email ON invitations(invitee_email);
+        CREATE INDEX IF NOT EXISTS idx_invitations_course_id ON invitations(course_id);
+        CREATE INDEX IF NOT EXISTS idx_invitations_status ON invitations(status);
+      `);
+      console.log('✅ Invitations indexes created');
+    } else {
+      console.log('✅ Invitations table already exists');
+    }
+    
     console.log('🎉 Database initialization completed successfully!');
     
   } catch (error) {

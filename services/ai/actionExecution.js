@@ -4131,22 +4131,76 @@ Ask your teacher for the class code - they can find it in:
             };
           }
           
-          // Exact match - invite the students using internal service
+          // Exact match - invite the students using our invitation service
           const courseId = selectedCourse.id;
           
           try {
-            // Extract user from JWT token
-            const token = userToken.split(' ')[1]; // Remove 'Bearer ' prefix
-            const decoded = jwt.verify(token, process.env.JWT_SECRET);
-            const user = await getUserByEmail(decoded.email);
+            // Use our invitation service to send invitations
+            const invitationService = require('../invitationService');
             
-            if (!user.access_token || !user.refresh_token) {
-              throw new Error('Missing required OAuth2 tokens');
+            const result = await invitationService.inviteMultipleUsers({
+              courseId: courseId,
+              inviterUserId: req.user.id,
+              inviteeEmails: studentEmails,
+              inviteeRole: 'student',
+              inviterName: req.user.name,
+              courseName: selectedCourse.name
+            });
+            
+            // Format success message
+            const successList = result.successful.map(inv => `✅ ${inv.email}`).join('\n');
+            const failedList = result.failed.length > 0 
+              ? `\n\n❌ **Failed:**\n${result.failed.map(f => `• ${f.email}: ${f.error}`).join('\n')}`
+              : '';
+            
+            const message = `📧 **Invitations Sent!**\n\n**Course:** ${selectedCourse.name}\n\n**Successfully invited:**\n${successList}${failedList}\n\n${result.successful.length} invitation email(s) sent. Students will receive an email with a link to join the course.`;
+            
+            return {
+              message,
+              conversationId: req.body.conversationId,
+              result
+            };
+          } catch (error) {
+            console.error('Error in INVITE_STUDENTS:', error);
+            
+            // Handle specific errors
+            if (error.message.includes('already enrolled')) {
+              return {
+                message: `Some students are already enrolled in this course. ${error.message}`,
+                conversationId: req.body.conversationId
+              };
             }
             
-            // First, verify the user has teacher/owner permissions on this specific course
-            const { getCourse } = require('../classroomService');
-            const courseDetails = await getCourse(
+            if (error.message.includes('already been sent')) {
+              return {
+                message: `An invitation has already been sent to one or more of these email addresses for this course.`,
+                conversationId: req.body.conversationId
+              };
+            }
+            
+            return {
+              message: `I encountered an error while sending invitations: ${error.message}. Please try again.`,
+              error: error.message,
+              conversationId: req.body.conversationId
+            };
+          }
+        } catch (error) {
+          console.error('Error in INVITE_STUDENTS outer:', error);
+          return {
+            message: "Sorry, I encountered an error while trying to invite students. Please try again.",
+            error: error.message,
+            conversationId: req.body.conversationId
+          };
+        }
+
+      case 'STUDENT_JOIN_SUGGESTION':
+        // Extract potential course names and emails from the message
+        const messageText = req.body.message || '';
+        const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+        const emails = messageText.match(emailRegex) || [];
+        
+        // Try to extract course names from common patterns
+        const coursePatterns = [
               {
                 access_token: user.access_token,
                 refresh_token: user.refresh_token
