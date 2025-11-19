@@ -91,22 +91,11 @@ async function initDatabase() {
         await pool.query(`ALTER TABLE courses ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`);
       }
       
-      // If owner_id exists but teacher_id doesn't have values, sync them with type casting
+      // If owner_id exists but teacher_id doesn't have values, sync them
       if (columns.includes('owner_id') && columns.includes('teacher_id')) {
         console.log('🔄 Syncing owner_id and teacher_id columns...');
-        // Only sync if owner_id is numeric (can be cast to integer)
-        await pool.query(`
-          UPDATE courses 
-          SET teacher_id = CAST(owner_id AS INTEGER) 
-          WHERE teacher_id IS NULL 
-          AND owner_id ~ '^[0-9]+$';
-        `);
-        await pool.query(`
-          UPDATE courses 
-          SET owner_id = CAST(teacher_id AS VARCHAR) 
-          WHERE owner_id IS NULL;
-        `);
-        console.log('✅ Synced teacher_id and owner_id columns');
+        await pool.query(`UPDATE courses SET teacher_id = owner_id WHERE teacher_id IS NULL;`);
+        await pool.query(`UPDATE courses SET owner_id = teacher_id WHERE owner_id IS NULL;`);
       }
       
       console.log('✅ Courses table structure verified');
@@ -266,7 +255,59 @@ async function initDatabase() {
       `);
       console.log('✅ Invitations indexes created');
     } else {
-      console.log('✅ Invitations table already exists');
+      console.log('⚠️  Invitations table already exists. Checking structure...');
+      const invColumns = checkInvitationsTable.rows.map(row => row.column_name);
+      
+      // Add missing columns if needed
+      if (!invColumns.includes('invitee_email')) {
+        console.log('➕ Adding invitee_email column to invitations table...');
+        await pool.query(`ALTER TABLE invitations ADD COLUMN invitee_email VARCHAR(255);`);
+      }
+      
+      if (!invColumns.includes('invitee_role')) {
+        console.log('➕ Adding invitee_role column to invitations table...');
+        await pool.query(`ALTER TABLE invitations ADD COLUMN invitee_role VARCHAR(50) CHECK (invitee_role IN ('student', 'teacher'));`);
+      }
+      
+      if (!invColumns.includes('inviter_user_id')) {
+        console.log('➕ Adding inviter_user_id column to invitations table...');
+        await pool.query(`ALTER TABLE invitations ADD COLUMN inviter_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;`);
+      }
+      
+      if (!invColumns.includes('accepted_user_id')) {
+        console.log('➕ Adding accepted_user_id column to invitations table...');
+        await pool.query(`ALTER TABLE invitations ADD COLUMN accepted_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL;`);
+      }
+      
+      if (!invColumns.includes('accepted_at')) {
+        console.log('➕ Adding accepted_at column to invitations table...');
+        await pool.query(`ALTER TABLE invitations ADD COLUMN accepted_at TIMESTAMP;`);
+      }
+      
+      if (!invColumns.includes('expires_at')) {
+        console.log('➕ Adding expires_at column to invitations table...');
+        await pool.query(`ALTER TABLE invitations ADD COLUMN expires_at TIMESTAMP;`);
+      }
+      
+      if (!invColumns.includes('created_at')) {
+        console.log('➕ Adding created_at column to invitations table...');
+        await pool.query(`ALTER TABLE invitations ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`);
+      }
+      
+      if (!invColumns.includes('updated_at')) {
+        console.log('➕ Adding updated_at column to invitations table...');
+        await pool.query(`ALTER TABLE invitations ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`);
+      }
+      
+      // Create indexes for invitations if they don't exist
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_invitations_token ON invitations(token);
+        CREATE INDEX IF NOT EXISTS idx_invitations_email ON invitations(invitee_email);
+        CREATE INDEX IF NOT EXISTS idx_invitations_course_id ON invitations(course_id);
+        CREATE INDEX IF NOT EXISTS idx_invitations_status ON invitations(status);
+      `);
+      
+      console.log('✅ Invitations table structure verified');
     }
     
     console.log('🎉 Database initialization completed successfully!');
