@@ -16,7 +16,7 @@ router.patch('/agents/:agentId/status', automationController.toggleAgentStatus);
 
 // ==================== EMAIL CONFIGURATION ====================
 router.get('/agents/:agentId/gmail/auth', automationController.setupGmailOAuth);
-router.get('/gmail/callback', automationController.handleGmailCallback);
+// Gmail callback is handled by /api/auth/google/callback with state parameter
 router.put('/agents/:agentId/email-config', automationController.updateEmailConfig);
 
 // ==================== WORKFLOWS ====================

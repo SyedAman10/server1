@@ -4,6 +4,7 @@ const automationExecutionModel = require('../models/automationExecution.model');
 const emailAgentConfigModel = require('../models/emailAgentConfig.model');
 const gmailService = require('../services/automation/gmailIntegrationService');
 const { executeWorkflow } = require('../services/automation/automationExecutionEngine');
+const { getAuthUrl, getTokensFromCode } = require('../integrations/google.oauth');
 
 /**
  * Automation Controller
@@ -260,8 +261,13 @@ exports.setupGmailOAuth = async (req, res) => {
       });
     }
 
-    // Generate OAuth URL
-    const authUrl = gmailService.getAuthUrl(userId, agentId);
+    // Generate OAuth URL using existing integration with state parameter
+    const state = JSON.stringify({ 
+      type: 'automation',
+      userId, 
+      agentId 
+    });
+    const authUrl = getAuthUrl(state);
 
     return res.status(200).json({
       success: true,
@@ -276,22 +282,11 @@ exports.setupGmailOAuth = async (req, res) => {
   }
 };
 
-// Handle Gmail OAuth callback
-exports.handleGmailCallback = async (req, res) => {
+// Handle Gmail OAuth callback (called from main auth callback)
+exports.handleGmailCallback = async (code, userId, agentId) => {
   try {
-    const { code, state } = req.query;
-
-    if (!code || !state) {
-      return res.status(400).json({
-        success: false,
-        message: 'Missing code or state parameter'
-      });
-    }
-
-    const { userId, agentId } = JSON.parse(state);
-
-    // Exchange code for tokens
-    const tokens = await gmailService.getTokensFromCode(code);
+    // Exchange code for tokens using existing integration
+    const tokens = await getTokensFromCode(code);
 
     // Get Gmail profile
     const profile = await gmailService.getProfile(tokens);
@@ -315,17 +310,16 @@ exports.handleGmailCallback = async (req, res) => {
       });
     }
 
-    return res.status(200).json({
+    console.log(`✅ Gmail authorization successful for agent ${agentId}: ${profile.emailAddress}`);
+
+    return {
       success: true,
       message: 'Gmail authorization successful',
       emailAddress: profile.emailAddress
-    });
+    };
   } catch (error) {
     console.error('Error handling Gmail callback:', error);
-    return res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to handle Gmail callback'
-    });
+    throw error;
   }
 };
 

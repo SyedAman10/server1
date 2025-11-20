@@ -14,6 +14,8 @@ const scopes = [
   'https://www.googleapis.com/auth/drive',
   'https://www.googleapis.com/auth/forms.body',
   'https://www.googleapis.com/auth/gmail.send',
+  'https://www.googleapis.com/auth/gmail.readonly',
+  'https://www.googleapis.com/auth/gmail.modify',
   'https://www.googleapis.com/auth/userinfo.profile',
   'https://www.googleapis.com/auth/userinfo.email',
   'https://www.googleapis.com/auth/classroom.rosters',
@@ -21,11 +23,12 @@ const scopes = [
   'https://www.googleapis.com/auth/classroom.student-submissions.me.readonly'
 ];
 
-const getAuthUrl = () =>
+const getAuthUrl = (state = null) =>
   oauth2Client.generateAuthUrl({
     access_type: 'offline',
     scope: scopes,
     prompt: 'consent',
+    ...(state && { state })
   });
 
 const getTokensFromCode = async (code) => {

@@ -118,7 +118,30 @@ const handleWebAuth = async (req, res) => {
     const { code, state } = req.query;
     console.log('Auth callback received:', { code, state });
     
-    if (!state || !VALID_ROLES.includes(state)) {
+    // Check if state is JSON (for automation) or a simple role string
+    let parsedState;
+    try {
+      parsedState = JSON.parse(state);
+    } catch (e) {
+      parsedState = { type: 'classroom', role: state };
+    }
+
+    // Handle automation Gmail OAuth callback
+    if (parsedState.type === 'automation') {
+      const automationController = require('./automation.controller');
+      const result = await automationController.handleGmailCallback(code, parsedState.userId, parsedState.agentId);
+      
+      const frontendUrl = getFrontendUrl();
+      const redirectUrl = new URL(frontendUrl + '/automation');
+      redirectUrl.searchParams.set('success', 'true');
+      redirectUrl.searchParams.set('message', 'Gmail connected successfully');
+      redirectUrl.searchParams.set('agentId', parsedState.agentId);
+      
+      return res.redirect(redirectUrl.toString());
+    }
+
+    // Handle classroom OAuth (original flow)
+    if (!parsedState.role || !VALID_ROLES.includes(parsedState.role)) {
       console.error('Invalid role in state:', state);
       return res.status(400).json({
         success: false,
@@ -132,7 +155,7 @@ const handleWebAuth = async (req, res) => {
     const oauth2 = google.oauth2({ auth: webOAuthClient, version: 'v2' });
     const { data: userInfo } = await oauth2.userinfo.get();
     
-    const user = await handleUserAuth(userInfo, tokens, state);
+    const user = await handleUserAuth(userInfo, tokens, parsedState.role);
 
     console.log('✅ Web Auth Successful:', {
       email: user.userData.email,

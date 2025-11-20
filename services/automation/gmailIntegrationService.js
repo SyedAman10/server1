@@ -1,28 +1,30 @@
 const { google } = require('googleapis');
 const nodemailer = require('nodemailer');
+const { oauth2Client } = require('../../integrations/google.oauth');
 
 /**
  * Gmail Integration Service
  * Handles Gmail OAuth, reading, and sending emails for automation agents
+ * Uses the shared OAuth client from google.oauth.js
  */
 
-// Create OAuth2 client
+// Create OAuth2 client with tokens
 function createOAuth2Client(tokens) {
-  const oauth2Client = new google.auth.OAuth2(
+  const client = new google.auth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
-    process.env.GOOGLE_REDIRECT_URI
+    process.env.REDIRECT_URI
   );
 
   if (tokens) {
-    oauth2Client.setCredentials({
+    client.setCredentials({
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token,
       expiry_date: tokens.expiry_date
     });
   }
 
-  return oauth2Client;
+  return client;
 }
 
 // Get Gmail client
@@ -31,39 +33,13 @@ function getGmailClient(tokens) {
   return google.gmail({ version: 'v1', auth });
 }
 
-// Get authorization URL for Gmail OAuth
-function getAuthUrl(userId, agentId) {
-  const oauth2Client = createOAuth2Client();
-  
-  const scopes = [
-    'https://www.googleapis.com/auth/gmail.readonly',
-    'https://www.googleapis.com/auth/gmail.send',
-    'https://www.googleapis.com/auth/gmail.modify'
-  ];
-
-  const authUrl = oauth2Client.generateAuthUrl({
-    access_type: 'offline',
-    scope: scopes,
-    state: JSON.stringify({ userId, agentId }) // Pass state for callback
-  });
-
-  return authUrl;
-}
-
-// Exchange authorization code for tokens
-async function getTokensFromCode(code) {
-  const oauth2Client = createOAuth2Client();
-  const { tokens } = await oauth2Client.getToken(code);
-  return tokens;
-}
-
 // Refresh access token
 async function refreshAccessToken(refreshToken) {
-  const oauth2Client = createOAuth2Client({
+  const client = createOAuth2Client({
     refresh_token: refreshToken
   });
 
-  const { credentials } = await oauth2Client.refreshAccessToken();
+  const { credentials } = await client.refreshAccessToken();
   return credentials;
 }
 
@@ -326,8 +302,6 @@ async function getProfile(tokens) {
 module.exports = {
   createOAuth2Client,
   getGmailClient,
-  getAuthUrl,
-  getTokensFromCode,
   refreshAccessToken,
   listEmails,
   getEmailById,
