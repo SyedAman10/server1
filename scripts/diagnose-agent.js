@@ -124,7 +124,7 @@ async function diagnoseAgent() {
     console.log('\n6️⃣  RECENT EXECUTIONS:');
     console.log('─'.repeat(60));
     const executionsQuery = await pool.query(
-      'SELECT id, workflow_id, status, created_at FROM automation_executions WHERE agent_id = $1 ORDER BY created_at DESC LIMIT 5',
+      'SELECT id, workflow_id, status, started_at FROM automation_executions WHERE agent_id = $1 ORDER BY started_at DESC LIMIT 5',
       [agentId]
     );
     
@@ -137,7 +137,7 @@ async function diagnoseAgent() {
         console.log(`   - ID: ${exec.id}`);
         console.log(`   - Workflow: ${exec.workflow_id}`);
         console.log(`   - Status: ${exec.status}`);
-        console.log(`   - Date: ${exec.created_at}`);
+        console.log(`   - Date: ${exec.started_at}`);
       });
     }
     
