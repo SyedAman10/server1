@@ -57,6 +57,18 @@ exports.getUserAgents = async (req, res) => {
       ? await automationAgentModel.getAgentsByType(userId, type)
       : await automationAgentModel.getAgentsByUser(userId);
 
+    // Add email config for email agents
+    for (const agent of agents) {
+      if (agent.type.includes('email')) {
+        const emailConfig = await emailAgentConfigModel.getEmailConfigByAgentId(agent.id);
+        agent.emailConfig = emailConfig;
+        
+        // Add convenience fields for frontend
+        agent.isGmailConnected = !!(emailConfig && emailConfig.email_address);
+        agent.connectedEmail = emailConfig ? emailConfig.email_address : null;
+      }
+    }
+
     return res.status(200).json({
       success: true,
       agents,
@@ -98,6 +110,10 @@ exports.getAgent = async (req, res) => {
     if (agent.type.includes('email')) {
       const emailConfig = await emailAgentConfigModel.getEmailConfigByAgentId(agent.id);
       agent.emailConfig = emailConfig;
+      
+      // Add convenience fields for frontend
+      agent.isGmailConnected = !!(emailConfig && emailConfig.email_address);
+      agent.connectedEmail = emailConfig ? emailConfig.email_address : null;
     }
 
     return res.status(200).json({
