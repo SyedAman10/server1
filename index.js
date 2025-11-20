@@ -12,6 +12,7 @@ const audioRoutes = require('./routes/audio.routes'); // New audio routes
 const calendarRoutes = require('./routes/calendar.routes'); // New calendar routes
 const courseRoutes = require('./routes/course.routes'); // New course routes
 const invitationRoutes = require('./routes/invitation.routes'); // New invitation routes
+const automationRoutes = require('./routes/automation.routes'); // Automation system routes
 
 const app = express();
 
@@ -20,7 +21,13 @@ const getCorsOrigins = () => {
   if (process.env.NODE_ENV === 'production') {
     const origins = [
       process.env.FRONTEND_URL || 'https://xytek-classroom-assistant.vercel.app',
-      process.env.BACKEND_URL || 'https://class.xytek.ai'
+      process.env.BACKEND_URL || 'https://class.xytek.ai',
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://localhost:3002',
+      'http://localhost:5000',
+      'http://localhost:5173', // Vite default port
+      'http://localhost:8080'
     ];
     // Remove duplicates
     return [...new Set(origins)];
@@ -29,7 +36,10 @@ const getCorsOrigins = () => {
     process.env.FRONTEND_URL || 'http://localhost:3000',
     process.env.BACKEND_URL || 'http://localhost:3000',
     'http://localhost:3001',
-    'http://localhost:3002'
+    'http://localhost:3002',
+    'http://localhost:5000',
+    'http://localhost:5173', // Vite default port
+    'http://localhost:8080'
   ];
 };
 
@@ -65,6 +75,7 @@ app.use('/api/calendar', calendarRoutes); // Mount calendar routes
 app.use('/api/courses', courseRoutes); // Mount course routes
 app.use('/api/invitations', invitationRoutes); // Mount invitation routes
 app.use('/api/announcements', require('./routes/announcement.routes')); // Mount announcement routes
+app.use('/api/automation', automationRoutes); // Mount automation routes
 
 // OAuth callback route for mobile apps
 app.get('/auth/callback', (req, res) => {
@@ -154,7 +165,14 @@ app.get('/', (req, res) => res.send('AI Classroom Assistant is Live 🚀'));
 // For local development
 if (process.env.NODE_ENV === 'production') {
   const PORT = process.env.PORT || 3000;
-  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+    
+    // Start email polling service for automation agents
+    const emailPollingService = require('./services/automation/emailPollingService');
+    emailPollingService.startEmailPolling(60); // Poll every 60 seconds
+    console.log('📧 Email polling service started');
+  });
 }
 
 // Export for Vercel

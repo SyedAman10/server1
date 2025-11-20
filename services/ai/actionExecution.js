@@ -1979,37 +1979,37 @@ async function makeApiCall(url, method, data, userToken, req) {
             console.log('DEBUG: Internal createCourse call successful');
             return result.data;
             
-        } else if (method === 'POST' && endpoint.includes('/announcements')) {
+          } else if (method === 'POST' && endpoint.includes('/announcements')) {
           // For createAnnouncement, use our database system
-          const courseId = endpoint.split('/')[1]; // Extract courseId from /{courseId}/announcements
+            const courseId = endpoint.split('/')[1]; // Extract courseId from /{courseId}/announcements
           console.log('DEBUG: Creating announcement with new database system for courseId:', courseId);
-          
-          // Validate required fields
+            
+            // Validate required fields
           if (!data.content && !data.text) {
             throw new Error('Announcement content is required');
-          }
-          
-          const announcementData = {
+            }
+            
+            const announcementData = {
             courseId: courseId,
             teacherId: req.user.id,
             title: data.title || null,
             content: data.content || data.text
-          };
-          
-          console.log('DEBUG: Creating announcement with data:', announcementData);
-          
+            };
+            
+            console.log('DEBUG: Creating announcement with data:', announcementData);
+            
           // Use the announcement service
           const announcementService = require('../../services/announcementService');
           const result = await announcementService.createAnnouncement(announcementData);
           
           console.log('DEBUG: Announcement created successfully:', result);
           return result;
-          
-        } else if (method === 'GET' && endpoint.includes('/announcements')) {
+            
+          } else if (method === 'GET' && endpoint.includes('/announcements')) {
           // For getAnnouncements, use our database system
           console.log('DEBUG: Getting announcements with new database system');
           
-          const courseId = endpoint.split('/')[1]; // Extract courseId from /{courseId}/announcements
+            const courseId = endpoint.split('/')[1]; // Extract courseId from /{courseId}/announcements
           
           // Use the announcement model
           const announcementModel = require('../../models/announcement.model');
@@ -3485,22 +3485,22 @@ Ask your teacher for the class code - they can find it in:
         });
         
         if (!response || !response.success) {
-          return {
+            return {
             message: `Sorry, I couldn't create the announcement. ${response?.message || 'Please try again.'}`,
-            conversationId: req.body.conversationId
-          };
-        }
-        
-        // ✅ COMPLETE ACTION: Mark the ongoing action as completed
-        if (conversationId) {
-          completeOngoingAction(conversationId);
-        }
+              conversationId: req.body.conversationId
+            };
+          }
+          
+          // ✅ COMPLETE ACTION: Mark the ongoing action as completed
+          if (conversationId) {
+            completeOngoingAction(conversationId);
+          }
 
-        return {
+          return {
           message: `Perfect! I've posted your announcement "${parameters.announcementText}" in ${selectedCourse.name}. ${response.message}`,
-          announcement: response.announcement,
-          conversationId: conversationId
-        };
+            announcement: response.announcement,
+            conversationId: conversationId
+          };
         } catch (error) {
           console.error('Error in AI_ASSISTED_ANNOUNCEMENT:', error);
           
@@ -3574,28 +3574,28 @@ Ask your teacher for the class code - they can find it in:
           }
           
         // Exact match - get the announcements using our database system
-        const courseId = selectedCourse.id;
+          const courseId = selectedCourse.id;
         const announcementModel = require('../../models/announcement.model');
         const announcements = await announcementModel.getAnnouncementsByCourse(courseId);
-        
-        if (!announcements || announcements.length === 0) {
-          return {
-            message: `📢 **${selectedCourse.name}**\n\nNo announcements found yet. This course is ready for your first announcement!`,
-            conversationId: req.body.conversationId
-          };
-        }
-        
-        const announcementList = announcements.map((announcement, index) => {
+          
+          if (!announcements || announcements.length === 0) {
+            return {
+              message: `📢 **${selectedCourse.name}**\n\nNo announcements found yet. This course is ready for your first announcement!`,
+              conversationId: req.body.conversationId
+            };
+          }
+          
+          const announcementList = announcements.map((announcement, index) => {
           const date = new Date(announcement.created_at).toLocaleDateString();
           const titleText = announcement.title ? `**${announcement.title}**\n   ` : '';
           return `${index + 1}. ${titleText}${announcement.content}\n   📅 ${date} • By ${announcement.teacher_name}`;
-        }).join('\n\n');
-        
-        return {
-          message: `📢 **${selectedCourse.name} - Announcements**\n\n${announcementList}\n\nTotal: ${announcements.length} announcement${announcements.length !== 1 ? 's' : ''}`,
-          announcements: announcements,
-          conversationId: req.body.conversationId
-        };
+          }).join('\n\n');
+          
+          return {
+            message: `📢 **${selectedCourse.name} - Announcements**\n\n${announcementList}\n\nTotal: ${announcements.length} announcement${announcements.length !== 1 ? 's' : ''}`,
+            announcements: announcements,
+            conversationId: req.body.conversationId
+          };
         } catch (error) {
           console.error('Error in GET_ANNOUNCEMENTS:', error);
           return {

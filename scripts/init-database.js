@@ -465,6 +465,145 @@ async function initDatabase() {
       console.log('✅ Announcements table structure verified');
     }
     
+    // Create automation_agents table
+    const checkAgentsTable = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'automation_agents';
+    `);
+    
+    if (checkAgentsTable.rows.length === 0) {
+      await pool.query(`
+        CREATE TABLE automation_agents (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+          name VARCHAR(255) NOT NULL,
+          description TEXT,
+          type VARCHAR(50) NOT NULL CHECK (type IN ('email_inbound', 'email_outbound', 'webhook', 'scheduled')),
+          status VARCHAR(50) DEFAULT 'inactive' CHECK (status IN ('active', 'inactive', 'paused', 'error')),
+          config JSONB NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          last_run_at TIMESTAMP,
+          next_run_at TIMESTAMP
+        );
+      `);
+      console.log('✅ Automation agents table created successfully');
+      
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_agents_user_id ON automation_agents(user_id);
+        CREATE INDEX IF NOT EXISTS idx_agents_type ON automation_agents(type);
+        CREATE INDEX IF NOT EXISTS idx_agents_status ON automation_agents(status);
+      `);
+      console.log('✅ Automation agents indexes created');
+    } else {
+      console.log('✅ Automation agents table already exists');
+    }
+    
+    // Create automation_workflows table
+    const checkWorkflowsTable = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'automation_workflows';
+    `);
+    
+    if (checkWorkflowsTable.rows.length === 0) {
+      await pool.query(`
+        CREATE TABLE automation_workflows (
+          id SERIAL PRIMARY KEY,
+          agent_id INTEGER REFERENCES automation_agents(id) ON DELETE CASCADE,
+          name VARCHAR(255) NOT NULL,
+          description TEXT,
+          trigger_config JSONB NOT NULL,
+          actions JSONB NOT NULL,
+          conditions JSONB,
+          status VARCHAR(50) DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'draft')),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      console.log('✅ Automation workflows table created successfully');
+      
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_workflows_agent_id ON automation_workflows(agent_id);
+        CREATE INDEX IF NOT EXISTS idx_workflows_status ON automation_workflows(status);
+      `);
+      console.log('✅ Automation workflows indexes created');
+    } else {
+      console.log('✅ Automation workflows table already exists');
+    }
+    
+    // Create automation_executions table
+    const checkExecutionsTable = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'automation_executions';
+    `);
+    
+    if (checkExecutionsTable.rows.length === 0) {
+      await pool.query(`
+        CREATE TABLE automation_executions (
+          id SERIAL PRIMARY KEY,
+          agent_id INTEGER REFERENCES automation_agents(id) ON DELETE CASCADE,
+          workflow_id INTEGER REFERENCES automation_workflows(id) ON DELETE CASCADE,
+          status VARCHAR(50) NOT NULL CHECK (status IN ('success', 'failed', 'running', 'cancelled')),
+          trigger_data JSONB,
+          execution_data JSONB,
+          error_message TEXT,
+          started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          completed_at TIMESTAMP,
+          duration_ms INTEGER
+        );
+      `);
+      console.log('✅ Automation executions table created successfully');
+      
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_executions_agent_id ON automation_executions(agent_id);
+        CREATE INDEX IF NOT EXISTS idx_executions_workflow_id ON automation_executions(workflow_id);
+        CREATE INDEX IF NOT EXISTS idx_executions_status ON automation_executions(status);
+        CREATE INDEX IF NOT EXISTS idx_executions_started_at ON automation_executions(started_at);
+      `);
+      console.log('✅ Automation executions indexes created');
+    } else {
+      console.log('✅ Automation executions table already exists');
+    }
+    
+    // Create email_agent_configs table (specific for Gmail agents)
+    const checkEmailConfigsTable = await pool.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'email_agent_configs';
+    `);
+    
+    if (checkEmailConfigsTable.rows.length === 0) {
+      await pool.query(`
+        CREATE TABLE email_agent_configs (
+          id SERIAL PRIMARY KEY,
+          agent_id INTEGER UNIQUE REFERENCES automation_agents(id) ON DELETE CASCADE,
+          email_address VARCHAR(255) NOT NULL,
+          provider VARCHAR(50) DEFAULT 'gmail' CHECK (provider IN ('gmail', 'outlook', 'custom')),
+          oauth_tokens JSONB,
+          imap_config JSONB,
+          smtp_config JSONB,
+          filters JSONB,
+          polling_interval INTEGER DEFAULT 300,
+          last_email_id VARCHAR(255),
+          last_checked_at TIMESTAMP,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      console.log('✅ Email agent configs table created successfully');
+      
+      await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_email_configs_agent_id ON email_agent_configs(agent_id);
+        CREATE INDEX IF NOT EXISTS idx_email_configs_email ON email_agent_configs(email_address);
+      `);
+      console.log('✅ Email agent configs indexes created');
+    } else {
+      console.log('✅ Email agent configs table already exists');
+    }
+    
     console.log('🎉 Database initialization completed successfully!');
     
   } catch (error) {
