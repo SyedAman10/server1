@@ -41,7 +41,7 @@ async function initDatabase() {
       await pool.query(`
         CREATE TABLE users (
           id SERIAL PRIMARY KEY,
-          email VARCHAR(255) UNIQUE NOT NULL,
+          email VARCHAR(255) NOT NULL,
           password VARCHAR(255) NOT NULL,
           name VARCHAR(255) NOT NULL,
           picture VARCHAR(500),
@@ -49,17 +49,37 @@ async function initDatabase() {
           access_token TEXT,
           refresh_token TEXT,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE (email, role)
         );
       `);
       console.log('✅ Users table created successfully');
     }
     
-    // Create index on email for faster lookups
+    // Drop old email unique constraint if exists
     await pool.query(`
-      CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+      ALTER TABLE users DROP CONSTRAINT IF EXISTS users_email_key;
+      DROP INDEX IF EXISTS users_email_idx;
+      DROP INDEX IF EXISTS idx_users_email;
     `);
-    console.log('✅ Users email index created');
+    
+    // Add composite unique constraint on (email, role)
+    try {
+      await pool.query(`
+        ALTER TABLE users 
+        ADD CONSTRAINT users_email_role_key UNIQUE (email, role);
+      `);
+    } catch (err) {
+      if (!err.message.includes('already exists')) {
+        console.log('⚠️  Constraint may already exist:', err.message);
+      }
+    }
+    
+    // Create index for faster lookups
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_users_email_role ON users(email, role);
+    `);
+    console.log('✅ Users (email, role) unique constraint and index created');
     
     // Check if courses table exists
     const checkCoursesTable = await pool.query(`

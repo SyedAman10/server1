@@ -43,6 +43,18 @@ async function getUserByEmail(email) {
   return result.rows[0];
 }
 
+// Get user by email and role (for multi-role accounts)
+async function getUserByEmailAndRole(email, role) {
+  const result = await db.query('SELECT * FROM users WHERE email = $1 AND role = $2', [email, role]);
+  return result.rows[0];
+}
+
+// Get all accounts with same email (for login role selection)
+async function getUsersByEmail(email) {
+  const result = await db.query('SELECT id, email, name, role, picture FROM users WHERE email = $1', [email]);
+  return result.rows;
+}
+
 // Get user by ID
 async function getUserById(id) {
   const result = await db.query('SELECT * FROM users WHERE id = $1', [id]);
@@ -90,7 +102,9 @@ async function updateUser(id, updates) {
 module.exports = { 
   createUser, 
   upsertUser, 
-  getUserByEmail, 
+  getUserByEmail,
+  getUserByEmailAndRole,
+  getUsersByEmail,
   getUserById,
   verifyPassword,
   updateUser

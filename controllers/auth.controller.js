@@ -1,6 +1,6 @@
 const { google } = require('googleapis');
 const jwt = require('jsonwebtoken');
-const { upsertUser, createUser, getUserByEmail, verifyPassword } = require('../models/user.model');
+const { upsertUser, createUser, getUserByEmail, getUserByEmailAndRole, getUsersByEmail, verifyPassword } = require('../models/user.model');
 
 // Dynamic URLs based on environment
 const getBackendUrl = () => {
@@ -841,12 +841,12 @@ const signup = async (req, res) => {
       });
     }
 
-    // Check if user already exists
-    const existingUser = await getUserByEmail(email);
+    // Check if user already exists with this email AND role
+    const existingUser = await getUserByEmailAndRole(email, role);
     if (existingUser) {
       return res.status(400).json({
         success: false,
-        error: 'User with this email already exists'
+        error: `User with this email already exists as ${role}`
       });
     }
 
@@ -913,7 +913,7 @@ const signup = async (req, res) => {
 // Login endpoint
 const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, role } = req.body;
 
     // Validate input
     if (!email || !password) {
@@ -923,13 +923,38 @@ const login = async (req, res) => {
       });
     }
 
-    // Get user by email
-    const user = await getUserByEmail(email);
-    if (!user) {
+    // Get all accounts with this email
+    const users = await getUsersByEmail(email);
+    if (!users || users.length === 0) {
       return res.status(401).json({
         success: false,
         error: 'Invalid email or password'
       });
+    }
+
+    // If role is specified, find user with that role
+    let user;
+    if (role) {
+      user = await getUserByEmailAndRole(email, role);
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          error: `No ${role} account found with this email`
+        });
+      }
+    } else {
+      // If no role specified and multiple accounts exist, return available roles
+      if (users.length > 1) {
+        return res.status(200).json({
+          success: false,
+          requiresRole: true,
+          availableRoles: users.map(u => u.role),
+          message: 'Multiple accounts found. Please specify a role.',
+          accounts: users.map(u => ({ role: u.role, name: u.name }))
+        });
+      }
+      // Only one account, use it
+      user = await getUserByEmail(email);
     }
 
     // Verify password
