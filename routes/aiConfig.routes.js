@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const aiConfigController = require('../controllers/aiConfig.controller');
-const { authenticate } = require('../middleware/auth');
+const { authenticate } = require('../middleware/auth.middleware');
 
 /**
  * AI Configuration Routes
