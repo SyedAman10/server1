@@ -3,6 +3,8 @@ const automationWorkflowModel = require('../../models/automationWorkflow.model')
 const automationExecutionModel = require('../../models/automationExecution.model');
 const gmailService = require('./gmailIntegrationService');
 const emailAgentConfigModel = require('../../models/emailAgentConfig.model');
+const aiConfigModel = require('../../models/aiConfiguration.model');
+const aiService = require('./aiService');
 
 /**
  * Automation Execution Engine
@@ -122,6 +124,9 @@ async function executeAction(action, triggerData, agent) {
     
     case 'reply_to_email':
       return await executeReplyToEmailAction(action, triggerData, agent);
+    
+    case 'generate_ai_reply':
+      return await executeGenerateAiReplyAction(action, triggerData, agent);
     
     case 'mark_as_read':
       return await executeMarkAsReadAction(action, triggerData, agent);
@@ -255,6 +260,91 @@ function stripHtml(html) {
   text = text.replace(/\s+/g, ' ').trim();
   
   return text;
+}
+
+// Execute generate AI reply action
+async function executeGenerateAiReplyAction(action, triggerData, agent) {
+  const emailConfig = await emailAgentConfigModel.getEmailConfigByAgentId(agent.id);
+  if (!emailConfig || !emailConfig.oauth_tokens) {
+    throw new Error('Email configuration not found or not authorized');
+  }
+
+  const email = triggerData.email;
+  if (!email) {
+    throw new Error('No email data in trigger');
+  }
+
+  // Get AI configuration
+  const aiConfig = action.config.aiConfigId 
+    ? await aiConfigModel.getAiConfig(agent.user_id, action.config.provider)
+    : await aiConfigModel.getDefaultAiConfig(agent.user_id);
+
+  if (!aiConfig) {
+    throw new Error('No AI configuration found. Please set up your AI provider first.');
+  }
+
+  // Strip HTML from email body
+  const cleanEmailBody = stripHtml(email.body);
+
+  // Generate AI reply
+  console.log('🤖 Generating AI reply...');
+  const aiResponse = await aiService.generateAiReply({
+    provider: aiConfig.provider,
+    apiKey: aiConfig.api_key,
+    modelName: aiConfig.model_name,
+    temperature: action.config.temperature || aiConfig.temperature,
+    maxTokens: action.config.maxTokens || aiConfig.max_tokens,
+    systemPrompt: action.config.systemPrompt || 'You are a helpful email assistant. Write professional, concise, and friendly email replies.',
+    userMessage: cleanEmailBody,
+    emailContext: {
+      from: email.from,
+      subject: email.subject,
+      date: email.date
+    }
+  });
+
+  console.log('✅ AI reply generated:', aiResponse.reply.substring(0, 100) + '...');
+
+  // Format date nicely
+  const formattedDate = new Date(email.date).toLocaleString('en-US', {
+    weekday: 'short',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+
+  // Send the AI-generated reply
+  await gmailService.sendEmail(emailConfig.oauth_tokens, {
+    to: email.from,
+    subject: `Re: ${email.subject}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; font-size: 14px; color: #333;">
+        <p style="white-space: pre-line;">${aiResponse.reply}</p>
+        <br>
+        <div style="border-top: 1px solid #ccc; margin-top: 20px; padding-top: 10px; color: #666;">
+          <p style="margin: 5px 0;"><strong>From:</strong> ${email.from}</p>
+          <p style="margin: 5px 0;"><strong>Date:</strong> ${formattedDate}</p>
+          <p style="margin: 5px 0;"><strong>Subject:</strong> ${email.subject}</p>
+          <br>
+          <div style="border-left: 3px solid #ccc; padding-left: 10px; color: #666;">
+            ${cleanEmailBody}
+          </div>
+        </div>
+      </div>
+    `,
+    body: `${aiResponse.reply}\n\n---------- Original Message ----------\nFrom: ${email.from}\nDate: ${formattedDate}\nSubject: ${email.subject}\n\n${cleanEmailBody}`
+  });
+
+  return { 
+    replyTo: email.from, 
+    originalSubject: email.subject,
+    aiProvider: aiResponse.provider,
+    aiModel: aiResponse.model,
+    tokensUsed: aiResponse.tokensUsed,
+    generatedReply: aiResponse.reply
+  };
 }
 
 // Execute mark as read action

@@ -76,6 +76,7 @@ app.use('/api/courses', courseRoutes); // Mount course routes
 app.use('/api/invitations', invitationRoutes); // Mount invitation routes
 app.use('/api/announcements', require('./routes/announcement.routes')); // Mount announcement routes
 app.use('/api/automation', automationRoutes); // Mount automation routes
+app.use('/api/ai-config', require('./routes/aiConfig.routes')); // AI configuration routes
 
 // OAuth callback route for mobile apps
 app.get('/auth/callback', (req, res) => {
