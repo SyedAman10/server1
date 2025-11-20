@@ -862,8 +862,8 @@ async function detectIntentFallback(message, conversationId) {
     // Extract course name from 'in course X', 'for course X', or 'in X'
     // But NOT if it's a time indicator like "today", "tomorrow", etc.
     if (!isTodaysAssignment) {
-      const courseMatch = message.match(/(?:in|for)\s+(?:course\s+)?([\w\s-]+)/i);
-      if (courseMatch && courseMatch[1]) {
+    const courseMatch = message.match(/(?:in|for)\s+(?:course\s+)?([\w\s-]+)/i);
+    if (courseMatch && courseMatch[1]) {
         const extractedName = courseMatch[1].trim();
         // Filter out time indicators
         const timeIndicators = ['today', 'tomorrow', 'yesterday', 'tonight', 'this week', 'next week'];

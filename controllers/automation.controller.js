@@ -383,7 +383,7 @@ exports.updateEmailConfig = async (req, res) => {
 // Create workflow
 exports.createWorkflow = async (req, res) => {
   try {
-    const { agentId, name, description, triggerConfig, actions, conditions } = req.body;
+    const { agentId, name, description, triggerConfig, actions, conditions, status } = req.body;
     const userId = req.user.id;
 
     if (!agentId || !name || !triggerConfig || !actions) {
@@ -408,7 +408,8 @@ exports.createWorkflow = async (req, res) => {
       description,
       triggerConfig,
       actions,
-      conditions
+      conditions,
+      status: status || 'active'  // Include status from request, default to 'active'
     });
 
     return res.status(201).json({
