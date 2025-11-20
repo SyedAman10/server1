@@ -185,33 +185,48 @@ async function sendEmail(tokens, { to, cc, bcc, subject, body, html, attachments
   try {
     const gmail = getGmailClient(tokens);
     
-    // Build email message
+    // Build email message with proper multipart structure
+    const boundary = '----=_Part_' + Date.now();
     const messageParts = [
-      'Content-Type: multipart/mixed; boundary="boundary"\n',
       'MIME-Version: 1.0\n',
       `To: ${to}\n`,
       cc ? `Cc: ${cc}\n` : '',
       bcc ? `Bcc: ${bcc}\n` : '',
-      `Subject: ${subject}\n\n`,
-      '--boundary\n',
-      html ? 'Content-Type: text/html; charset=UTF-8\n\n' : 'Content-Type: text/plain; charset=UTF-8\n\n',
-      html || body,
-      '\n'
+      `Subject: ${subject}\n`,
+      `Content-Type: multipart/alternative; boundary="${boundary}"\n\n`,
+      `--${boundary}\n`,
+      'Content-Type: text/plain; charset=UTF-8\n',
+      'Content-Transfer-Encoding: quoted-printable\n\n',
+      body || '',
+      '\n\n'
     ];
-
-    // Add attachments
-    for (const attachment of attachments) {
+    
+    // Add HTML part if provided
+    if (html) {
       messageParts.push(
-        '--boundary\n',
-        `Content-Type: ${attachment.mimeType || 'application/octet-stream'}; name="${attachment.filename}"\n`,
-        'Content-Transfer-Encoding: base64\n',
-        `Content-Disposition: attachment; filename="${attachment.filename}"\n\n`,
-        attachment.data.toString('base64'),
-        '\n'
+        `--${boundary}\n`,
+        'Content-Type: text/html; charset=UTF-8\n',
+        'Content-Transfer-Encoding: quoted-printable\n\n',
+        html,
+        '\n\n'
       );
     }
+    
+    messageParts.push(`--${boundary}--\n`);
 
-    messageParts.push('--boundary--');
+    // Add attachments if any
+    if (attachments && attachments.length > 0) {
+      for (const attachment of attachments) {
+        messageParts.push(
+          `--${boundary}\n`,
+          `Content-Type: ${attachment.mimeType || 'application/octet-stream'}; name="${attachment.filename}"\n`,
+          'Content-Transfer-Encoding: base64\n',
+          `Content-Disposition: attachment; filename="${attachment.filename}"\n\n`,
+          attachment.data.toString('base64'),
+          '\n'
+        );
+      }
+    }
 
     const message = messageParts.join('');
     const encodedMessage = Buffer.from(message)

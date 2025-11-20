@@ -198,14 +198,63 @@ async function executeReplyToEmailAction(action, triggerData, agent) {
   }
 
   const replyBody = replaceVariables(action.config.replyBody, triggerData);
+  
+  // Strip HTML tags from original email body
+  const cleanBody = stripHtml(email.body);
+  
+  // Format date nicely
+  const formattedDate = new Date(email.date).toLocaleString('en-US', {
+    weekday: 'short',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
 
   await gmailService.sendEmail(emailConfig.oauth_tokens, {
     to: email.from,
     subject: `Re: ${email.subject}`,
-    body: `${replyBody}\n\n---------- Original message ---------\nFrom: ${email.from}\nDate: ${email.date}\nSubject: ${email.subject}\n\n${email.body}`
+    html: `
+      <div style="font-family: Arial, sans-serif; font-size: 14px; color: #333;">
+        <p style="white-space: pre-line;">${replyBody}</p>
+        <br>
+        <div style="border-top: 1px solid #ccc; margin-top: 20px; padding-top: 10px; color: #666;">
+          <p style="margin: 5px 0;"><strong>From:</strong> ${email.from}</p>
+          <p style="margin: 5px 0;"><strong>Date:</strong> ${formattedDate}</p>
+          <p style="margin: 5px 0;"><strong>Subject:</strong> ${email.subject}</p>
+          <br>
+          <div style="border-left: 3px solid #ccc; padding-left: 10px; color: #666;">
+            ${cleanBody}
+          </div>
+        </div>
+      </div>
+    `,
+    body: `${replyBody}\n\n---------- Original Message ----------\nFrom: ${email.from}\nDate: ${formattedDate}\nSubject: ${email.subject}\n\n${cleanBody}`
   });
 
   return { replyTo: email.from, originalSubject: email.subject };
+}
+
+// Helper function to strip HTML tags
+function stripHtml(html) {
+  if (!html) return '';
+  
+  // Remove HTML tags
+  let text = html.replace(/<style[^>]*>.*?<\/style>/gis, '')
+                 .replace(/<script[^>]*>.*?<\/script>/gis, '')
+                 .replace(/<[^>]+>/g, '')
+                 .replace(/&nbsp;/g, ' ')
+                 .replace(/&amp;/g, '&')
+                 .replace(/&lt;/g, '<')
+                 .replace(/&gt;/g, '>')
+                 .replace(/&quot;/g, '"')
+                 .replace(/&#39;/g, "'");
+  
+  // Clean up multiple spaces and newlines
+  text = text.replace(/\s+/g, ' ').trim();
+  
+  return text;
 }
 
 // Execute mark as read action
