@@ -93,11 +93,12 @@ async function updateEmailConfig(agentId, updates) {
 // Get all email configs that need polling
 async function getEmailConfigsForPolling() {
   const query = `
-    SELECT ec.*, a.id as agent_id, a.name as agent_name, a.user_id, a.status as agent_status
+    SELECT ec.*, a.id as agent_id, a.name as agent_name, a.user_id, a.status as agent_status, a.type as agent_type
     FROM email_agent_configs ec
     JOIN automation_agents a ON ec.agent_id = a.id
     WHERE a.status = 'active' 
-      AND a.type = 'email_inbound'
+      AND (a.type = 'email_inbound' OR a.type = 'inbound_email')
+      AND a.type NOT LIKE '%outbound%'
     ORDER BY ec.last_checked_at ASC NULLS FIRST;
   `;
   const result = await db.query(query);
