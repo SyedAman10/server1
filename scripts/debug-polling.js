@@ -9,20 +9,23 @@ async function debugPolling() {
     // 1. Check for active agents
     const agentsResult = await db.query(`
       SELECT 
-        id, 
-        name, 
-        type, 
-        status,
-        oauth_tokens IS NOT NULL as has_tokens,
-        created_at
-      FROM automation_agents 
-      WHERE status = 'active' AND type = 'inbound_email'
+        a.id, 
+        a.name, 
+        a.type, 
+        a.status,
+        ec.oauth_tokens IS NOT NULL as has_tokens,
+        ec.email_address,
+        a.created_at
+      FROM automation_agents a
+      LEFT JOIN email_agent_configs ec ON ec.agent_id = a.id
+      WHERE a.status = 'active' AND a.type = 'inbound_email'
     `);
 
     console.log(`\n📊 Active Inbound Email Agents: ${agentsResult.rows.length}`);
     agentsResult.rows.forEach(agent => {
       console.log(`   - Agent #${agent.id}: "${agent.name}"`);
       console.log(`     Status: ${agent.status}`);
+      console.log(`     Email: ${agent.email_address || 'Not configured'}`);
       console.log(`     Has OAuth: ${agent.has_tokens ? '✅' : '❌'}`);
       console.log(`     Created: ${agent.created_at}`);
     });
@@ -63,12 +66,18 @@ async function debugPolling() {
 
     // 3. Check OAuth token validity
     for (const agent of agentsResult.rows) {
+      if (!agent.has_tokens) {
+        console.log(`\n🔐 OAuth Tokens for Agent #${agent.id}:`);
+        console.log(`   ❌ No OAuth tokens found - needs Gmail authorization!`);
+        continue;
+      }
+
       const tokenResult = await db.query(`
         SELECT 
           oauth_tokens,
           updated_at
-        FROM automation_agents 
-        WHERE id = $1
+        FROM email_agent_configs
+        WHERE agent_id = $1
       `, [agent.id]);
 
       if (tokenResult.rows[0]?.oauth_tokens) {
@@ -129,12 +138,21 @@ async function debugPolling() {
     console.log('✓ If you DON\'T see polling messages:');
     console.log('  └─ Run: pm2 restart index');
     console.log('');
-    console.log('✓ If tokens are EXPIRED:');
-    console.log('  └─ Re-authorize Gmail at:');
-    console.log(`     curl https://class.xytek.ai/api/automation/agents/${agentsResult.rows[0].id}/gmail-auth-url`);
-    console.log('');
-    console.log('✓ Send a test email to: amanullahnaqvi@gmail.com');
-    console.log('  └─ Check response time (should be 15-30 seconds)');
+    
+    if (agentsResult.rows.length > 0) {
+      console.log('✓ If tokens are EXPIRED or MISSING:');
+      console.log('  └─ Re-authorize Gmail at:');
+      agentsResult.rows.forEach(agent => {
+        console.log(`     curl -H "Authorization: Bearer YOUR_TOKEN" https://class.xytek.ai/api/automation/agents/${agent.id}/gmail-auth-url`);
+      });
+      console.log('');
+      
+      const testEmail = agentsResult.rows[0].email_address;
+      if (testEmail) {
+        console.log(`✓ Send a test email to: ${testEmail}`);
+        console.log('  └─ Check response time (should be 15-30 seconds)');
+      }
+    }
     console.log('');
 
   } catch (error) {
