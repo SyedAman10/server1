@@ -1,3 +1,4 @@
+require('dotenv').config();
 const db = require('../utils/db');
 
 async function debugPolling() {
