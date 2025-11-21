@@ -1,4 +1,4 @@
-const { pool } = require('../utils/db');
+const db = require('../utils/db');
 
 async function debugPolling() {
   console.log('\n🔍 LIVE POLLING DEBUG\n');
@@ -6,7 +6,7 @@ async function debugPolling() {
 
   try {
     // 1. Check for active agents
-    const agentsResult = await pool.query(`
+    const agentsResult = await db.query(`
       SELECT 
         id, 
         name, 
@@ -32,7 +32,7 @@ async function debugPolling() {
     }
 
     // 2. Check for active workflows
-    const workflowsResult = await pool.query(`
+    const workflowsResult = await db.query(`
       SELECT 
         w.id,
         w.agent_id,
@@ -62,7 +62,7 @@ async function debugPolling() {
 
     // 3. Check OAuth token validity
     for (const agent of agentsResult.rows) {
-      const tokenResult = await pool.query(`
+      const tokenResult = await db.query(`
         SELECT 
           oauth_tokens,
           updated_at
@@ -91,7 +91,7 @@ async function debugPolling() {
     }
 
     // 4. Check recent executions
-    const executionsResult = await pool.query(`
+    const executionsResult = await db.query(`
       SELECT 
         e.id,
         e.workflow_id,
