@@ -171,7 +171,7 @@ if (process.env.NODE_ENV === 'production') {
     
     // Start email polling service for automation agents
     const emailPollingService = require('./services/automation/emailPollingService');
-    emailPollingService.startEmailPolling(60); // Poll every 60 seconds
+    emailPollingService.startEmailPolling(15); // Poll every 15 seconds for faster responses
     console.log('📧 Email polling service started');
   });
 }

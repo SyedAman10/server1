@@ -235,7 +235,9 @@ async function executeReplyToEmailAction(action, triggerData, agent) {
         </div>
       </div>
     `,
-    body: `${replyBody}\n\n---------- Original Message ----------\nFrom: ${email.from}\nDate: ${formattedDate}\nSubject: ${email.subject}\n\n${cleanBody}`
+    body: `${replyBody}\n\n---------- Original Message ----------\nFrom: ${email.from}\nDate: ${formattedDate}\nSubject: ${email.subject}\n\n${cleanBody}`,
+    threadId: email.threadId,  // Thread the reply properly
+    messageId: email.messageId  // Reference the original message
   });
 
   return { replyTo: email.from, originalSubject: email.subject };
@@ -315,7 +317,7 @@ async function executeGenerateAiReplyAction(action, triggerData, agent) {
     minute: '2-digit'
   });
 
-  // Send the AI-generated reply
+  // Send the AI-generated reply (with proper threading)
   await gmailService.sendEmail(emailConfig.oauth_tokens, {
     to: email.from,
     subject: `Re: ${email.subject}`,
@@ -334,7 +336,9 @@ async function executeGenerateAiReplyAction(action, triggerData, agent) {
         </div>
       </div>
     `,
-    body: `${aiResponse.reply}\n\n---------- Original Message ----------\nFrom: ${email.from}\nDate: ${formattedDate}\nSubject: ${email.subject}\n\n${cleanEmailBody}`
+    body: `${aiResponse.reply}\n\n---------- Original Message ----------\nFrom: ${email.from}\nDate: ${formattedDate}\nSubject: ${email.subject}\n\n${cleanEmailBody}`,
+    threadId: email.threadId,  // Thread the reply properly
+    messageId: email.messageId  // Reference the original message
   });
 
   return { 

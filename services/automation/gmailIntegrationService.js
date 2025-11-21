@@ -148,6 +148,7 @@ function parseEmail(emailData) {
   return {
     id: emailData.id,
     threadId: emailData.threadId,
+    messageId: getHeader('Message-ID'),  // Add for proper email threading
     from: getHeader('From'),
     to: getHeader('To'),
     cc: getHeader('Cc'),
@@ -181,11 +182,11 @@ async function downloadAttachment(tokens, emailId, attachmentId) {
 }
 
 // Send email
-async function sendEmail(tokens, { to, cc, bcc, subject, body, html, attachments = [] }) {
+async function sendEmail(tokens, { to, cc, bcc, subject, body, html, attachments = [], threadId, messageId }) {
   try {
     const gmail = getGmailClient(tokens);
     
-    // Build email message with proper multipart structure
+    // Build email message with proper multipart structure and threading headers
     const boundary = '----=_Part_' + Date.now();
     const messageParts = [
       'MIME-Version: 1.0\n',
@@ -193,6 +194,9 @@ async function sendEmail(tokens, { to, cc, bcc, subject, body, html, attachments
       cc ? `Cc: ${cc}\n` : '',
       bcc ? `Bcc: ${bcc}\n` : '',
       `Subject: ${subject}\n`,
+      // Add threading headers for proper email threading
+      messageId ? `In-Reply-To: ${messageId}\n` : '',
+      messageId ? `References: ${messageId}\n` : '',
       `Content-Type: multipart/alternative; boundary="${boundary}"\n\n`,
       `--${boundary}\n`,
       'Content-Type: text/plain; charset=UTF-8\n',
@@ -235,11 +239,18 @@ async function sendEmail(tokens, { to, cc, bcc, subject, body, html, attachments
       .replace(/\//g, '_')
       .replace(/=+$/, '');
 
+    const requestBody = {
+      raw: encodedMessage
+    };
+    
+    // Add threadId for proper email threading
+    if (threadId) {
+      requestBody.threadId = threadId;
+    }
+    
     const response = await gmail.users.messages.send({
       userId: 'me',
-      requestBody: {
-        raw: encodedMessage
-      }
+      requestBody
     });
 
     return {
