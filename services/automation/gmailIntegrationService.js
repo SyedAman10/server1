@@ -35,12 +35,26 @@ function getGmailClient(tokens) {
 
 // Refresh access token
 async function refreshAccessToken(refreshToken) {
-  const client = createOAuth2Client({
-    refresh_token: refreshToken
-  });
+  try {
+    const client = createOAuth2Client({
+      refresh_token: refreshToken
+    });
 
-  const { credentials } = await client.refreshAccessToken();
-  return credentials;
+    const { credentials } = await client.refreshAccessToken();
+    
+    console.log('✅ OAuth token refreshed successfully');
+    
+    return {
+      access_token: credentials.access_token,
+      refresh_token: credentials.refresh_token || refreshToken, // Keep old refresh token if not provided
+      expiry_date: credentials.expiry_date,
+      token_type: credentials.token_type,
+      scope: credentials.scope
+    };
+  } catch (error) {
+    console.error('❌ Failed to refresh OAuth token:', error.message);
+    throw new Error(`OAuth token refresh failed: ${error.message}. User may need to re-authorize.`);
+  }
 }
 
 // List emails with filters

@@ -98,11 +98,19 @@ async function pollEmailAgent(emailConfig) {
     // Refresh tokens if needed
     let tokens = emailConfig.oauth_tokens;
     if (tokens && tokens.expiry_date && tokens.expiry_date < Date.now()) {
-      console.log(`      Refreshing access token...`);
-      tokens = await gmailService.refreshAccessToken(tokens.refresh_token);
-      await emailAgentConfigModel.updateEmailConfig(emailConfig.agent_id, {
-        oauthTokens: tokens
-      });
+      console.log(`      ⏳ Access token expired, refreshing...`);
+      try {
+        tokens = await gmailService.refreshAccessToken(tokens.refresh_token);
+        await emailAgentConfigModel.updateEmailConfig(emailConfig.agent_id, {
+          oauthTokens: tokens
+        });
+        console.log(`      ✅ Token refreshed successfully`);
+      } catch (refreshError) {
+        console.error(`      ❌ Token refresh failed:`, refreshError.message);
+        console.error(`      → Agent "${emailConfig.agent_name}" needs re-authorization`);
+        // Skip this agent for now - user needs to re-authorize
+        return;
+      }
     }
 
     // Get filters from config

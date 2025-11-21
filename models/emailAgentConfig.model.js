@@ -98,8 +98,6 @@ async function getEmailConfigsForPolling() {
     JOIN automation_agents a ON ec.agent_id = a.id
     WHERE a.status = 'active' 
       AND a.type = 'email_inbound'
-      AND (ec.last_checked_at IS NULL 
-           OR ec.last_checked_at < NOW() - (ec.polling_interval || ' seconds')::INTERVAL)
     ORDER BY ec.last_checked_at ASC NULLS FIRST;
   `;
   const result = await db.query(query);
