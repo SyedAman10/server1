@@ -217,25 +217,16 @@ async function executeReplyToEmailAction(action, triggerData, agent) {
     minute: '2-digit'
   });
 
+  // Send clean reply without quoting original (Gmail threads handle this automatically)
   await gmailService.sendEmail(emailConfig.oauth_tokens, {
     to: email.from,
     subject: `Re: ${email.subject}`,
     html: `
       <div style="font-family: Arial, sans-serif; font-size: 14px; color: #333;">
         <p style="white-space: pre-line;">${replyBody}</p>
-        <br>
-        <div style="border-top: 1px solid #ccc; margin-top: 20px; padding-top: 10px; color: #666;">
-          <p style="margin: 5px 0;"><strong>From:</strong> ${email.from}</p>
-          <p style="margin: 5px 0;"><strong>Date:</strong> ${formattedDate}</p>
-          <p style="margin: 5px 0;"><strong>Subject:</strong> ${email.subject}</p>
-          <br>
-          <div style="border-left: 3px solid #ccc; padding-left: 10px; color: #666;">
-            ${cleanBody}
-          </div>
-        </div>
       </div>
     `,
-    body: `${replyBody}\n\n---------- Original Message ----------\nFrom: ${email.from}\nDate: ${formattedDate}\nSubject: ${email.subject}\n\n${cleanBody}`,
+    body: replyBody,
     threadId: email.threadId,  // Thread the reply properly
     messageId: email.messageId  // Reference the original message
   });
@@ -318,25 +309,16 @@ async function executeGenerateAiReplyAction(action, triggerData, agent) {
   });
 
   // Send the AI-generated reply (with proper threading)
+  // Clean, simple reply without quoting original email (Gmail handles that automatically)
   await gmailService.sendEmail(emailConfig.oauth_tokens, {
     to: email.from,
     subject: `Re: ${email.subject}`,
     html: `
       <div style="font-family: Arial, sans-serif; font-size: 14px; color: #333;">
         <p style="white-space: pre-line;">${aiResponse.reply}</p>
-        <br>
-        <div style="border-top: 1px solid #ccc; margin-top: 20px; padding-top: 10px; color: #666;">
-          <p style="margin: 5px 0;"><strong>From:</strong> ${email.from}</p>
-          <p style="margin: 5px 0;"><strong>Date:</strong> ${formattedDate}</p>
-          <p style="margin: 5px 0;"><strong>Subject:</strong> ${email.subject}</p>
-          <br>
-          <div style="border-left: 3px solid #ccc; padding-left: 10px; color: #666;">
-            ${cleanEmailBody}
-          </div>
-        </div>
       </div>
     `,
-    body: `${aiResponse.reply}\n\n---------- Original Message ----------\nFrom: ${email.from}\nDate: ${formattedDate}\nSubject: ${email.subject}\n\n${cleanEmailBody}`,
+    body: aiResponse.reply,
     threadId: email.threadId,  // Thread the reply properly
     messageId: email.messageId  // Reference the original message
   });
