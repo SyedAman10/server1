@@ -2,6 +2,22 @@ const express = require('express');
 const router = express.Router();
 const automationController = require('../controllers/automation.controller');
 const { authenticate, requireRole } = require('../middleware/auth.middleware');
+const multer = require('multer');
+
+// Configure multer for CSV upload (memory storage)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'text/csv' || file.originalname.endsWith('.csv')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only CSV files are allowed'));
+    }
+  }
+});
 
 // All automation routes require authentication
 router.use(authenticate);
@@ -30,6 +46,12 @@ router.post('/workflows/:workflowId/execute', automationController.executeWorkfl
 // ==================== EXECUTIONS ====================
 router.get('/agents/:agentId/executions', automationController.getExecutionsByAgent);
 router.get('/agents/:agentId/stats', automationController.getExecutionStats);
+
+// ==================== RECIPIENT LISTS ====================
+router.post('/recipient-lists/upload', upload.single('csv'), automationController.uploadCsvRecipients);
+router.get('/recipient-lists', automationController.getRecipientLists);
+router.get('/recipient-lists/:listId', automationController.getRecipientList);
+router.delete('/recipient-lists/:listId', automationController.deleteRecipientList);
 
 module.exports = router;
 

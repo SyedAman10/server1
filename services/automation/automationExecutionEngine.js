@@ -119,6 +119,9 @@ async function executeAction(action, triggerData, agent) {
     case 'send_email':
       return await executeSendEmailAction(action, triggerData, agent);
     
+    case 'send_bulk_email':
+      return await executeSendBulkEmailAction(action, triggerData, agent);
+    
     case 'forward_email':
       return await executeForwardEmailAction(action, triggerData, agent);
     
@@ -127,6 +130,9 @@ async function executeAction(action, triggerData, agent) {
     
     case 'generate_ai_reply':
       return await executeGenerateAiReplyAction(action, triggerData, agent);
+    
+    case 'generate_ai_content':
+      return await executeGenerateAiContentAction(action, triggerData, agent);
     
     case 'mark_as_read':
       return await executeMarkAsReadAction(action, triggerData, agent);
@@ -165,6 +171,86 @@ async function executeSendEmailAction(action, triggerData, agent) {
   });
 
   return { to, subject, body };
+}
+
+// Execute send bulk email action
+async function executeSendBulkEmailAction(action, triggerData, agent) {
+  const recipientListModel = require('../../models/recipientList.model');
+  const emailConfig = await emailAgentConfigModel.getEmailConfigByAgentId(agent.id);
+  
+  if (!emailConfig || !emailConfig.oauth_tokens) {
+    throw new Error('Email configuration not found or not authorized');
+  }
+
+  // Get recipient list
+  const listId = action.config.recipientListId;
+  if (!listId) {
+    throw new Error('Recipient list ID is required for bulk email');
+  }
+
+  const recipientList = await recipientListModel.getRecipientListById(listId);
+  if (!recipientList) {
+    throw new Error(`Recipient list ${listId} not found`);
+  }
+
+  // Check ownership
+  if (recipientList.user_id !== agent.user_id) {
+    throw new Error('You do not have permission to use this recipient list');
+  }
+
+  const recipients = recipientList.recipients;
+  const results = {
+    total: recipients.length,
+    sent: 0,
+    failed: 0,
+    errors: []
+  };
+
+  console.log(`📤 Sending bulk email to ${recipients.length} recipients...`);
+
+  // Send email to each recipient
+  for (let i = 0; i < recipients.length; i++) {
+    const recipient = recipients[i];
+    
+    try {
+      // Merge recipient data with trigger data
+      const recipientData = { ...triggerData, ...recipient };
+      
+      // Replace variables for this specific recipient
+      const to = recipient.email;
+      const subject = replaceVariables(action.config.subject, recipientData);
+      const body = replaceVariables(action.config.body, recipientData);
+      const htmlBody = action.config.htmlBody ? replaceVariables(action.config.htmlBody, recipientData) : undefined;
+
+      await gmailService.sendEmail(emailConfig.oauth_tokens, {
+        to,
+        subject,
+        body,
+        html: htmlBody
+      });
+
+      results.sent++;
+      console.log(`   ✅ Sent to ${to} (${i + 1}/${recipients.length})`);
+
+      // Add delay to avoid rate limiting (Gmail: max 2000/day, ~1 per second)
+      if (i < recipients.length - 1 && action.config.delayBetweenEmails) {
+        const delay = action.config.delayBetweenEmails || 1000; // Default 1 second
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+
+    } catch (error) {
+      results.failed++;
+      results.errors.push({
+        recipient: recipient.email,
+        error: error.message
+      });
+      console.error(`   ❌ Failed to send to ${recipient.email}:`, error.message);
+    }
+  }
+
+  console.log(`✅ Bulk email completed: ${results.sent} sent, ${results.failed} failed`);
+
+  return results;
 }
 
 // Execute forward email action
@@ -330,6 +416,50 @@ async function executeGenerateAiReplyAction(action, triggerData, agent) {
     aiModel: aiResponse.model,
     tokensUsed: aiResponse.tokensUsed,
     generatedReply: aiResponse.reply
+  };
+}
+
+// Execute generate AI content action (for outbound emails)
+async function executeGenerateAiContentAction(action, triggerData, agent) {
+  // Get AI configuration
+  const aiConfig = action.config.aiConfigId 
+    ? await aiConfigModel.getAiConfig(agent.user_id, action.config.provider)
+    : await aiConfigModel.getDefaultAiConfig(agent.user_id);
+
+  if (!aiConfig) {
+    throw new Error('No AI configuration found. Please set up your AI provider first.');
+  }
+
+  // Replace variables in the prompt
+  const prompt = replaceVariables(action.config.prompt, triggerData);
+
+  // Generate AI content
+  console.log('🤖 Generating AI content...');
+  console.log('   Prompt:', prompt.substring(0, 100) + '...');
+  
+  const aiResponse = await aiService.generateContent({
+    provider: aiConfig.provider,
+    apiKey: aiConfig.api_key,
+    modelName: aiConfig.model_name,
+    temperature: action.config.temperature || aiConfig.temperature || 0.7,
+    maxTokens: action.config.maxTokens || aiConfig.max_tokens || 500,
+    systemPrompt: action.config.systemPrompt || 'You are a helpful email writing assistant. Write professional, engaging, and concise email content.',
+    userPrompt: prompt
+  });
+
+  console.log('✅ AI content generated:', aiResponse.content.substring(0, 100) + '...');
+
+  // Store the generated content in triggerData for next actions to use
+  triggerData.ai_content = aiResponse.content;
+  triggerData.ai_provider = aiResponse.provider;
+  triggerData.ai_model = aiResponse.model;
+  triggerData.ai_tokens_used = aiResponse.tokensUsed;
+
+  return { 
+    generatedContent: aiResponse.content,
+    aiProvider: aiResponse.provider,
+    aiModel: aiResponse.model,
+    tokensUsed: aiResponse.tokensUsed
   };
 }
 

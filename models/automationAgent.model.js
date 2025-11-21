@@ -1,7 +1,7 @@
 const db = require('../utils/db');
 
 // Create an automation agent
-async function createAgent({ userId, name, description, type, config, status = 'inactive' }) {
+async function createAgent({ userId, name, description, type, config, status = 'active' }) {
   const query = `
     INSERT INTO automation_agents (user_id, name, description, type, config, status)
     VALUES ($1, $2, $3, $4, $5, $6)

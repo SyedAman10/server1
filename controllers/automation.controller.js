@@ -2,9 +2,12 @@ const automationAgentModel = require('../models/automationAgent.model');
 const automationWorkflowModel = require('../models/automationWorkflow.model');
 const automationExecutionModel = require('../models/automationExecution.model');
 const emailAgentConfigModel = require('../models/emailAgentConfig.model');
+const recipientListModel = require('../models/recipientList.model');
 const gmailService = require('../services/automation/gmailIntegrationService');
 const { executeWorkflow } = require('../services/automation/automationExecutionEngine');
 const { getAuthUrl, getTokensFromCode } = require('../integrations/google.oauth');
+const multer = require('multer');
+const csv = require('csv-parse/sync');
 
 /**
  * Automation Controller
@@ -676,6 +679,185 @@ exports.getExecutionStats = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to get execution stats'
+    });
+  }
+};
+
+// ==================== RECIPIENT LISTS ====================
+
+// Upload CSV and create recipient list
+exports.uploadCsvRecipients = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { name, description } = req.body;
+    
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No CSV file uploaded'
+      });
+    }
+
+    if (!name) {
+      return res.status(400).json({
+        success: false,
+        message: 'List name is required'
+      });
+    }
+
+    // Parse CSV
+    const csvContent = req.file.buffer.toString('utf-8');
+    const records = csv.parse(csvContent, {
+      columns: true,
+      skip_empty_lines: true,
+      trim: true
+    });
+
+    if (records.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'CSV file is empty or invalid'
+      });
+    }
+
+    // Validate that CSV has an 'email' column
+    if (!records[0].email && !records[0].Email && !records[0].EMAIL) {
+      return res.status(400).json({
+        success: false,
+        message: 'CSV must have an "email" column'
+      });
+    }
+
+    // Normalize email field name
+    const recipients = records.map(record => {
+      const normalized = {};
+      for (const [key, value] of Object.entries(record)) {
+        const normalizedKey = key.toLowerCase() === 'email' ? 'email' : key;
+        normalized[normalizedKey] = value;
+      }
+      // Ensure email field exists
+      if (!normalized.email && (record.Email || record.EMAIL)) {
+        normalized.email = record.Email || record.EMAIL;
+      }
+      return normalized;
+    });
+
+    // Create recipient list
+    const recipientList = await recipientListModel.createRecipientList({
+      userId,
+      name,
+      description: description || `Uploaded from CSV on ${new Date().toLocaleDateString()}`,
+      recipients
+    });
+
+    return res.status(201).json({
+      success: true,
+      recipientList: {
+        id: recipientList.id,
+        name: recipientList.name,
+        description: recipientList.description,
+        totalCount: recipientList.total_count,
+        createdAt: recipientList.created_at
+      },
+      sample: recipients.slice(0, 3) // Show first 3 recipients
+    });
+  } catch (error) {
+    console.error('Error uploading CSV:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to upload CSV'
+    });
+  }
+};
+
+// Get all recipient lists
+exports.getRecipientLists = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const lists = await recipientListModel.getRecipientListsByUser(userId);
+
+    return res.status(200).json({
+      success: true,
+      lists,
+      count: lists.length
+    });
+  } catch (error) {
+    console.error('Error getting recipient lists:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to get recipient lists'
+    });
+  }
+};
+
+// Get recipient list by ID
+exports.getRecipientList = async (req, res) => {
+  try {
+    const { listId } = req.params;
+    const userId = req.user.id;
+
+    const list = await recipientListModel.getRecipientListById(listId);
+
+    if (!list) {
+      return res.status(404).json({
+        success: false,
+        message: 'Recipient list not found'
+      });
+    }
+
+    if (list.user_id !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'You do not have permission to view this recipient list'
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      list
+    });
+  } catch (error) {
+    console.error('Error getting recipient list:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to get recipient list'
+    });
+  }
+};
+
+// Delete recipient list
+exports.deleteRecipientList = async (req, res) => {
+  try {
+    const { listId } = req.params;
+    const userId = req.user.id;
+
+    const list = await recipientListModel.getRecipientListById(listId);
+
+    if (!list) {
+      return res.status(404).json({
+        success: false,
+        message: 'Recipient list not found'
+      });
+    }
+
+    if (list.user_id !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'You do not have permission to delete this recipient list'
+      });
+    }
+
+    await recipientListModel.deleteRecipientList(listId);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Recipient list deleted successfully'
+    });
+  } catch (error) {
+    console.error('Error deleting recipient list:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to delete recipient list'
     });
   }
 };

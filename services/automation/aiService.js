@@ -109,6 +109,91 @@ Please generate a professional email reply based on the instructions above.
   }
 }
 
+// Generate AI content (for outbound emails and general content generation)
+async function generateContent({ provider, apiKey, modelName, temperature, maxTokens, systemPrompt, userPrompt }) {
+  switch (provider) {
+    case 'openai':
+      return await generateOpenAiContent({ apiKey, modelName, temperature, maxTokens, systemPrompt, userPrompt });
+    
+    case 'gemini':
+      return await generateGeminiContent({ apiKey, modelName, temperature, maxTokens, systemPrompt, userPrompt });
+    
+    default:
+      throw new Error(`Unsupported AI provider: ${provider}`);
+  }
+}
+
+// Generate content using OpenAI
+async function generateOpenAiContent({ apiKey, modelName, temperature, maxTokens, systemPrompt, userPrompt }) {
+  try {
+    const openai = new OpenAI({ apiKey });
+
+    const messages = [
+      {
+        role: 'system',
+        content: systemPrompt || 'You are a helpful email writing assistant. Write professional, engaging, and concise content.'
+      },
+      {
+        role: 'user',
+        content: userPrompt
+      }
+    ];
+
+    const response = await openai.chat.completions.create({
+      model: modelName || 'gpt-4',
+      messages: messages,
+      temperature: temperature || 0.7,
+      max_tokens: maxTokens || 500
+    });
+
+    return {
+      success: true,
+      content: response.choices[0].message.content,
+      provider: 'openai',
+      model: modelName,
+      tokensUsed: response.usage.total_tokens
+    };
+  } catch (error) {
+    console.error('OpenAI error:', error);
+    throw new Error(`OpenAI error: ${error.message}`);
+  }
+}
+
+// Generate content using Google Gemini
+async function generateGeminiContent({ apiKey, modelName, temperature, maxTokens, systemPrompt, userPrompt }) {
+  try {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ 
+      model: modelName || 'gemini-pro',
+      generationConfig: {
+        temperature: temperature || 0.7,
+        maxOutputTokens: maxTokens || 500
+      }
+    });
+
+    const prompt = `
+${systemPrompt || 'You are a helpful email writing assistant. Write professional, engaging, and concise content.'}
+
+${userPrompt}
+    `.trim();
+
+    const result = await model.generateContent(prompt);
+    const response = result.response;
+    const content = response.text();
+
+    return {
+      success: true,
+      content: content,
+      provider: 'gemini',
+      model: modelName,
+      tokensUsed: null // Gemini doesn't provide token count in the same way
+    };
+  } catch (error) {
+    console.error('Gemini error:', error);
+    throw new Error(`Gemini error: ${error.message}`);
+  }
+}
+
 // Test AI configuration
 async function testAiConfig({ provider, apiKey, modelName }) {
   try {
@@ -148,6 +233,9 @@ module.exports = {
   generateAiReply,
   generateOpenAiReply,
   generateGeminiReply,
+  generateContent,
+  generateOpenAiContent,
+  generateGeminiContent,
   testAiConfig
 };
 
