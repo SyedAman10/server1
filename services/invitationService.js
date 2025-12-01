@@ -42,9 +42,9 @@ async function inviteUser({ courseId, inviterUserId, inviteeEmail, inviteeRole, 
     // Check if there's already a pending invitation
     const existingInvitation = await invitationModel.getExistingInvitation(courseId, inviteeEmail);
     if (existingInvitation) {
-      // Cancel the old invitation and create a new one
+      // Cancel the old invitation by setting it to 'expired'
       console.log(`🔄 Cancelling old invitation and creating new one for ${inviteeEmail}`);
-      await invitationModel.updateInvitationStatus(existingInvitation.id, 'cancelled');
+      await invitationModel.updateInvitationStatus(existingInvitation.id, 'expired');
     }
 
     // Generate token and expiration (7 days)
