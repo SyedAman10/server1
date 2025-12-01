@@ -63,14 +63,14 @@ async function getInvitationsByCourse(courseId) {
 async function updateInvitationStatus(invitationId, status, acceptedUserId = null) {
   const query = `
     UPDATE invitations
-    SET status = $1, 
-        accepted_user_id = $2,
-        accepted_at = CASE WHEN $1 = 'accepted' THEN CURRENT_TIMESTAMP ELSE accepted_at END,
+    SET status = $2, 
+        accepted_user_id = $3,
+        accepted_at = CASE WHEN $2 = 'accepted' THEN CURRENT_TIMESTAMP ELSE accepted_at END,
         updated_at = CURRENT_TIMESTAMP
     WHERE id = $1
     RETURNING *;
   `;
-  const result = await db.query(query, [status, acceptedUserId, invitationId]);
+  const result = await db.query(query, [invitationId, status, acceptedUserId]);
   return result.rows[0];
 }
 
