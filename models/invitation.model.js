@@ -61,16 +61,34 @@ async function getInvitationsByCourse(courseId) {
 
 // Update invitation status
 async function updateInvitationStatus(invitationId, status, acceptedUserId = null) {
-  const query = `
-    UPDATE invitations
-    SET status = $2, 
-        accepted_user_id = $3,
-        accepted_at = CASE WHEN $2::text = 'accepted' THEN CURRENT_TIMESTAMP ELSE accepted_at END,
-        updated_at = CURRENT_TIMESTAMP
-    WHERE id = $1
-    RETURNING *;
-  `;
-  const result = await db.query(query, [invitationId, status, acceptedUserId]);
+  // Build query based on status to avoid parameter type issues
+  let query;
+  let values;
+  
+  if (status === 'accepted') {
+    query = `
+      UPDATE invitations
+      SET status = $2, 
+          accepted_user_id = $3,
+          accepted_at = CURRENT_TIMESTAMP,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = $1
+      RETURNING *;
+    `;
+    values = [invitationId, status, acceptedUserId];
+  } else {
+    query = `
+      UPDATE invitations
+      SET status = $2, 
+          accepted_user_id = $3,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = $1
+      RETURNING *;
+    `;
+    values = [invitationId, status, acceptedUserId];
+  }
+  
+  const result = await db.query(query, values);
   return result.rows[0];
 }
 
