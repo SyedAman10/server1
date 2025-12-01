@@ -31,14 +31,20 @@ async function inviteUser({ courseId, inviterUserId, inviteeEmail, inviteeRole, 
     if (existingUser && inviteeRole === 'student') {
       const isEnrolled = await courseModel.isStudentEnrolled(courseId, existingUser.id);
       if (isEnrolled) {
-        throw new Error('User is already enrolled in this course');
+        return {
+          success: false,
+          alreadyEnrolled: true,
+          message: `${inviteeEmail} is already enrolled in this course`
+        };
       }
     }
 
     // Check if there's already a pending invitation
     const existingInvitation = await invitationModel.getExistingInvitation(courseId, inviteeEmail);
     if (existingInvitation) {
-      throw new Error('An invitation has already been sent to this email for this course');
+      // Cancel the old invitation and create a new one
+      console.log(`🔄 Cancelling old invitation and creating new one for ${inviteeEmail}`);
+      await invitationModel.updateInvitationStatus(existingInvitation.id, 'cancelled');
     }
 
     // Generate token and expiration (7 days)
@@ -90,9 +96,12 @@ async function inviteUser({ courseId, inviterUserId, inviteeEmail, inviteeRole, 
       success: true,
       invitation,
       userExistsInSystem,
-      message: userExistsInSystem 
-        ? `Invitation sent to ${inviteeEmail}`
-        : `Account creation required email sent to ${inviteeEmail}`
+      isResend: !!existingInvitation,
+      message: existingInvitation 
+        ? `Previous invitation cancelled. New invitation sent to ${inviteeEmail}`
+        : (userExistsInSystem 
+            ? `Invitation sent to ${inviteeEmail}`
+            : `Account creation required email sent to ${inviteeEmail}`)
     };
   } catch (error) {
     console.error('Error inviting user:', error);
