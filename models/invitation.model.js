@@ -65,7 +65,7 @@ async function updateInvitationStatus(invitationId, status, acceptedUserId = nul
     UPDATE invitations
     SET status = $2, 
         accepted_user_id = $3,
-        accepted_at = CASE WHEN $2 = 'accepted' THEN CURRENT_TIMESTAMP ELSE accepted_at END,
+        accepted_at = CASE WHEN $2::text = 'accepted' THEN CURRENT_TIMESTAMP ELSE accepted_at END,
         updated_at = CURRENT_TIMESTAMP
     WHERE id = $1
     RETURNING *;
