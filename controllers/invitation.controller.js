@@ -87,10 +87,10 @@ const acceptInvitation = async (req, res) => {
     
     // Check if user is authenticated
     if (!req.user || !req.user.id) {
-      // Redirect to frontend signup/login with invitation token
+      // Redirect to frontend login with invitation token
       const frontendUrl = process.env.FRONTEND_URL || 'https://xytek-classroom-assistant.vercel.app';
-      console.log(`Redirecting unauthenticated user to: ${frontendUrl}/accept-invitation?token=${token}`);
-      return res.redirect(302, `${frontendUrl}/accept-invitation?token=${token}`);
+      console.log(`Redirecting unauthenticated user to: ${frontendUrl}/login?returnTo=/accept-invitation/${token}`);
+      return res.redirect(302, `${frontendUrl}/login?returnTo=${encodeURIComponent(`/accept-invitation/${token}`)}`);
     }
 
     // User is authenticated, accept the invitation
@@ -101,14 +101,21 @@ const acceptInvitation = async (req, res) => {
       userName: req.user.name
     });
 
-    // Redirect to course page
+    // Redirect to course page with the correct URL format
     const frontendUrl = process.env.FRONTEND_URL || 'https://xytek-classroom-assistant.vercel.app';
-    console.log(`Redirecting to course: ${frontendUrl}/courses/${result.course.id}?accepted=true`);
-    res.redirect(302, `${frontendUrl}/courses/${result.course.id}?accepted=true`);
+    const coursePageUrl = `${frontendUrl}/apps/classes/${result.course.id}`;
+    
+    console.log(`✅ Invitation accepted! Redirecting to course: ${coursePageUrl}`);
+    
+    // Redirect to the course page
+    return res.redirect(302, coursePageUrl);
+    
   } catch (error) {
     console.error('Accept invitation error:', error);
     const frontendUrl = process.env.FRONTEND_URL || 'https://xytek-classroom-assistant.vercel.app';
-    res.redirect(302, `${frontendUrl}/error?message=${encodeURIComponent(error.message)}`);
+    
+    // Redirect to error page with message
+    return res.redirect(302, `${frontendUrl}/error?message=${encodeURIComponent(error.message)}`);
   }
 };
 

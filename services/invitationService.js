@@ -23,14 +23,15 @@ async function inviteUser({ courseId, inviterUserId, inviteeEmail, inviteeRole, 
       throw new Error('Course not found');
     }
 
+    // Check if user exists in XYTEK system
+    const existingUser = await userModel.getUserByEmail(inviteeEmail);
+    const userExistsInSystem = !!existingUser;
+
     // Check if user is already enrolled
-    if (inviteeRole === 'student') {
-      const existingUser = await userModel.getUserByEmail(inviteeEmail);
-      if (existingUser) {
-        const isEnrolled = await courseModel.isStudentEnrolled(courseId, existingUser.id);
-        if (isEnrolled) {
-          throw new Error('User is already enrolled in this course');
-        }
+    if (existingUser && inviteeRole === 'student') {
+      const isEnrolled = await courseModel.isStudentEnrolled(courseId, existingUser.id);
+      if (isEnrolled) {
+        throw new Error('User is already enrolled in this course');
       }
     }
 
@@ -59,20 +60,39 @@ async function inviteUser({ courseId, inviterUserId, inviteeEmail, inviteeRole, 
     const backendUrl = process.env.BACKEND_URL || 'https://class.xytek.ai';
     const invitationLink = `${backendUrl}/api/invitations/accept/${token}`;
 
-    // Send invitation email
-    await sendInvitationEmail({
-      toEmail: inviteeEmail,
-      inviterName: inviterName || 'A teacher',
-      courseName: courseName || course.name,
-      role: inviteeRole,
-      invitationLink,
-      expiresInDays: 7
-    });
+    // Send different emails based on whether user has an account
+    if (userExistsInSystem) {
+      // Send standard invitation email
+      await sendInvitationEmail({
+        toEmail: inviteeEmail,
+        inviterName: inviterName || 'A teacher',
+        courseName: courseName || course.name,
+        role: inviteeRole,
+        invitationLink,
+        expiresInDays: 7
+      });
+      console.log(`✅ Sent invitation to existing user: ${inviteeEmail}`);
+    } else {
+      // Send "create account first" email
+      const { sendCreateAccountFirstEmail } = require('./invitationEmailService');
+      await sendCreateAccountFirstEmail({
+        toEmail: inviteeEmail,
+        inviterName: inviterName || 'A teacher',
+        courseName: courseName || course.name,
+        role: inviteeRole,
+        invitationLink,
+        expiresInDays: 7
+      });
+      console.log(`✅ Sent "create account first" email to: ${inviteeEmail}`);
+    }
 
     return {
       success: true,
       invitation,
-      message: `Invitation sent to ${inviteeEmail}`
+      userExistsInSystem,
+      message: userExistsInSystem 
+        ? `Invitation sent to ${inviteeEmail}`
+        : `Account creation required email sent to ${inviteeEmail}`
     };
   } catch (error) {
     console.error('Error inviting user:', error);
