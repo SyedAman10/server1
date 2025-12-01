@@ -9,10 +9,13 @@ router.use(authenticate);
 // Create announcement (teachers and super_admin only)
 router.post('/', announcementController.createAnnouncement);
 
-// Get announcements for a course
+// Get all announcements for current user
+router.get('/', announcementController.getAllAnnouncements);
+
+// Get announcements for a specific course
 router.get('/course/:courseId', announcementController.getAnnouncementsByCourse);
 
-// Get a single announcement
+// Get a single announcement by ID
 router.get('/:announcementId', announcementController.getAnnouncementById);
 
 // Update announcement (teachers and super_admin only)
@@ -22,4 +25,3 @@ router.put('/:announcementId', announcementController.updateAnnouncement);
 router.delete('/:announcementId', announcementController.deleteAnnouncement);
 
 module.exports = router;
-
