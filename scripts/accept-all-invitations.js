@@ -73,14 +73,14 @@ async function acceptAllInvitations() {
       
       // Check if already enrolled
       const enrollmentCheck = await query(
-        `SELECT * FROM course_enrollments WHERE course_id = $1 AND user_id = $2`,
+        `SELECT * FROM course_enrollments WHERE course_id = $1 AND student_id = $2`,
         [course.id, userId]
       );
       
       if (enrollmentCheck.rows.length === 0) {
         // Enroll user
         await query(
-          `INSERT INTO course_enrollments (course_id, user_id, enrolled_at) 
+          `INSERT INTO course_enrollments (course_id, student_id, enrolled_at) 
            VALUES ($1, $2, NOW())`,
           [course.id, userId]
         );
@@ -108,7 +108,7 @@ async function acceptAllInvitations() {
     const enrollments = await query(
       `SELECT u.email, u.role, ce.enrolled_at 
        FROM course_enrollments ce
-       JOIN users u ON ce.user_id = u.id
+       JOIN users u ON ce.student_id = u.id
        WHERE ce.course_id = $1
        ORDER BY ce.enrolled_at DESC`,
       [course.id]
