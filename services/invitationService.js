@@ -139,7 +139,7 @@ async function inviteMultipleUsers({ courseId, inviterUserId, inviteeEmails, inv
   };
 }
 
-// Accept invitation
+// Accept invitation (auto-create user if needed)
 async function acceptInvitation({ token, userId, userEmail, userName }) {
   try {
     // Get invitation
@@ -159,27 +159,69 @@ async function acceptInvitation({ token, userId, userEmail, userName }) {
       throw new Error('Invitation has expired');
     }
 
-    // Check if email matches (if user exists)
+    // If no userId provided, find or create user based on invitation email
+    let finalUserId = userId;
+    let finalUserName = userName;
+    
+    if (!finalUserId) {
+      // Check if user exists with this email and role
+      let user = await userModel.getUserByEmailAndRole(invitation.invitee_email, invitation.invitee_role);
+      
+      if (!user) {
+        // Create new user
+        console.log(`📝 Creating new ${invitation.invitee_role} user: ${invitation.invitee_email}`);
+        const tempPassword = crypto.randomBytes(16).toString('hex');
+        user = await userModel.createUser({
+          email: invitation.invitee_email,
+          password: tempPassword, // They'll need to reset this
+          name: invitation.invitee_email.split('@')[0],
+          role: invitation.invitee_role
+        });
+        console.log(`✅ Created user with ID: ${user.id}`);
+      }
+      
+      finalUserId = user.id;
+      finalUserName = user.name;
+    }
+
+    // Check if email matches (if userEmail was provided)
     if (userEmail && invitation.invitee_email.toLowerCase() !== userEmail.toLowerCase()) {
       throw new Error('This invitation was sent to a different email address');
     }
 
+    // Check if already enrolled
+    const isEnrolled = await courseModel.isStudentEnrolled(invitation.course_id, finalUserId);
+    if (isEnrolled) {
+      // Still mark invitation as accepted
+      await invitationModel.updateInvitationStatus(invitation.id, 'accepted', finalUserId);
+      return {
+        success: true,
+        alreadyEnrolled: true,
+        course: {
+          id: invitation.course_id,
+          name: invitation.course_name
+        },
+        role: invitation.invitee_role,
+        message: `You're already enrolled in ${invitation.course_name}`
+      };
+    }
+
     // Enroll user in course
     if (invitation.invitee_role === 'student') {
-      await courseModel.enrollStudent(invitation.course_id, userId);
+      await courseModel.enrollStudent(invitation.course_id, finalUserId);
     } else if (invitation.invitee_role === 'teacher') {
       // For teacher invitations, you might want different logic
       // For now, we'll also enroll them as students but you can customize this
-      await courseModel.enrollStudent(invitation.course_id, userId);
+      await courseModel.enrollStudent(invitation.course_id, finalUserId);
     }
 
     // Update invitation status
-    await invitationModel.updateInvitationStatus(invitation.id, 'accepted', userId);
+    await invitationModel.updateInvitationStatus(invitation.id, 'accepted', finalUserId);
 
     // Send welcome email
     await sendWelcomeEmail({
       toEmail: invitation.invitee_email,
-      userName: userName || 'there',
+      userName: finalUserName || 'there',
       courseName: invitation.course_name,
       role: invitation.invitee_role
     });
@@ -191,6 +233,7 @@ async function acceptInvitation({ token, userId, userEmail, userName }) {
         name: invitation.course_name
       },
       role: invitation.invitee_role,
+      userCreated: !userId, // Indicate if we created a new user
       message: `Successfully joined ${invitation.course_name}`
     };
   } catch (error) {

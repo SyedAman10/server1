@@ -85,20 +85,13 @@ const acceptInvitation = async (req, res) => {
       });
     }
     
-    // Check if user is authenticated
-    if (!req.user || !req.user.id) {
-      // Redirect to frontend login with invitation token
-      const frontendUrl = process.env.FRONTEND_URL || 'https://xytek-classroom-assistant.vercel.app';
-      console.log(`Redirecting unauthenticated user to: ${frontendUrl}/login?returnTo=/accept-invitation/${token}`);
-      return res.redirect(302, `${frontendUrl}/login?returnTo=${encodeURIComponent(`/accept-invitation/${token}`)}`);
-    }
-
-    // User is authenticated, accept the invitation
+    // Accept invitation - no authentication required
+    // Service will auto-create user if needed
     const result = await invitationService.acceptInvitation({
       token,
-      userId: req.user.id,
-      userEmail: req.user.email,
-      userName: req.user.name
+      userId: req.user?.id, // Optional - will auto-create if not provided
+      userEmail: req.user?.email,
+      userName: req.user?.name
     });
 
     // Return a beautiful success HTML page with auto-redirect
@@ -187,6 +180,14 @@ const acceptInvitation = async (req, res) => {
             line-height: 1.6;
             margin-bottom: 32px;
         }
+        .info-box {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 24px;
+            font-size: 14px;
+            color: #555;
+        }
         .redirect-info {
             display: flex;
             align-items: center;
@@ -230,19 +231,20 @@ const acceptInvitation = async (req, res) => {
                 <polyline points="14 27 22 35 38 19"/>
             </svg>
         </div>
-        <h1>🎉 Success!</h1>
+        <h1>🎉 ${result.alreadyEnrolled ? 'Already Enrolled!' : 'Success!'}</h1>
         <div class="course-name">${result.course.name}</div>
-        <p>You've been successfully enrolled in the course. Get ready to start learning!</p>
+        <p>${result.alreadyEnrolled ? "You're already enrolled in this course!" : "You've been successfully enrolled in the course. Get ready to start learning!"}</p>
+        ${result.userCreated ? '<div class="info-box">📝 An account has been created for you. Please log in to access the course.</div>' : ''}
         <div class="redirect-info">
             <div class="spinner"></div>
-            <span>Redirecting to your course...</span>
+            <span>Redirecting to ${result.userCreated ? 'login' : 'your course'}...</span>
         </div>
-        <a href="${coursePageUrl}" class="button">Go to Course Now</a>
+        <a href="${result.userCreated ? frontendUrl + '/login' : coursePageUrl}" class="button">${result.userCreated ? 'Go to Login' : 'Go to Course Now'}</a>
     </div>
     <script>
         // Auto-redirect after 3 seconds
         setTimeout(() => {
-            window.location.href = '${coursePageUrl}';
+            window.location.href = '${result.userCreated ? frontendUrl + '/login' : coursePageUrl}';
         }, 3000);
     </script>
 </body>
