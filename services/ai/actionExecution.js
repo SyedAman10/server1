@@ -3886,6 +3886,25 @@ If you have any issues, just let me know and I'll help you troubleshoot!`,
           // Exact match - create the assignment using database system
           const courseId = selectedCourse.id;
           
+          // ✅ CHECK: If user wants to attach a file but hasn't uploaded it yet
+          if (parameters.hasAttachment === true && parameters.attachmentUrl === 'pending') {
+            // Don't create assignment yet - return a message asking for file upload
+            // The frontend should show file upload UI
+            return {
+              message: `📎 **Please upload your file**\n\nYou indicated you want to attach a file to this assignment. Please use the file upload button below to attach your file.\n\n**Assignment Details:**\n• Course: ${selectedCourse.name}\n• Title: ${parameters.title}${parameters.description ? `\n• Description: ${parameters.description}` : ''}\n\nOnce you upload the file, the assignment will be created automatically.`,
+              awaitingFileUpload: true,
+              assignmentData: {
+                courseId: courseId,
+                courseName: selectedCourse.name,
+                title: parameters.title,
+                description: parameters.description || '',
+                dueDate: parameters.dueDate,
+                maxPoints: parameters.maxPoints || 100
+              },
+              conversationId: req.body.conversationId || generateConversationId()
+            };
+          }
+          
           try {
             // Prepare due date - convert from dueDate object to ISO string if needed
             let dueDateTime = null;
