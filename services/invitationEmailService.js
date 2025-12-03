@@ -571,9 +571,182 @@ async function sendCreateAccountFirstEmail({
   }
 }
 
+// Send account credentials email for auto-created users
+async function sendCredentialsEmail({ toEmail, userName, courseName, tempPassword }) {
+  try {
+    const transporter = createTransporter();
+    const frontendUrl = process.env.FRONTEND_URL || 'https://xytek-classroom-assistant.vercel.app';
+    const loginUrl = `${frontendUrl}/login`;
+    
+    const mailOptions = {
+      from: `"${process.env.EMAIL_FROM_NAME || 'XYTEK Classroom Assistant'}" <${process.env.EMAIL_USER}>`,
+      to: toEmail,
+      subject: `Your Account Credentials - ${courseName}`,
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Your Account Credentials</title>
+          <style>
+            body { 
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+              line-height: 1.6;
+              color: #333;
+              max-width: 600px;
+              margin: 0 auto;
+              padding: 20px;
+              background-color: #f5f5f5;
+            }
+            .container {
+              background: white;
+              padding: 40px;
+              border-radius: 10px;
+              box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            }
+            .header {
+              text-align: center;
+              margin-bottom: 30px;
+            }
+            .header h1 {
+              color: #4299e1;
+              margin: 0;
+            }
+            .icon {
+              font-size: 48px;
+              margin-bottom: 20px;
+            }
+            .credentials-box {
+              background: #f8f9fa;
+              border-left: 4px solid #4299e1;
+              padding: 20px;
+              margin: 20px 0;
+              border-radius: 5px;
+            }
+            .credential-item {
+              margin: 15px 0;
+            }
+            .credential-label {
+              font-weight: 600;
+              color: #555;
+              display: block;
+              margin-bottom: 5px;
+            }
+            .credential-value {
+              font-family: 'Courier New', monospace;
+              background: white;
+              padding: 10px;
+              border-radius: 5px;
+              border: 1px solid #ddd;
+              word-break: break-all;
+            }
+            .button {
+              display: inline-block;
+              background: #4299e1;
+              color: white !important;
+              text-decoration: none;
+              padding: 12px 30px;
+              border-radius: 5px;
+              margin: 20px 0;
+              font-weight: 600;
+            }
+            .warning {
+              background: #fff3cd;
+              border-left: 4px solid #ffc107;
+              padding: 15px;
+              margin: 20px 0;
+              border-radius: 5px;
+            }
+            .footer {
+              text-align: center;
+              margin-top: 30px;
+              padding-top: 20px;
+              border-top: 1px solid #eee;
+              color: #666;
+              font-size: 14px;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <div class="icon">🔐</div>
+              <h1>Your Account Has Been Created!</h1>
+            </div>
+            
+            <p>Hi ${userName},</p>
+            
+            <p>An account has been automatically created for you to access <strong>${courseName}</strong>. Here are your login credentials:</p>
+            
+            <div class="credentials-box">
+              <div class="credential-item">
+                <span class="credential-label">📧 Email:</span>
+                <div class="credential-value">${toEmail}</div>
+              </div>
+              
+              <div class="credential-item">
+                <span class="credential-label">🔑 Temporary Password:</span>
+                <div class="credential-value">${tempPassword}</div>
+              </div>
+            </div>
+            
+            <div class="warning">
+              <strong>⚠️ Important:</strong> This is a temporary password. Please change it after your first login to keep your account secure.
+            </div>
+            
+            <div style="text-align: center;">
+              <a href="${loginUrl}" class="button">Login Now</a>
+            </div>
+            
+            <p style="margin-top: 30px;">If you have any questions or need assistance, please don't hesitate to reach out.</p>
+            
+            <div class="footer">
+              <p>This is an automated email from XYTEK Classroom Assistant</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `,
+      text: `
+Your Account Has Been Created!
+
+Hi ${userName},
+
+An account has been automatically created for you to access ${courseName}.
+
+Your Login Credentials:
+━━━━━━━━━━━━━━━━━━━━━━
+Email: ${toEmail}
+Temporary Password: ${tempPassword}
+━━━━━━━━━━━━━━━━━━━━━━
+
+⚠️ IMPORTANT: This is a temporary password. Please change it after your first login to keep your account secure.
+
+Login here: ${loginUrl}
+
+If you have any questions or need assistance, please don't hesitate to reach out.
+
+---
+This is an automated email from XYTEK Classroom Assistant
+      `
+    };
+    
+    await transporter.sendMail(mailOptions);
+    console.log('✅ Credentials email sent:', { to: toEmail });
+    
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Error sending credentials email:', error);
+    // Don't throw error - we don't want to fail the invitation acceptance
+    return { success: false, error: error.message };
+  }
+}
+
 module.exports = {
   sendInvitationEmail,
   sendWelcomeEmail,
-  sendCreateAccountFirstEmail
+  sendCreateAccountFirstEmail,
+  sendCredentialsEmail
 };
 

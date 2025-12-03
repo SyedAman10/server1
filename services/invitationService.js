@@ -162,6 +162,8 @@ async function acceptInvitation({ token, userId, userEmail, userName }) {
     // If no userId provided, find or create user based on invitation email
     let finalUserId = userId;
     let finalUserName = userName;
+    let userWasCreated = false;
+    let tempPassword = null;
     
     if (!finalUserId) {
       // Check if user exists with this email and role
@@ -170,14 +172,25 @@ async function acceptInvitation({ token, userId, userEmail, userName }) {
       if (!user) {
         // Create new user
         console.log(`📝 Creating new ${invitation.invitee_role} user: ${invitation.invitee_email}`);
-        const tempPassword = crypto.randomBytes(16).toString('hex');
+        tempPassword = crypto.randomBytes(12).toString('hex'); // 24 character password
         user = await userModel.createUser({
           email: invitation.invitee_email,
-          password: tempPassword, // They'll need to reset this
+          password: tempPassword,
           name: invitation.invitee_email.split('@')[0],
           role: invitation.invitee_role
         });
         console.log(`✅ Created user with ID: ${user.id}`);
+        userWasCreated = true;
+        
+        // Send credentials email
+        const { sendCredentialsEmail } = require('./invitationEmailService');
+        await sendCredentialsEmail({
+          toEmail: invitation.invitee_email,
+          userName: user.name,
+          courseName: invitation.course_name,
+          tempPassword: tempPassword
+        });
+        console.log(`📧 Sent credentials email to: ${invitation.invitee_email}`);
       }
       
       finalUserId = user.id;
@@ -218,13 +231,15 @@ async function acceptInvitation({ token, userId, userEmail, userName }) {
     // Update invitation status
     await invitationModel.updateInvitationStatus(invitation.id, 'accepted', finalUserId);
 
-    // Send welcome email
-    await sendWelcomeEmail({
-      toEmail: invitation.invitee_email,
-      userName: finalUserName || 'there',
-      courseName: invitation.course_name,
-      role: invitation.invitee_role
-    });
+    // Send welcome email (only if user was not just created, as they already got credentials email)
+    if (!userWasCreated) {
+      await sendWelcomeEmail({
+        toEmail: invitation.invitee_email,
+        userName: finalUserName || 'there',
+        courseName: invitation.course_name,
+        role: invitation.invitee_role
+      });
+    }
 
     return {
       success: true,
@@ -233,7 +248,7 @@ async function acceptInvitation({ token, userId, userEmail, userName }) {
         name: invitation.course_name
       },
       role: invitation.invitee_role,
-      userCreated: !userId, // Indicate if we created a new user
+      userCreated: userWasCreated,
       message: `Successfully joined ${invitation.course_name}`
     };
   } catch (error) {
