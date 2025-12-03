@@ -2489,7 +2489,15 @@ async function executeAction(intentData, originalMessage, userToken, req) {
           // Format the courses list
           const coursesList = result.courses.map((course, index) => {
             const studentCount = course.student_count || 0;
-            return `${index + 1}. **${course.name}**${course.section ? ` (Section: ${course.section})` : ''}\n   👥 ${studentCount} student${studentCount !== 1 ? 's' : ''}${course.teacher_name ? `\n   👨‍🏫 Teacher: ${course.teacher_name}` : ''}`;
+            
+            // Different formatting based on user role
+            if (userRole === 'student') {
+              // Students only see course name and teacher
+              return `${index + 1}. **${course.name}**${course.section ? ` (Section: ${course.section})` : ''}${course.teacher_name ? `\n   👨‍🏫 Teacher: ${course.teacher_name}` : ''}`;
+            } else {
+              // Teachers and admins see student count
+              return `${index + 1}. **${course.name}**${course.section ? ` (Section: ${course.section})` : ''}\n   👥 ${studentCount} student${studentCount !== 1 ? 's' : ''}${course.teacher_name ? `\n   👨‍🏫 Teacher: ${course.teacher_name}` : ''}`;
+            }
           }).join('\n\n');
           
           const roleMessage = userRole === 'teacher' 
