@@ -2101,11 +2101,18 @@ async function makeApiCall(url, method, data, userToken, req) {
     console.log('DEBUG: Making external HTTP API call');
     
       const axios = require('axios');
+      
+      // Check if this is an OpenAI API call and format the auth header correctly
+      const isOpenAICall = safeUrl.includes('api.openai.com');
+      const authHeader = isOpenAICall && userToken && !userToken.startsWith('Bearer ')
+        ? `Bearer ${userToken}`
+        : userToken;
+      
     const config = {
         method: method,
         url: safeUrl,
       headers: {
-          Authorization: userToken,
+          Authorization: authHeader,
         'Content-Type': 'application/json'
         },
         data: data || undefined,
@@ -2116,11 +2123,10 @@ async function makeApiCall(url, method, data, userToken, req) {
         url: config.url,
       hasData: !!config.data,
         headers: {
-          Authorization: config.headers.Authorization,
+          Authorization: authHeader ? (authHeader.length > 20 ? authHeader.substring(0, 20) + '...' : authHeader) : 'none',
           'Content-Type': config.headers['Content-Type']
         }
     });
-    console.log('DEBUG: Full axios config:', JSON.stringify(config, null, 2));
     
     const response = await axios(config);
     return response.data;
