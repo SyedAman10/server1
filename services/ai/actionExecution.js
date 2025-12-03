@@ -1099,7 +1099,7 @@ Extracted title:`;
                 action: 'INVITE_STUDENTS',
                 missingParameters: ['courseName'],
                 collectedParameters: { ...collectedParameters },
-                nextMessage: "I don't see any courses available. Please create a course first or check your Google Classroom setup.",
+                nextMessage: "I don't see any courses available. Please create a course first or check your classroom setup.",
                 actionComplete: false
               };
             }
@@ -1244,7 +1244,7 @@ Extracted title:`;
                 action: 'CHECK_ASSIGNMENT_SUBMISSIONS',
                 missingParameters: ['courseName'],
                 collectedParameters: { ...collectedParameters },
-                nextMessage: "I don't see any courses available. Please create a course first or check your Google Classroom setup.",
+                nextMessage: "I don't see any courses available. Please create a course first or check your classroom setup.",
                 actionComplete: false
               };
             }
@@ -1709,7 +1709,7 @@ Extracted title:`;
  */
 async function findMatchingCourse(courseName, userToken, req, baseUrl) {
   try {
-    // Get all courses from database (not Google Classroom)
+    // Get all courses from database
     let coursesResponse = await makeApiCall(`${baseUrl}/api/courses`, 'GET', null, userToken, req);
     
     if (!coursesResponse || !coursesResponse.courses || !Array.isArray(coursesResponse.courses)) {
@@ -2892,12 +2892,12 @@ async function executeAction(intentData, originalMessage, userToken, req) {
 
       case 'ASSIGNMENT_SUBMISSION_HELP': {
         return {
-          message: `📝 **How to Submit an Assignment in Google Classroom:**
+          message: `📝 **How to Submit an Assignment:**
 
 **Step-by-Step Guide:**
 
-1. **Open Google Classroom**
-   • Go to classroom.google.com
+1. **Open Your Classroom**
+   • Go to your classroom platform
    • Sign in with your school account
 
 2. **Find Your Assignment**
@@ -2910,8 +2910,8 @@ async function executeAction(intentData, originalMessage, userToken, req) {
    • Click "Add or create" to upload your file
    • Choose from:
      - 📁 **Upload from device** - Select files from your computer
-     - 📄 **Google Drive** - Choose files from your Drive
-     - 📝 **Create** - Make a new Google Doc, Sheet, or Slide
+     - 📄 **Drive** - Choose files from your Drive
+     - 📝 **Create** - Make a new Doc, Sheet, or Slide
      - 🔗 **Link** - Add a link to your work
 
 4. **Add Comments (Optional)**
@@ -2924,7 +2924,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
 
 **Important Tips:**
 • ⏰ Submit before the due date to avoid late penalties
-• 📱 You can also submit from the Google Classroom mobile app
+• 📱 You can also submit from the mobile app
 • 🔄 You can unsubmit and resubmit before the due date
 • 📋 Check the assignment details for specific requirements
 
@@ -2938,7 +2938,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
 
       case 'JOIN_CLASS_HELP': {
         return {
-          message: `🎓 **How to Join a Class in Google Classroom:**
+          message: `🎓 **How to Join a Class:**
 
 **Method 1: Using Class Code (Most Common)**
 
@@ -2948,7 +2948,7 @@ async function executeAction(intentData, originalMessage, userToken, req) {
    • Your teacher can find it in the class settings
 
 2. **Join the Class**
-   • Go to classroom.google.com
+   • Go to your classroom platform
    • Sign in with your school account
    • Click the "+" button in the top right
    • Select "Join class"
@@ -2959,14 +2959,14 @@ async function executeAction(intentData, originalMessage, userToken, req) {
 
 1. **Check Your Email**
    • Look for an invitation from your teacher
-   • It will be from Google Classroom
+   • It will be from the classroom system
 
 2. **Accept the Invitation**
    • Click "Join" in the email
    • Or click the link in the email
    • You'll be automatically added to the class
 
-**Method 3: Using Google Meet Link**
+**Method 3: Using Meeting Link**
 
 1. **Join via Meet**
    • If your teacher shared a Meet link
@@ -2975,18 +2975,18 @@ async function executeAction(intentData, originalMessage, userToken, req) {
 **Troubleshooting:**
 ❌ **"Class not found" error:**
 • Double-check the class code
-• Make sure you're using the correct Google account
+• Make sure you're using the correct account
 • Ask your teacher to verify the code
 ❌ **"You're already in this class" message:**
 • You're already enrolled
-• Check your Google Classroom homepage
+• Check your classroom homepage
 ❌ **Can't find the "+" button:**
 • Make sure you're signed in
 • Try refreshing the page
 • Check if you're using the correct account
 **Important Tips:**
-• 🔐 Use your school Google account, not personal
-• 📱 You can also join using the Google Classroom mobile app
+• 🔐 Use your school account, not personal
+• 📱 You can also join using the mobile app
 • ⏰ Join as soon as possible to not miss assignments
 • 📧 Check your email regularly for invitations
 • 🆘 Contact your teacher if you have trouble joining
@@ -3383,7 +3383,7 @@ Ask your teacher for the class code - they can find it in:
             materials: []
           };
           
-          // Use internal call to Google Classroom API
+          // Use internal API call
           const response = await makeApiCall(
             `${baseUrl}/api/classroom/${courseId}/announcements`,
             'POST',
@@ -3405,7 +3405,7 @@ Ask your teacher for the class code - they can find it in:
           }
 
           return {
-            message: `Great! I've posted your announcement "${parameters.announcementText}" in ${selectedCourse.name}. Your students will now see this announcement in their Google Classroom.`,
+            message: `Great! I've posted your announcement "${parameters.announcementText}" in ${selectedCourse.name}. Your students will now see this announcement in their classroom.`,
             announcement: response.announcement,
             conversationId: conversationId
           };
@@ -4757,7 +4757,7 @@ Need specific help? Just ask! For example:
 **Tips:**
 - You just need to provide the course name
 - Examples: "Create course Math 101", "Make a class called Physics 201"
-- The course will be created in Google Classroom and you'll be the teacher`,
+- The course will be created in the classroom and you'll be the teacher`,
           conversationId: conversationId
         };
 
@@ -5186,7 +5186,7 @@ Create only the announcement text, without any introductory text or markdown for
             
             if (courses.length === 0) {
               return {
-                message: "I don't see any courses available. Please create a course first or check your Google Classroom setup.",
+                message: "I don't see any courses available. Please create a course first or check your classroom setup.",
                 conversationId: req.body.conversationId
               };
             }
@@ -5410,7 +5410,7 @@ Create only the announcement text, without any introductory text or markdown for
             matchingAssignments = assignments.filter(a => {
               if (!a.creationTime) return false;
               
-              // Parse the creation date (already in UTC from Google Classroom API)
+              // Parse the creation date (already in UTC from API)
               const creationDate = new Date(a.creationTime);
               const creationDateStr = creationDate.toISOString().split('T')[0];
               
@@ -6480,7 +6480,7 @@ Create only the announcement text, without any introductory text or markdown for
             
             if (courses.length === 0) {
               return {
-                message: "I don't see any courses available. Please create a course first or check your Google Classroom setup.",
+                message: "I don't see any courses available. Please create a course first or check your classroom setup.",
                 conversationId: req.body.conversationId
               };
             }
@@ -6851,7 +6851,7 @@ Create only the announcement text, without any introductory text or markdown for
           
           if (courses.length === 0) {
             return {
-              message: "I don't see any courses available. Please create a course first or check your Google Classroom setup.",
+              message: "I don't see any courses available. Please create a course first or check your classroom setup.",
               conversationId: req.body.conversationId
             };
           }
@@ -7445,7 +7445,7 @@ function formatCourseDetailsResponse(courseResponse, userRole, conversationId) {
       message += `**🎫 Enrollment Information:**\n`;
       message += `• **Enrollment Code:** ${course.enrollmentCode}\n`;
       if (course.alternateLink) {
-        message += `• **Classroom Link:** [Open in Google Classroom](${course.alternateLink})\n`;
+        message += `• **Classroom Link:** [Open Classroom](${course.alternateLink})\n`;
       }
       message += '\n';
     }

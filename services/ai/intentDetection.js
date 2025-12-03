@@ -1464,7 +1464,7 @@ async function detectIntent(message, conversationHistory, conversationId) {
       - LIST_PENDING_ASSIGNMENTS: User wants to see their pending/due assignments across all courses (no parameters needed)
       - SHOW_COURSE_GRADES: User wants to see their grades in specific courses (extract courseNames from the request)
       - ASSIGNMENT_SUBMISSION_HELP: User is asking how to submit an assignment or needs help with assignment submission process (no parameters needed)
-      - JOIN_CLASS_HELP: User is asking how to join a class or needs help with joining a Google Classroom (no parameters needed)
+      - JOIN_CLASS_HELP: User is asking how to join a class or needs help with joining a classroom (no parameters needed)
       - SHOW_ENROLLED_STUDENTS: User wants to see the list of enrolled students in a course (extract courseName)
       - CREATE_MEETING: User wants to create a meeting or schedule an appointment (extract title, attendees, dateExpr, timeExpr, duration, description)
       - LIST_MEETINGS: User wants to see all meetings or list upcoming meetings (no parameters needed)
