@@ -654,6 +654,22 @@ Extracted title:`;
         }
       }
       
+      // Check if user answered about attachment
+      if (missingParameters.includes('hasAttachment')) {
+        const lowerMessage = originalMessage.toLowerCase().trim();
+        const yesPatterns = ['yes', 'yeah', 'yep', 'sure', 'ok', 'okay', 'y', 'ya', 'yea', 'attach'];
+        const noPatterns = ['no', 'nope', 'nah', 'n', 'skip', 'not', 'don\'t'];
+        
+        if (yesPatterns.some(pattern => lowerMessage === pattern || lowerMessage.includes(pattern))) {
+          newParameters.hasAttachment = true;
+          newParameters.attachmentUrl = 'pending'; // Will be provided later through frontend
+          parametersFound = true;
+        } else if (noPatterns.some(pattern => lowerMessage === pattern || lowerMessage.includes(pattern))) {
+          newParameters.hasAttachment = false;
+          parametersFound = true;
+        }
+      }
+      
       // Check if user provided course name
       if (missingParameters.includes('courseName')) {
         let courseName = originalMessage.trim();
@@ -3684,6 +3700,10 @@ If you have any issues, just let me know and I'll help you troubleshoot!`,
         if (!parameters.title) {
           missingParams.push('title');
         }
+        // Check if hasAttachment hasn't been asked yet
+        if (parameters.hasAttachment === undefined) {
+          missingParams.push('hasAttachment');
+        }
 
         if (missingParams.length > 0) {
           // If course name is missing, ask for it first and validate it
@@ -3788,6 +3808,22 @@ If you have any issues, just let me know and I'll help you troubleshoot!`,
                 }
               };
             }
+          }
+          // If only hasAttachment is missing, ask about attachment
+          else if (missingParams.includes('hasAttachment')) {
+            // We have course and title, now ask if they want to attach a file
+            const preservedParams = { ...parameters };
+            startOngoingAction(conversationId, 'CREATE_ASSIGNMENT', ['hasAttachment'], preservedParams);
+            
+            return {
+              message: `Would you like to attach a file to this assignment? (yes/no)\n\n📎 You can attach:\n• PDF documents\n• Word documents\n• Images\n• Spreadsheets\n• Any other files\n\nJust say "yes" or "no".`,
+              conversationId: conversationId,
+              ongoingAction: {
+                action: 'CREATE_ASSIGNMENT',
+                missingParameters: ['hasAttachment'],
+                collectedParameters: preservedParams
+              }
+            };
           }
         }
 
