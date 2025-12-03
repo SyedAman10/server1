@@ -2952,63 +2952,52 @@ async function executeAction(intentData, originalMessage, userToken, req) {
 
       case 'JOIN_CLASS_HELP': {
         return {
-          message: `🎓 **How to Join a Class:**
+          message: `🎓 **How to Join a Class - It's Super Easy!**
 
-**Method 1: Using Class Code (Most Common)**
+**📧 The Easiest Way: Email Invitation**
 
-1. **Get the Class Code**
-   • Ask your teacher for the class code
-   • It's usually 6-7 characters (e.g., "abc1234")
-   • Your teacher can find it in the class settings
+Your teacher will send you an invitation email. Here's what happens:
 
-2. **Join the Class**
-   • Go to your classroom platform
-   • Sign in with your school account
-   • Click the "+" button in the top right
-   • Select "Join class"
-   • Enter the class code
-   • Click "Join"
+1. **📬 Check Your Email**
+   • Look for an invitation email from your teacher
+   • Subject: "You're invited to join [Course Name]!"
+   • It contains a special join link
 
-**Method 2: Using Email Invitation**
+2. **🔗 Click the Join Link**
+   • Just click the link in the email
+   • That's it! You're done!
 
-1. **Check Your Email**
-   • Look for an invitation from your teacher
-   • It will be from the classroom system
+3. **✨ What Happens Next:**
+   
+   **If you're NEW to the platform:**
+   • ✅ We automatically create an account for you
+   • 📧 You'll receive another email with your login credentials
+   • 🎉 You're instantly enrolled in the class
+   • 🔐 Use those credentials to log in and access your course
+   
+   **If you already have an account:**
+   • ✅ You're instantly enrolled in the class
+   • 🎉 You can access the course immediately
+   • 📚 All course materials are ready for you
 
-2. **Accept the Invitation**
-   • Click "Join" in the email
-   • Or click the link in the email
-   • You'll be automatically added to the class
+**That's It! No Complex Steps!**
 
-**Method 3: Using Meeting Link**
+You don't need to:
+❌ Create an account manually
+❌ Remember class codes
+❌ Fill out forms
+❌ Wait for approval
 
-1. **Join via Meet**
-   • If your teacher shared a Meet link
-   • Click the link to join the class
-   • You may be automatically enrolled
-**Troubleshooting:**
-❌ **"Class not found" error:**
-• Double-check the class code
-• Make sure you're using the correct account
-• Ask your teacher to verify the code
-❌ **"You're already in this class" message:**
-• You're already enrolled
-• Check your classroom homepage
-❌ **Can't find the "+" button:**
-• Make sure you're signed in
-• Try refreshing the page
-• Check if you're using the correct account
-**Important Tips:**
-• 🔐 Use your school account, not personal
-• 📱 You can also join using the mobile app
-• ⏰ Join as soon as possible to not miss assignments
-• 📧 Check your email regularly for invitations
-• 🆘 Contact your teacher if you have trouble joining
+**✨ Just one click and you're in!**
 
-**Need the Class Code?**
-Ask your teacher for the class code - they can find it in:
-• Class settings → General → Class code
-• Or they can share it from the class page`,
+**💡 Quick Tips:**
+• 📧 Check your spam/junk folder if you don't see the invitation
+• ⏰ Accept invitations promptly - they're usually valid for 7 days
+• 🔐 If an account was created for you, change your password after first login
+• 🆘 Contact your teacher if you didn't receive an invitation
+
+**Need Help?**
+If you have any issues, just let me know and I'll help you troubleshoot!`,
           conversationId: req.body.conversationId || generateConversationId()
         };
       }
