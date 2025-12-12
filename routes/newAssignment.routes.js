@@ -24,5 +24,11 @@ router.put('/:assignmentId', assignmentController.updateAssignment);
 // Delete assignment (teachers and super_admin only)
 router.delete('/:assignmentId', assignmentController.deleteAssignment);
 
+// Add attachments to an assignment (teachers and super_admin only)
+router.post('/:assignmentId/attachments', assignmentController.addAttachments);
+
+// Remove an attachment from an assignment (teachers and super_admin only)
+router.delete('/:assignmentId/attachments/:filename', assignmentController.removeAttachment);
+
 module.exports = router;
 

@@ -5,10 +5,10 @@ const assignmentService = require('../services/newAssignmentService');
  * Handles HTTP requests for assignment operations
  */
 
-// Create assignment
+// Create assignment with optional attachments
 exports.createAssignment = async (req, res) => {
   try {
-    const { courseId, title, description, dueDate, maxPoints } = req.body;
+    const { courseId, title, description, dueDate, maxPoints, attachments } = req.body;
     const teacherId = req.user.id;
     const userRole = req.user.role;
 
@@ -33,7 +33,8 @@ exports.createAssignment = async (req, res) => {
       title,
       description,
       dueDate,
-      maxPoints
+      maxPoints,
+      attachments: attachments || []
     });
 
     return res.status(201).json(result);
@@ -106,11 +107,11 @@ exports.getAssignmentById = async (req, res) => {
   }
 };
 
-// Update assignment
+// Update assignment (including attachments if provided)
 exports.updateAssignment = async (req, res) => {
   try {
     const { assignmentId } = req.params;
-    const { title, description, dueDate, maxPoints } = req.body;
+    const { title, description, dueDate, maxPoints, attachments } = req.body;
     const userId = req.user.id;
     const userRole = req.user.role;
 
@@ -123,7 +124,7 @@ exports.updateAssignment = async (req, res) => {
 
     const result = await assignmentService.updateAssignment(
       assignmentId,
-      { title, description, dueDate, maxPoints },
+      { title, description, dueDate, maxPoints, attachments },
       userId,
       userRole
     );
@@ -183,6 +184,76 @@ exports.getUpcomingAssignments = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to get upcoming assignments'
+    });
+  }
+};
+
+// Add attachments to an existing assignment
+exports.addAttachments = async (req, res) => {
+  try {
+    const { assignmentId } = req.params;
+    const { attachments } = req.body;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    if (!assignmentId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Assignment ID is required'
+      });
+    }
+
+    if (!attachments || !Array.isArray(attachments) || attachments.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Attachments array is required'
+      });
+    }
+
+    const result = await assignmentService.addAttachments(
+      assignmentId,
+      attachments,
+      userId,
+      userRole
+    );
+
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error('Error adding attachments:', error);
+    return res.status(error.message.includes('permission') ? 403 : 500).json({
+      success: false,
+      message: error.message || 'Failed to add attachments'
+    });
+  }
+};
+
+// Remove an attachment from an assignment
+exports.removeAttachment = async (req, res) => {
+  try {
+    const { assignmentId, filename } = req.params;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+
+    if (!assignmentId || !filename) {
+      return res.status(400).json({
+        success: false,
+        message: 'Assignment ID and filename are required'
+      });
+    }
+
+    const result = await assignmentService.removeAttachment(
+      assignmentId,
+      filename,
+      userId,
+      userRole
+    );
+
+    return res.status(200).json(result);
+  } catch (error) {
+    console.error('Error removing attachment:', error);
+    return res.status(error.message.includes('permission') ? 403 : 500).json({
+      success: false,
+      message: error.message || 'Failed to remove attachment'
     });
   }
 };

@@ -260,3 +260,4 @@ checkAndAcceptInvitations()
     process.exit(1);
   });
 
+

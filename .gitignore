@@ -1,1 +1,7 @@
 .env
+node_modules/
+
+# Uploaded files (stored locally, will be moved to S3 later)
+uploads/*
+!uploads/.gitkeep
+!uploads/assignments/.gitkeep

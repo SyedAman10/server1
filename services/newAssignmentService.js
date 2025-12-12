@@ -7,8 +7,8 @@ const { sendAssignmentEmail } = require('./assignmentEmailService');
  * Handles business logic for assignment operations using database
  */
 
-// Create a new assignment
-async function createAssignment({ courseId, teacherId, title, description, dueDate, maxPoints }) {
+// Create a new assignment with optional attachments
+async function createAssignment({ courseId, teacherId, title, description, dueDate, maxPoints, attachments }) {
   try {
     // Verify course exists
     const course = await courseModel.getCourseById(courseId);
@@ -16,14 +16,15 @@ async function createAssignment({ courseId, teacherId, title, description, dueDa
       throw new Error('Course not found');
     }
 
-    // Create assignment
+    // Create assignment with attachments
     const assignment = await assignmentModel.createAssignment({
       courseId,
       teacherId,
       title,
       description,
       dueDate,
-      maxPoints
+      maxPoints,
+      attachments: attachments || []
     });
 
     // Get all students enrolled in the course
@@ -199,12 +200,74 @@ async function getUpcomingAssignments(days = 7) {
   }
 }
 
+// Add attachments to an existing assignment
+async function addAttachments(assignmentId, newAttachments, userId, userRole) {
+  try {
+    const assignment = await assignmentModel.getAssignmentById(assignmentId);
+    if (!assignment) {
+      throw new Error('Assignment not found');
+    }
+
+    // Only the teacher who created it or super_admin can add attachments
+    if (userRole === 'teacher' && assignment.teacher_id !== userId) {
+      throw new Error('You do not have permission to modify this assignment');
+    }
+
+    if (userRole === 'student') {
+      throw new Error('Students cannot add attachments to assignments');
+    }
+
+    const updatedAssignment = await assignmentModel.addAttachments(assignmentId, newAttachments);
+
+    return {
+      success: true,
+      assignment: updatedAssignment,
+      message: `${newAttachments.length} attachment(s) added successfully`
+    };
+  } catch (error) {
+    console.error('Error adding attachments:', error);
+    throw error;
+  }
+}
+
+// Remove an attachment from an assignment
+async function removeAttachment(assignmentId, attachmentFilename, userId, userRole) {
+  try {
+    const assignment = await assignmentModel.getAssignmentById(assignmentId);
+    if (!assignment) {
+      throw new Error('Assignment not found');
+    }
+
+    // Only the teacher who created it or super_admin can remove attachments
+    if (userRole === 'teacher' && assignment.teacher_id !== userId) {
+      throw new Error('You do not have permission to modify this assignment');
+    }
+
+    if (userRole === 'student') {
+      throw new Error('Students cannot remove attachments from assignments');
+    }
+
+    const updatedAssignment = await assignmentModel.removeAttachment(assignmentId, attachmentFilename);
+
+    return {
+      success: true,
+      assignment: updatedAssignment,
+      message: 'Attachment removed successfully'
+    };
+  } catch (error) {
+    console.error('Error removing attachment:', error);
+    throw error;
+  }
+}
+
 module.exports = {
   createAssignment,
   getAssignmentsByCourse,
   getAssignmentById,
   updateAssignment,
   deleteAssignment,
-  getUpcomingAssignments
+  getUpcomingAssignments,
+  addAttachments,
+  removeAttachment
 };
 
