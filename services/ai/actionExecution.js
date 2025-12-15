@@ -853,6 +853,19 @@ Extracted title:`;
       }
       break;
       
+      case 'SUBMIT_ASSIGNMENT':
+        // Handle parameter collection for assignment submission
+        if (missingParameters.includes('courseName')) {
+          // User provided course name - just use their message as the course name
+          newParameters.courseName = originalMessage.trim();
+          parametersFound = true;
+        } else if (missingParameters.includes('assignmentTitle')) {
+          // User provided assignment title or number
+          newParameters.assignmentTitle = originalMessage.trim();
+          parametersFound = true;
+        }
+        break;
+      
       case 'CREATE_ANNOUNCEMENT':
         // If we're waiting for a course name, treat the user's response as a course name
         if (missingParameters.includes('courseName')) {
