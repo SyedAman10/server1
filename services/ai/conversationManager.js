@@ -1,5 +1,5 @@
 const { v4: uuidv4 } = require('uuid');
-const conversationModel = require('../models/conversation.model');
+const conversationModel = require('../../models/conversation.model');
 
 // In-memory storage for conversations
 const conversations = new Map();
