@@ -83,6 +83,72 @@ async function getAssignmentsByCourse(courseId, userId, userRole) {
 
     const assignments = await assignmentModel.getAssignmentsByCourse(courseId);
 
+    // For teachers and super_admin, add submission counts to each assignment
+    if ((userRole === 'teacher' || userRole === 'super_admin') && assignments.length > 0) {
+      const submissionModel = require('../models/submission.model');
+      const db = require('../utils/db');
+      
+      // Get submission counts for all assignments in one query (more efficient)
+      const assignmentIds = assignments.map(a => a.id);
+      const submissionCounts = await db.query(`
+        SELECT assignment_id, COUNT(*) as submission_count
+        FROM assignment_submissions
+        WHERE assignment_id = ANY($1)
+        GROUP BY assignment_id
+      `, [assignmentIds]);
+      
+      // Create a map of assignment_id -> count
+      const countsMap = {};
+      submissionCounts.rows.forEach(row => {
+        countsMap[row.assignment_id] = parseInt(row.submission_count);
+      });
+      
+      // Add submission count to each assignment
+      const assignmentsWithCounts = assignments.map(assignment => ({
+        ...assignment,
+        submissionCount: countsMap[assignment.id] || 0
+      }));
+      
+      return {
+        success: true,
+        assignments: assignmentsWithCounts,
+        count: assignments.length
+      };
+    }
+    
+    // For students, check which assignments they've submitted
+    if (userRole === 'student' && assignments.length > 0) {
+      const submissionModel = require('../models/submission.model');
+      const db = require('../utils/db');
+      
+      // Get student's submissions for all assignments in one query
+      const assignmentIds = assignments.map(a => a.id);
+      const mySubmissions = await db.query(`
+        SELECT assignment_id, status, submitted_at, grade
+        FROM assignment_submissions
+        WHERE assignment_id = ANY($1) AND student_id = $2
+      `, [assignmentIds, userId]);
+      
+      // Create a map of assignment_id -> submission
+      const submissionsMap = {};
+      mySubmissions.rows.forEach(row => {
+        submissionsMap[row.assignment_id] = row;
+      });
+      
+      // Add submission status to each assignment
+      const assignmentsWithStatus = assignments.map(assignment => ({
+        ...assignment,
+        mySubmission: submissionsMap[assignment.id] || null,
+        hasSubmitted: !!submissionsMap[assignment.id]
+      }));
+      
+      return {
+        success: true,
+        assignments: assignmentsWithStatus,
+        count: assignments.length
+      };
+    }
+
     return {
       success: true,
       assignments,
@@ -113,6 +179,29 @@ async function getAssignmentById(assignmentId, userId, userRole) {
       if (!isEnrolled) {
         throw new Error('You are not enrolled in this course');
       }
+      
+      // For students, check if they have submitted
+      const submissionModel = require('../models/submission.model');
+      const mySubmission = await submissionModel.getSubmissionByStudentAndAssignment(userId, assignmentId);
+      
+      return {
+        success: true,
+        assignment,
+        mySubmission: mySubmission || null
+      };
+    }
+
+    // For teachers and super_admin, include all submissions
+    if (userRole === 'teacher' || userRole === 'super_admin') {
+      const submissionModel = require('../models/submission.model');
+      const submissions = await submissionModel.getSubmissionsByAssignment(assignmentId);
+      
+      return {
+        success: true,
+        assignment,
+        submissions: submissions || [],
+        submissionCount: submissions ? submissions.length : 0
+      };
     }
 
     return {
