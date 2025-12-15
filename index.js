@@ -49,7 +49,19 @@ const getCorsOrigins = () => {
 // CORS configuration
 app.use(cors({
   origin: getCorsOrigins(),
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  exposedHeaders: ['Content-Length', 'X-Request-Id'],
+  maxAge: 86400 // 24 hours
+}));
+
+// Handle preflight requests explicitly
+app.options('*', cors({
+  origin: getCorsOrigins(),
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept']
 }));
 
 app.use(express.json());
