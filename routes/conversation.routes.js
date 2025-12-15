@@ -1,10 +1,19 @@
 const express = require('express');
 const router = express.Router();
+const cors = require('cors');
 const conversationController = require('../controllers/conversation.controller');
 const { authenticate } = require('../middleware/auth.middleware');
 
-// All routes require authentication
-router.use(authenticate);
+// Handle preflight requests for all routes in this router
+router.options('*', cors());
+
+// All routes require authentication (but OPTIONS requests pass through)
+router.use((req, res, next) => {
+  if (req.method === 'OPTIONS') {
+    return next();
+  }
+  return authenticate(req, res, next);
+});
 
 // Create a new conversation
 router.post('/', conversationController.createConversation);
