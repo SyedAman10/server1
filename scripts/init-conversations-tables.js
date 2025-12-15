@@ -1,3 +1,4 @@
+require('dotenv').config(); // Load environment variables
 const db = require('../utils/db');
 
 /**
