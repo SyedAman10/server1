@@ -60,28 +60,18 @@ async function initConversationsTables() {
     `);
     console.log('✅ Index on conversation_messages.created_at created');
 
-    // Try to create full-text search indexes (requires pg_trgm extension)
-    try {
-      // First, try to enable the extension
-      await db.query(`CREATE EXTENSION IF NOT EXISTS pg_trgm;`);
-      console.log('✅ pg_trgm extension enabled');
-      
-      await db.query(`
-        CREATE INDEX IF NOT EXISTS idx_conversations_title_trgm 
-        ON conversations USING gin(title gin_trgm_ops);
-      `);
-      console.log('✅ Full-text search index on conversations.title created');
+    // Create index for full-text search
+    await db.query(`
+      CREATE INDEX IF NOT EXISTS idx_conversations_title_trgm 
+      ON conversations USING gin(title gin_trgm_ops);
+    `);
+    console.log('✅ Full-text search index on conversations.title created');
 
-      await db.query(`
-        CREATE INDEX IF NOT EXISTS idx_conversation_messages_content_trgm 
-        ON conversation_messages USING gin(content gin_trgm_ops);
-      `);
-      console.log('✅ Full-text search index on conversation_messages.content created');
-    } catch (extError) {
-      console.log('⚠️  Warning: Could not create full-text search indexes');
-      console.log('   This is optional - search will still work but may be slower');
-      console.log('   To enable: Run "CREATE EXTENSION pg_trgm;" in your database');
-    }
+    await db.query(`
+      CREATE INDEX IF NOT EXISTS idx_conversation_messages_content_trgm 
+      ON conversation_messages USING gin(content gin_trgm_ops);
+    `);
+    console.log('✅ Full-text search index on conversation_messages.content created');
 
     console.log('✅ All conversation tables and indexes created successfully!');
     process.exit(0);
