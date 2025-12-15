@@ -1487,7 +1487,8 @@ async function detectIntent(message, conversationHistory, conversationId) {
       - LIST_ASSIGNMENTS: User wants to see all assignments in a course (extract courseName or courseId)
       - LIST_PENDING_ASSIGNMENTS: User wants to see their pending/due assignments across all courses (no parameters needed)
       - SHOW_COURSE_GRADES: User wants to see their grades in specific courses (extract courseNames from the request)
-      - ASSIGNMENT_SUBMISSION_HELP: User is asking how to submit an assignment or needs help with assignment submission process (no parameters needed)
+      - SUBMIT_ASSIGNMENT: User wants to ACTUALLY SUBMIT an assignment (not asking how to) - student is submitting their work (extract courseName, assignmentTitle if mentioned) - Use this for "submit assignment", "turn in homework", "hand in my work"
+      - ASSIGNMENT_SUBMISSION_HELP: User is ASKING HOW to submit an assignment or needs help with submission process (no parameters needed) - Use this only when user asks "how to submit", "how do I submit", includes question marks
       - JOIN_CLASS_HELP: User is asking how to join a class or needs help with joining a classroom (no parameters needed)
       - SHOW_ENROLLED_STUDENTS: User wants to see the list of enrolled students in a course (extract courseName)
       - CREATE_MEETING: User wants to create a meeting or schedule an appointment (extract title, attendees, dateExpr, timeExpr, duration, description)
@@ -1546,6 +1547,15 @@ async function detectIntent(message, conversationHistory, conversationId) {
       - "check submissions for test 1 in computer science" → CHECK_ASSIGNMENT_SUBMISSIONS with courseName: "computer science", assignmentTitle: "test 1"
       - "show submission status for today's assignment" → CHECK_ASSIGNMENT_SUBMISSIONS with isTodaysAssignment: true
       - "who submitted today's assignment in physics" → CHECK_ASSIGNMENT_SUBMISSIONS with courseName: "physics", isTodaysAssignment: true
+      
+      IMPORTANT - SUBMIT_ASSIGNMENT vs ASSIGNMENT_SUBMISSION_HELP:
+      - "submit assignment" → SUBMIT_ASSIGNMENT (student wants to submit)
+      - "submit homework in math" → SUBMIT_ASSIGNMENT (student wants to submit)
+      - "turn in my assignment" → SUBMIT_ASSIGNMENT (student wants to submit)
+      - "hand in essay" → SUBMIT_ASSIGNMENT (student wants to submit)
+      - "how to submit assignment" → ASSIGNMENT_SUBMISSION_HELP (asking for instructions)
+      - "how do I submit?" → ASSIGNMENT_SUBMISSION_HELP (asking for instructions)
+      - "help with submitting" → ASSIGNMENT_SUBMISSION_HELP (asking for instructions)
       
       Examples for unsubmitted assignments:
       - "who has not submitted their assignment" → CHECK_UNSUBMITTED_ASSIGNMENTS (no course specified, will ask)
