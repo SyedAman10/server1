@@ -1,0 +1,80 @@
+require('dotenv').config();
+const db = require('../utils/db');
+
+/**
+ * Fix assignment_submissions table schema
+ */
+
+async function fixSubmissionsTable() {
+  try {
+    console.log('🔄 Fixing assignment_submissions table schema...');
+
+    // Drop existing table if it has wrong schema
+    await db.query(`DROP TABLE IF EXISTS assignment_submissions CASCADE;`);
+    console.log('✅ Dropped old table');
+
+    // Create table with correct schema
+    await db.query(`
+      CREATE TABLE assignment_submissions (
+        id SERIAL PRIMARY KEY,
+        assignment_id INTEGER NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
+        student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        submission_text TEXT,
+        attachments JSONB DEFAULT '[]',
+        status VARCHAR(50) DEFAULT 'submitted' CHECK (status IN ('submitted', 'graded', 'returned', 'late')),
+        grade INTEGER,
+        feedback TEXT,
+        submitted_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('✅ Assignment submissions table created with correct schema');
+
+    // Create indexes
+    await db.query(`
+      CREATE INDEX IF NOT EXISTS idx_submissions_assignment_id 
+      ON assignment_submissions(assignment_id);
+    `);
+    console.log('✅ Index on submissions.assignment_id created');
+
+    await db.query(`
+      CREATE INDEX IF NOT EXISTS idx_submissions_student_id 
+      ON assignment_submissions(student_id);
+    `);
+    console.log('✅ Index on submissions.student_id created');
+
+    await db.query(`
+      CREATE INDEX IF NOT EXISTS idx_submissions_status 
+      ON assignment_submissions(status);
+    `);
+    console.log('✅ Index on submissions.status created');
+
+    await db.query(`
+      CREATE INDEX IF NOT EXISTS idx_submissions_submitted_at 
+      ON assignment_submissions(submitted_at DESC);
+    `);
+    console.log('✅ Index on submissions.submitted_at created');
+
+    // Create unique constraint to prevent duplicate submissions
+    await db.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_student_assignment 
+      ON assignment_submissions(student_id, assignment_id);
+    `);
+    console.log('✅ Unique constraint on student/assignment created');
+
+    console.log('');
+    console.log('✅ Assignment submissions table fixed successfully!');
+    console.log('');
+    console.log('🚀 Ready to use!');
+    console.log('   Students can now submit assignments through the AI.');
+    console.log('');
+    process.exit(0);
+  } catch (error) {
+    console.error('❌ Error fixing submissions table:', error);
+    process.exit(1);
+  }
+}
+
+// Run the fix
+fixSubmissionsTable();
+
