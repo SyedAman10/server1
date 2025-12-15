@@ -40,14 +40,25 @@ async function getConversation(conversationId, userId = null) {
     // Create conversation in database if userId is provided
     if (userId) {
       try {
-        await conversationModel.createConversation({
-          conversationId,
-          userId,
-          title: 'New Conversation'
-        });
-        console.log(`💾 Created conversation in database: ${conversationId}`);
+        // Check if conversation already exists in database
+        const existingConv = await conversationModel.getConversationById(conversationId, userId);
+        if (!existingConv) {
+          await conversationModel.createConversation({
+            conversationId,
+            userId,
+            title: 'New Conversation'
+          });
+          console.log(`💾 Created conversation in database: ${conversationId}`);
+        } else {
+          console.log(`💾 Conversation already exists in database: ${conversationId}`);
+        }
       } catch (error) {
-        console.error('Error creating conversation in database:', error);
+        // If error is duplicate key, that's fine - conversation already exists
+        if (error.code === '23505') {
+          console.log(`💾 Conversation already exists in database: ${conversationId}`);
+        } else {
+          console.error('Error creating conversation in database:', error);
+        }
         // Continue even if database save fails (fall back to in-memory only)
       }
     }

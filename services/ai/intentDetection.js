@@ -1208,7 +1208,7 @@ async function detectCorrection(message, conversationId) {
   }
   
   const conversation = getConversation(conversationId);
-  if (!conversation || conversation.messages.length === 0) {
+  if (!conversation || !conversation.messages || conversation.messages.length === 0) {
     console.log('🔍 DEBUG: No conversation history found, skipping correction detection');
     return null;
   }
