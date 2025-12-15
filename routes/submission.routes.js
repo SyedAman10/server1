@@ -9,11 +9,14 @@ router.use(authenticate);
 // Create submission (students only)
 router.post('/', submissionController.createSubmission);
 
-// Get my submissions
+// Get my submissions (student)
 router.get('/my-submissions', submissionController.getMySubmissions);
 
-// Get specific submission
+// Get my specific submission for an assignment (student)
 router.get('/assignment/:assignmentId', submissionController.getSubmission);
+
+// Get all submissions for an assignment (teacher)
+router.get('/assignment/:assignmentId/all', submissionController.getAssignmentSubmissions);
 
 module.exports = router;
 
