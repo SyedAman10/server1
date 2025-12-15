@@ -4743,6 +4743,187 @@ If you have any issues, just let me know and I'll help you troubleshoot!`,
         };
       }
 
+      case 'SUBMIT_ASSIGNMENT': {
+        // Handle student assignment submission
+        const submissionModel = require('../models/submission.model');
+        const assignmentModel = require('../models/assignment.model');
+        const courseModel = require('../models/course.model');
+        
+        // Only students can submit
+        if (userRole !== 'student') {
+          return {
+            message: "Only students can submit assignments. Teachers can view submissions through the assignment dashboard.",
+            conversationId
+          };
+        }
+        
+        // Check if we have course name
+        if (!parameters.courseName) {
+          startOngoingAction(conversationId, 'SUBMIT_ASSIGNMENT', ['courseName'], parameters);
+          return {
+            message: "Which course is this assignment for? Please provide the course name.",
+            conversationId
+          };
+        }
+        
+        // Find the course
+        const courses = await makeApiCall(`${baseUrl}/api/courses`, 'GET', null, userToken, req);
+        const courseMatch = findBestCourseMatch(courses, parameters.courseName);
+        
+        if (!courseMatch || !courseMatch.exact) {
+          if (courseMatch && courseMatch.suggestions.length > 0) {
+            const suggestionsList = courseMatch.suggestions.map(c => `• ${c.name}`).join('\n');
+            return {
+              message: `I couldn't find a course called "${parameters.courseName}". Did you mean one of these?\n\n${suggestionsList}\n\nPlease specify which course.`,
+              conversationId
+            };
+          }
+          return {
+            message: `I couldn't find a course called "${parameters.courseName}". Please check the course name and try again.`,
+            conversationId
+          };
+        }
+        
+        const course = courseMatch.course;
+        
+        // Get assignments for this course
+        const assignmentsResponse = await makeApiCall(
+          `${baseUrl}/api/assignments/course/${course.id}`,
+          'GET',
+          null,
+          userToken,
+          req
+        );
+        
+        if (!assignmentsResponse.success || assignmentsResponse.assignments.length === 0) {
+          return {
+            message: `There are no assignments in ${course.name}. Check with your teacher if you think this is incorrect.`,
+            conversationId
+          };
+        }
+        
+        const assignments = assignmentsResponse.assignments;
+        
+        // If no assignment title specified, show available assignments
+        if (!parameters.assignmentTitle && assignments.length > 1) {
+          const assignmentsList = assignments.map((a, i) => 
+            `${i + 1}. ${a.title}${a.due_date ? ` (Due: ${new Date(a.due_date).toLocaleDateString()})` : ''}`
+          ).join('\n');
+          
+          startOngoingAction(conversationId, 'SUBMIT_ASSIGNMENT', ['assignmentTitle'], { ...parameters, courseId: course.id, courseName: course.name });
+          
+          return {
+            message: `Which assignment in ${course.name} would you like to submit?\n\n${assignmentsList}\n\nPlease tell me the assignment name or number.`,
+            conversationId
+          };
+        }
+        
+        // Find the assignment
+        let assignment;
+        if (assignments.length === 1) {
+          assignment = assignments[0];
+        } else if (parameters.assignmentTitle) {
+          // Try to match by title
+          assignment = assignments.find(a => 
+            a.title.toLowerCase().includes(parameters.assignmentTitle.toLowerCase()) ||
+            parameters.assignmentTitle.toLowerCase().includes(a.title.toLowerCase())
+          );
+          
+          if (!assignment) {
+            // Try by number
+            const num = parseInt(parameters.assignmentTitle);
+            if (!isNaN(num) && num > 0 && num <= assignments.length) {
+              assignment = assignments[num - 1];
+            }
+          }
+        }
+        
+        if (!assignment) {
+          const assignmentsList = assignments.map((a, i) => 
+            `${i + 1}. ${a.title}`
+          ).join('\n');
+          
+          return {
+            message: `I couldn't find that assignment. Available assignments in ${course.name}:\n\n${assignmentsList}\n\nPlease tell me which one you'd like to submit.`,
+            conversationId
+          };
+        }
+        
+        // Check if already submitted
+        const hasSubmitted = await submissionModel.hasStudentSubmitted(req.user.id, assignment.id);
+        if (hasSubmitted) {
+          return {
+            message: `You've already submitted "${assignment.title}" in ${course.name}. Contact your teacher if you need to resubmit.`,
+            conversationId
+          };
+        }
+        
+        // Check if assignment requires attachments
+        const assignmentAttachments = assignment.attachments ? 
+          (typeof assignment.attachments === 'string' ? JSON.parse(assignment.attachments) : assignment.attachments) : [];
+        
+        const requiresAttachment = assignmentAttachments.length > 0;
+        
+        // Check if user has uploaded file
+        if (requiresAttachment && (!req.body.attachmentUrl || req.body.attachmentUrl === 'pending')) {
+          return {
+            message: `📎 **File Upload Required**\n\n"${assignment.title}" requires a file attachment. Please upload your file using the button below.\n\n**Assignment Details:**\n• Course: ${course.name}\n• Title: ${assignment.title}${assignment.due_date ? `\n• Due: ${new Date(assignment.due_date).toLocaleDateString()}` : ''}\n\nOnce you upload your file, I'll submit it automatically.`,
+            awaitingFileUpload: true,
+            submissionData: {
+              assignmentId: assignment.id,
+              assignmentTitle: assignment.title,
+              courseId: course.id,
+              courseName: course.name
+            },
+            conversationId
+          };
+        }
+        
+        // Prepare submission attachments
+        let submissionAttachments = [];
+        if (req.body.attachmentUrl && req.body.attachmentUrl !== 'pending') {
+          submissionAttachments = [{
+            originalName: req.body.attachmentData?.originalName || 'submission',
+            filename: req.body.attachmentData?.filename || '',
+            url: req.body.attachmentData?.url || req.body.attachmentUrl,
+            fullUrl: req.body.attachmentUrl,
+            size: req.body.attachmentData?.size || 0,
+            mimetype: req.body.attachmentData?.mimetype || 'application/octet-stream',
+            uploadedAt: new Date().toISOString(),
+            uploadedBy: req.user.id
+          }];
+        }
+        
+        // Create the submission
+        try {
+          const submission = await submissionModel.createSubmission({
+            assignmentId: assignment.id,
+            studentId: req.user.id,
+            submissionText: parameters.submissionText || '',
+            attachments: submissionAttachments,
+            status: 'submitted'
+          });
+          
+          completeOngoingAction(conversationId);
+          
+          const attachmentInfo = submissionAttachments.length > 0 ? 
+            `\n• Attachment: ${submissionAttachments[0].originalName}` : '';
+          
+          return {
+            message: `✅ **Assignment Submitted Successfully!**\n\n**Submission Details:**\n• Course: ${course.name}\n• Assignment: ${assignment.title}\n• Submitted: ${new Date().toLocaleString()}${attachmentInfo}\n\nYour teacher will review your submission. Good luck! 🎓`,
+            submission,
+            awaitingFileUpload: false,
+            conversationId
+          };
+        } catch (error) {
+          console.error('Error creating submission:', error);
+          return {
+            message: `I encountered an error while submitting your assignment: ${error.message}. Please try again or contact your teacher.`,
+            conversationId
+          };
+        }
+      }
+
       case 'EDUCATIONAL_QUESTION':
         // Handle educational/academic questions
         return await handleEducationalQuestion(originalMessage, conversationId);
@@ -4757,10 +4938,11 @@ If you have any issues, just let me know and I'll help you troubleshoot!`,
 - "Show me the course details for Math 101" - Get course information
 
 📝 **Assignments:**
-- "Create assignment titled 'Homework 1' for Computer Science due next Friday at 5 PM" - Create an assignment
+- "Create assignment titled 'Homework 1' for Computer Science due next Friday at 5 PM" - Create an assignment (teachers)
+- "Submit assignment in English 101" - Submit an assignment (students)
 - "What assignments are due today?" - See pending assignments
 - "Who submitted the tire pressure essay?" - Check submissions (teachers)
-- "Grade assignment 'Essay 1' for student@email.com and give them 85" - Grade an assignment
+- "Grade assignment 'Essay 1' for student@email.com and give them 85" - Grade an assignment (teachers)
 
 📢 **Announcements:**
 - "Post announcement 'Class is cancelled tomorrow' to AI class" - Create an announcement

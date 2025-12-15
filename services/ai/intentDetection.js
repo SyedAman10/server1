@@ -974,22 +974,46 @@ async function detectIntentFallback(message, conversationId) {
     };
   }
 
-  // Assignment submission help
+  // Submit assignment (actual submission, not help)
+  if (
+    (lowerMessage.includes('submit') || lowerMessage.includes('turn in') || lowerMessage.includes('hand in')) && 
+    (lowerMessage.includes('assignment') || lowerMessage.includes('homework') || lowerMessage.includes('work')) &&
+    !lowerMessage.includes('how') && !lowerMessage.includes('help') && !lowerMessage.includes('?')
+  ) {
+    // Extract course name and assignment title
+    let courseName = '';
+    let assignmentTitle = '';
+    
+    // Extract course name from patterns like "in [COURSE]", "for [COURSE]"
+    const courseMatch = message.match(/(?:in|for)\s+(?:the\s+)?(?:course\s+)?([\w\s]+?)(?:\s+assignment|\s+class|\s*$)/i);
+    if (courseMatch && courseMatch[1]) {
+      courseName = courseMatch[1].trim();
+    }
+    
+    // Extract assignment title if mentioned
+    const assignmentMatch = message.match(/(?:assignment|homework)\s+(?:called|titled|named)?\s*([^in|for]+)/i);
+    if (assignmentMatch && assignmentMatch[1]) {
+      assignmentTitle = assignmentMatch[1].trim();
+    }
+    
+    return {
+      intent: 'SUBMIT_ASSIGNMENT',
+      confidence: 0.9,
+      parameters: {
+        ...(courseName ? { courseName } : {}),
+        ...(assignmentTitle ? { assignmentTitle } : {})
+      }
+    };
+  }
+  
+  // Assignment submission help (how to submit)
   if (
     lowerMessage.includes('how do i submit') ||
     lowerMessage.includes('how to submit') ||
     lowerMessage.includes('how can i submit') ||
     lowerMessage.includes('how do you submit') ||
-    lowerMessage.includes('submit assignment') ||
-    lowerMessage.includes('hand in assignment') ||
-    lowerMessage.includes('turn in assignment') ||
-    lowerMessage.includes('upload assignment') ||
-    lowerMessage.includes('assignment submission') ||
-    lowerMessage.includes('how to hand in') ||
-    lowerMessage.includes('how to turn in') ||
-    lowerMessage.includes('how to upload') ||
-    (lowerMessage.includes('help') && lowerMessage.includes('assignment')) ||
-    (lowerMessage.includes('help') && lowerMessage.includes('submit'))
+    (lowerMessage.includes('help') && lowerMessage.includes('submit')) ||
+    (lowerMessage.includes('help') && lowerMessage.includes('assignment') && lowerMessage.includes('?'))
   ) {
     return {
       intent: 'ASSIGNMENT_SUBMISSION_HELP',
