@@ -4780,19 +4780,11 @@ If you have any issues, just let me know and I'll help you troubleshoot!`,
         }
         
         // Find the course
-        const courses = await makeApiCall(`${baseUrl}/api/courses`, 'GET', null, userToken, req);
-        const courseMatch = findBestCourseMatch(courses, parameters.courseName);
+        const courseMatch = await findMatchingCourse(parameters.courseName, userToken, req, baseUrl);
         
-        if (!courseMatch || !courseMatch.exact) {
-          if (courseMatch && courseMatch.suggestions.length > 0) {
-            const suggestionsList = courseMatch.suggestions.map(c => `• ${c.name}`).join('\n');
-            return {
-              message: `I couldn't find a course called "${parameters.courseName}". Did you mean one of these?\n\n${suggestionsList}\n\nPlease specify which course.`,
-              conversationId
-            };
-          }
+        if (!courseMatch || !courseMatch.success) {
           return {
-            message: `I couldn't find a course called "${parameters.courseName}". Please check the course name and try again.`,
+            message: courseMatch?.message || `I couldn't find a course called "${parameters.courseName}". Please check the course name and try again.`,
             conversationId
           };
         }
