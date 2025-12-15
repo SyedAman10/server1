@@ -108,7 +108,12 @@ async function addMessage(conversationId, message, role = 'user') {
  * Start tracking an ongoing action
  */
 function startOngoingAction(conversationId, action, requiredParameters, initialParameters = {}) {
-  const conversation = getConversation(conversationId);
+  const conversation = conversations.get(conversationId);
+  
+  if (!conversation) {
+    console.log(`⚠️ Cannot start action - conversation not found: ${conversationId}`);
+    return null;
+  }
   
   conversation.context.ongoingAction = action;
   conversation.context.requiredParameters = requiredParameters;
@@ -127,7 +132,12 @@ function startOngoingAction(conversationId, action, requiredParameters, initialP
  * Update parameters for an ongoing action
  */
 function updateOngoingActionParameters(conversationId, newParameters) {
-  const conversation = getConversation(conversationId);
+  const conversation = conversations.get(conversationId);
+  
+  if (!conversation) {
+    console.log('⚠️ Cannot update parameters - conversation not found');
+    return null;
+  }
   
   if (!conversation.context.ongoingAction) {
     console.log('⚠️ No ongoing action to update parameters for');
@@ -152,10 +162,10 @@ function updateOngoingActionParameters(conversationId, newParameters) {
  * Check if an action is complete (all required parameters collected)
  */
 function isActionComplete(conversationId) {
-  const conversation = getConversation(conversationId);
+  const conversation = conversations.get(conversationId);
   
-  if (!conversation.context.ongoingAction) {
-    return true; // No ongoing action
+  if (!conversation || !conversation.context.ongoingAction) {
+    return true; // No conversation or no ongoing action
   }
   
   const { requiredParameters, collectedParameters } = conversation.context;
@@ -179,9 +189,9 @@ function isActionComplete(conversationId) {
  * Get the current ongoing action context
  */
 function getOngoingActionContext(conversationId) {
-  const conversation = getConversation(conversationId);
+  const conversation = conversations.get(conversationId);
   
-  if (!conversation.context.ongoingAction) {
+  if (!conversation || !conversation.context.ongoingAction) {
     return null;
   }
   
@@ -219,7 +229,12 @@ function getOngoingActionContext(conversationId) {
  * Complete an ongoing action (clear the tracking)
  */
 function completeOngoingAction(conversationId) {
-  const conversation = getConversation(conversationId);
+  const conversation = conversations.get(conversationId);
+  
+  if (!conversation) {
+    console.log('⚠️ Cannot complete action - conversation not found');
+    return null;
+  }
   
   if (!conversation.context.ongoingAction) {
     console.log('⚠️ No ongoing action to complete');
@@ -243,10 +258,10 @@ function completeOngoingAction(conversationId) {
  * Check if user is trying to start a new action while one is in progress
  */
 function isNewActionAttempt(conversationId, newIntent) {
-  const conversation = getConversation(conversationId);
+  const conversation = conversations.get(conversationId);
   
-  if (!conversation.context.ongoingAction) {
-    return false; // No ongoing action, so this can't be a new action attempt
+  if (!conversation || !conversation.context.ongoingAction) {
+    return false; // No conversation or no ongoing action, so this can't be a new action attempt
   }
   
   // List of intents that start new actions
@@ -353,7 +368,12 @@ function getContextAwareMessage(conversationId) {
  * Update conversation context
  */
 function updateContext(conversationId, context) {
-  const conversation = getConversation(conversationId);
+  const conversation = conversations.get(conversationId);
+  
+  if (!conversation) {
+    console.log('⚠️ Cannot update context - conversation not found');
+    return null;
+  }
   
   conversation.context = {
     ...conversation.context,
@@ -370,7 +390,11 @@ function updateContext(conversationId, context) {
  * Get conversation history in a format suitable for the AI model
  */
 function getFormattedHistory(conversationId) {
-  const conversation = getConversation(conversationId);
+  const conversation = conversations.get(conversationId);
+  
+  if (!conversation) {
+    return [];
+  }
   
   return conversation.messages.map(msg => ({
     role: msg.role,
@@ -382,7 +406,10 @@ function getFormattedHistory(conversationId) {
  * Get the last message from a conversation
  */
 function getLastMessage(conversationId) {
-  const conversation = getConversation(conversationId);
+  const conversation = conversations.get(conversationId);
+  if (!conversation || !conversation.messages) {
+    return null;
+  }
   return conversation.messages[conversation.messages.length - 1];
 }
 
@@ -390,7 +417,10 @@ function getLastMessage(conversationId) {
  * Get the last N messages from a conversation
  */
 function getLastMessages(conversationId, count = 5) {
-  const conversation = getConversation(conversationId);
+  const conversation = conversations.get(conversationId);
+  if (!conversation || !conversation.messages) {
+    return [];
+  }
   return conversation.messages.slice(-count);
 }
 
@@ -398,7 +428,12 @@ function getLastMessages(conversationId, count = 5) {
  * Reset conversation context (clear ongoing actions without deleting history)
  */
 function resetConversationContext(conversationId) {
-  const conversation = getConversation(conversationId);
+  const conversation = conversations.get(conversationId);
+  
+  if (!conversation) {
+    console.log(`⚠️ Cannot reset context - conversation not found: ${conversationId}`);
+    return null;
+  }
   
   // Clear ongoing action context but keep messages
   conversation.context.ongoingAction = null;
