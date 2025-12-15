@@ -4745,9 +4745,9 @@ If you have any issues, just let me know and I'll help you troubleshoot!`,
 
       case 'SUBMIT_ASSIGNMENT': {
         // Handle student assignment submission
-        const submissionModel = require('../models/submission.model');
-        const assignmentModel = require('../models/assignment.model');
-        const courseModel = require('../models/course.model');
+        const submissionModel = require('../../models/submission.model');
+        const assignmentModel = require('../../models/assignment.model');
+        const courseModel = require('../../models/course.model');
         
         // Only students can submit
         if (userRole !== 'student') {
