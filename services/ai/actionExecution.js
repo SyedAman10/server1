@@ -3923,9 +3923,30 @@ If you have any issues, just let me know and I'll help you troubleshoot!`,
               }
             }
             
+            // ✅ EXTRACT ATTACHMENT DATA: Check if user has uploaded a file
+            let attachments = [];
+            if (req.body.attachmentUrl && req.body.attachmentData && req.body.attachmentUrl !== 'pending') {
+              console.log('🔍 DEBUG: File uploaded! Including attachment in assignment');
+              console.log('🔍 DEBUG: attachmentUrl:', req.body.attachmentUrl);
+              console.log('🔍 DEBUG: attachmentData:', req.body.attachmentData);
+              
+              // Build attachment object from uploaded file data
+              attachments = [{
+                originalName: req.body.attachmentData.originalName,
+                filename: req.body.attachmentData.filename,
+                url: req.body.attachmentData.url,
+                fullUrl: req.body.attachmentUrl,
+                size: req.body.attachmentData.size,
+                mimetype: req.body.attachmentData.mimetype,
+                uploadedAt: new Date().toISOString(),
+                uploadedBy: req.user.id
+              }];
+            }
+            
             console.log('🔍 DEBUG: Creating assignment with database system');
             console.log('🔍 DEBUG: courseId:', courseId, 'teacherId:', req.user.id);
             console.log('🔍 DEBUG: dueDateTime:', dueDateTime);
+            console.log('🔍 DEBUG: attachments:', JSON.stringify(attachments));
             
             // Use the new database assignment service
             const newAssignmentService = require('../../services/newAssignmentService');
@@ -3935,7 +3956,8 @@ If you have any issues, just let me know and I'll help you troubleshoot!`,
               title: parameters.title,
               description: parameters.description || '',
               dueDate: dueDateTime,
-              maxPoints: parameters.maxPoints || 100
+              maxPoints: parameters.maxPoints || 100,
+              attachments: attachments
             });
 
             // ✅ COMPLETE ACTION: Mark the ongoing action as completed
@@ -3949,10 +3971,17 @@ If you have any issues, just let me know and I'll help you troubleshoot!`,
               const dueDateObj = new Date(dueDateTime);
               dueTimeStr = `\n• Due Date: ${dueDateObj.toLocaleDateString()} at ${dueDateObj.toLocaleTimeString()}`;
             }
+            
+            // Format attachment info if included
+            let attachmentStr = '';
+            if (attachments && attachments.length > 0) {
+              attachmentStr = `\n• Attachment: ${attachments[0].originalName} (${(attachments[0].size / 1024).toFixed(2)} KB)`;
+            }
 
             return {
-              message: `Great! I've successfully created your assignment "${parameters.title}" in ${selectedCourse.name}. 😊\n\nAssignment Details:\n• Title: ${parameters.title}${parameters.description ? `\n• Description: ${parameters.description}` : ''}${dueTimeStr}${parameters.maxPoints ? `\n• Max Points: ${parameters.maxPoints}` : ''}\n\n${response.message}\n\nNext steps:\n• Students have been notified via email\n• Review student submissions\n• Grade completed assignments\n• Provide feedback to students`,
+              message: `Great! I've successfully created your assignment "${parameters.title}" in ${selectedCourse.name}. 😊\n\nAssignment Details:\n• Title: ${parameters.title}${parameters.description ? `\n• Description: ${parameters.description}` : ''}${dueTimeStr}${parameters.maxPoints ? `\n• Max Points: ${parameters.maxPoints}` : ''}${attachmentStr}\n\n${response.message}\n\nNext steps:\n• Students have been notified via email\n• Review student submissions\n• Grade completed assignments\n• Provide feedback to students`,
               assignment: response.assignment,
+              awaitingFileUpload: false,
               conversationId: req.body.conversationId || generateConversationId()
             };
           } catch (error) {
