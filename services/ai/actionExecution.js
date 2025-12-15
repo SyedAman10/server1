@@ -670,6 +670,23 @@ Extracted title:`;
         }
       }
       
+      // ✅ CHECK: If file has been uploaded, update the attachmentUrl from 'pending' to actual URL
+      console.log('🔍 DEBUG: Checking for file upload update:', {
+        hasAttachmentUrlInCollected: !!collectedParameters.attachmentUrl,
+        attachmentUrlValue: collectedParameters.attachmentUrl,
+        isPending: collectedParameters.attachmentUrl === 'pending',
+        hasReqBodyUrl: !!req.body.attachmentUrl,
+        reqBodyUrl: req.body.attachmentUrl,
+        reqBodyUrlNotPending: req.body.attachmentUrl !== 'pending'
+      });
+      
+      if (collectedParameters.attachmentUrl === 'pending' && req.body.attachmentUrl && req.body.attachmentUrl !== 'pending') {
+        console.log('✅ DEBUG: File uploaded detected! Updating attachmentUrl from pending to:', req.body.attachmentUrl);
+        newParameters.attachmentUrl = req.body.attachmentUrl;
+        newParameters.attachmentData = req.body.attachmentData;
+        parametersFound = true;
+      }
+      
       // Check if user provided course name
       if (missingParameters.includes('courseName')) {
         let courseName = originalMessage.trim();
