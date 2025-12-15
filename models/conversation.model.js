@@ -127,26 +127,59 @@ async function getMessagesByConversation(conversationId, userId) {
 
 // Search conversations by title or content
 async function searchConversations(userId, searchTerm, limit = 20) {
-  const query = `
-    SELECT DISTINCT c.*,
-      (
-        SELECT COUNT(*)::int
-        FROM conversation_messages cm
-        WHERE cm.conversation_id = c.id
-      ) as message_count
-    FROM conversations c
-    LEFT JOIN conversation_messages cm ON c.id = cm.conversation_id
-    WHERE c.user_id = $1
-    AND (
-      c.title ILIKE $2
-      OR cm.content ILIKE $2
-    )
-    ORDER BY c.last_message_at DESC
-    LIMIT $3;
-  `;
-  const searchPattern = `%${searchTerm}%`;
-  const result = await db.query(query, [userId, searchPattern, limit]);
-  return result.rows;
+  // Try using trigram similarity first (if pg_trgm is available)
+  try {
+    const query = `
+      SELECT DISTINCT c.*,
+        (
+          SELECT COUNT(*)::int
+          FROM conversation_messages cm
+          WHERE cm.conversation_id = c.id
+        ) as message_count,
+        GREATEST(
+          similarity(c.title, $2),
+          (
+            SELECT MAX(similarity(cm.content, $2))
+            FROM conversation_messages cm
+            WHERE cm.conversation_id = c.id
+          )
+        ) as relevance
+      FROM conversations c
+      LEFT JOIN conversation_messages cm ON c.id = cm.conversation_id
+      WHERE c.user_id = $1
+      AND (
+        c.title % $2
+        OR cm.content % $2
+      )
+      ORDER BY relevance DESC, c.last_message_at DESC
+      LIMIT $3;
+    `;
+    const result = await db.query(query, [userId, searchTerm, limit]);
+    return result.rows;
+  } catch (error) {
+    // Fallback to simple ILIKE search if pg_trgm is not available
+    console.log('Using fallback search (pg_trgm not available)');
+    const query = `
+      SELECT DISTINCT c.*,
+        (
+          SELECT COUNT(*)::int
+          FROM conversation_messages cm
+          WHERE cm.conversation_id = c.id
+        ) as message_count
+      FROM conversations c
+      LEFT JOIN conversation_messages cm ON c.id = cm.conversation_id
+      WHERE c.user_id = $1
+      AND (
+        c.title ILIKE $2
+        OR cm.content ILIKE $2
+      )
+      ORDER BY c.last_message_at DESC
+      LIMIT $3;
+    `;
+    const searchPattern = `%${searchTerm}%`;
+    const result = await db.query(query, [userId, searchPattern, limit]);
+    return result.rows;
+  }
 }
 
 // Get conversation statistics for a user

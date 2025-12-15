@@ -60,20 +60,46 @@ async function initConversationsTables() {
     `);
     console.log('✅ Index on conversation_messages.created_at created');
 
-    // Create index for full-text search
-    await db.query(`
-      CREATE INDEX IF NOT EXISTS idx_conversations_title_trgm 
-      ON conversations USING gin(title gin_trgm_ops);
-    `);
-    console.log('✅ Full-text search index on conversations.title created');
+    // Try to enable pg_trgm extension and create full-text search indexes
+    console.log('📝 Attempting to enable pg_trgm extension for full-text search...');
+    try {
+      // Try to enable the extension
+      await db.query(`CREATE EXTENSION IF NOT EXISTS pg_trgm;`);
+      console.log('✅ pg_trgm extension enabled');
+      
+      // Create full-text search indexes
+      await db.query(`
+        CREATE INDEX IF NOT EXISTS idx_conversations_title_trgm 
+        ON conversations USING gin(title gin_trgm_ops);
+      `);
+      console.log('✅ Full-text search index on conversations.title created');
 
-    await db.query(`
-      CREATE INDEX IF NOT EXISTS idx_conversation_messages_content_trgm 
-      ON conversation_messages USING gin(content gin_trgm_ops);
-    `);
-    console.log('✅ Full-text search index on conversation_messages.content created');
+      await db.query(`
+        CREATE INDEX IF NOT EXISTS idx_conversation_messages_content_trgm 
+        ON conversation_messages USING gin(content gin_trgm_ops);
+      `);
+      console.log('✅ Full-text search index on conversation_messages.content created');
+    } catch (extError) {
+      console.log('⚠️  Warning: Could not enable pg_trgm extension');
+      console.log('   Full-text search indexes were NOT created');
+      console.log('   Search will still work but may be slower on large datasets');
+      console.log('');
+      console.log('   To enable manually:');
+      console.log('   1. Go to Neon dashboard > SQL Editor');
+      console.log('   2. Run: CREATE EXTENSION pg_trgm;');
+      console.log('   3. Run this script again');
+      console.log('');
+      console.log('   Or contact Neon support if you don\'t have permission');
+    }
 
-    console.log('✅ All conversation tables and indexes created successfully!');
+    console.log('');
+    console.log('✅ All conversation tables and basic indexes created successfully!');
+    console.log('');
+    console.log('🚀 Next steps:');
+    console.log('   1. Restart your server: pm2 restart server1');
+    console.log('   2. Test the API: GET /api/conversations');
+    console.log('   3. Conversations will now be saved automatically!');
+    console.log('');
     process.exit(0);
   } catch (error) {
     console.error('❌ Error creating conversation tables:', error);
