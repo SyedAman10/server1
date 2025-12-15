@@ -1,4 +1,5 @@
 const { v4: uuidv4 } = require('uuid');
+const conversationModel = require('../models/conversation.model');
 
 // In-memory storage for conversations
 const conversations = new Map();
@@ -13,7 +14,7 @@ function generateConversationId() {
 /**
  * Get or create a conversation
  */
-function getConversation(conversationId) {
+async function getConversation(conversationId, userId = null) {
   if (!conversationId) {
     conversationId = generateConversationId();
   }
@@ -21,6 +22,7 @@ function getConversation(conversationId) {
   if (!conversations.has(conversationId)) {
     conversations.set(conversationId, {
       id: conversationId,
+      userId,
       messages: [],
       context: {
         lastCourse: null,
@@ -34,6 +36,21 @@ function getConversation(conversationId) {
       createdAt: new Date(),
       updatedAt: new Date()
     });
+    
+    // Create conversation in database if userId is provided
+    if (userId) {
+      try {
+        await conversationModel.createConversation({
+          conversationId,
+          userId,
+          title: 'New Conversation'
+        });
+        console.log(`💾 Created conversation in database: ${conversationId}`);
+      } catch (error) {
+        console.error('Error creating conversation in database:', error);
+        // Continue even if database save fails (fall back to in-memory only)
+      }
+    }
   }
   
   return conversations.get(conversationId);
@@ -42,8 +59,13 @@ function getConversation(conversationId) {
 /**
  * Add a message to a conversation
  */
-function addMessage(conversationId, message, role = 'user') {
-  const conversation = getConversation(conversationId);
+async function addMessage(conversationId, message, role = 'user') {
+  const conversation = conversations.get(conversationId);
+  
+  if (!conversation) {
+    console.error('Conversation not found:', conversationId);
+    return null;
+  }
   
   // If the message is an object (like an API response), store it as is
   const messageContent = typeof message === 'object' ? message : {
@@ -57,6 +79,27 @@ function addMessage(conversationId, message, role = 'user') {
   });
   
   conversation.updatedAt = new Date();
+  
+  // Save message to database
+  try {
+    const contentString = typeof message === 'object' ? JSON.stringify(message) : message;
+    await conversationModel.addMessage({
+      conversationId,
+      role,
+      content: contentString,
+      metadata: typeof message === 'object' ? message : null
+    });
+    
+    // Auto-generate title if this is the first user message
+    if (role === 'user' && conversation.messages.filter(m => m.role === 'user').length === 1) {
+      const title = await conversationModel.generateConversationTitle(conversationId);
+      await conversationModel.updateConversationTitle(conversationId, conversation.userId, title);
+      console.log(`📝 Auto-generated title for conversation ${conversationId}: "${title}"`);
+    }
+  } catch (error) {
+    console.error('Error saving message to database:', error);
+    // Continue even if database save fails
+  }
   
   return conversation;
 }

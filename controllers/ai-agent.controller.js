@@ -460,11 +460,12 @@ async function handleMessage(req, res) {
       return res.status(401).json({ error: 'Authorization token is required' });
     }
 
-    // Get or create conversation
-    const conversation = getConversation(conversationId);
+    // Get or create conversation (pass userId for database persistence)
+    const userId = req.user ? req.user.id : null;
+    const conversation = await getConversation(conversationId, userId);
     
     // Add user message to conversation
-    addMessage(conversation.id, message);
+    await addMessage(conversation.id, message);
 
     // Get conversation history
     const history = getFormattedHistory(conversation.id);
@@ -518,7 +519,7 @@ async function handleMessage(req, res) {
     const result = await executeAction(intentData, message, userToken, req);
 
     // Add AI response to conversation
-    addMessage(conversation.id, result.message || result, 'assistant');
+    await addMessage(conversation.id, result.message || result, 'assistant');
 
     // Update conversation context if needed
     if (result.context) {

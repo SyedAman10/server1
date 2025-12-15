@@ -14,6 +14,7 @@ const courseRoutes = require('./routes/course.routes'); // New course routes
 const invitationRoutes = require('./routes/invitation.routes'); // New invitation routes
 const automationRoutes = require('./routes/automation.routes'); // Automation system routes
 const uploadRoutes = require('./routes/upload.routes'); // File upload routes
+const conversationRoutes = require('./routes/conversation.routes'); // Conversation history routes
 
 const app = express();
 
@@ -79,6 +80,7 @@ app.use('/api/announcements', require('./routes/announcement.routes')); // Mount
 app.use('/api/automation', automationRoutes); // Mount automation routes
 app.use('/api/ai-config', require('./routes/aiConfig.routes')); // AI configuration routes
 app.use('/api/upload', uploadRoutes); // File upload endpoint
+app.use('/api/conversations', conversationRoutes); // Conversation history endpoint
 
 // Serve uploaded files statically
 app.use('/uploads', express.static('uploads'));
