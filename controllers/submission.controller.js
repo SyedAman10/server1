@@ -128,10 +128,3 @@ exports.getSubmission = async (req, res) => {
     });
   }
 };
-
-module.exports = {
-  createSubmission,
-  getMySubmissions,
-  getSubmission
-};
-
