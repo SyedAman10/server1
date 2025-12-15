@@ -6,6 +6,9 @@ const { authenticate } = require('../middleware/auth.middleware');
 // All routes require authentication
 router.use(authenticate);
 
+// Create a new conversation
+router.post('/', conversationController.createConversation);
+
 // Get all conversations for authenticated user
 router.get('/', conversationController.getConversations);
 

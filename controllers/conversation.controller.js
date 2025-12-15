@@ -5,6 +5,36 @@ const conversationModel = require('../models/conversation.model');
  * Handles HTTP requests for conversation history operations
  */
 
+// Create a new conversation
+exports.createConversation = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { title } = req.body;
+
+    // Generate a new conversation ID
+    const { v4: uuidv4 } = require('uuid');
+    const conversationId = uuidv4();
+
+    const conversation = await conversationModel.createConversation({
+      conversationId,
+      userId,
+      title: title || 'New Conversation'
+    });
+
+    return res.status(201).json({
+      success: true,
+      conversation,
+      message: 'Conversation created successfully'
+    });
+  } catch (error) {
+    console.error('Error creating conversation:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to create conversation'
+    });
+  }
+};
+
 // Get all conversations for the authenticated user
 exports.getConversations = async (req, res) => {
   try {
