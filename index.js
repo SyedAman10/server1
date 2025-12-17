@@ -16,6 +16,7 @@ const automationRoutes = require('./routes/automation.routes'); // Automation sy
 const uploadRoutes = require('./routes/upload.routes'); // File upload routes
 const conversationRoutes = require('./routes/conversation.routes'); // Conversation history routes
 const submissionRoutes = require('./routes/submission.routes'); // Assignment submission routes
+const aiGradingRoutes = require('./routes/aiGrading.routes'); // AI grading routes
 
 const app = express();
 
@@ -109,6 +110,7 @@ app.use('/api/ai-config', require('./routes/aiConfig.routes')); // AI configurat
 app.use('/api/upload', uploadRoutes); // File upload endpoint
 app.use('/api/conversations', conversationRoutes); // Conversation history endpoint
 app.use('/api/submissions', submissionRoutes); // Assignment submission endpoint
+app.use('/api/ai-grading', aiGradingRoutes); // AI grading endpoint
 
 // Serve uploaded files statically
 app.use('/uploads', express.static('uploads'));
