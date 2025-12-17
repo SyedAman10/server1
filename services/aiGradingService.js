@@ -13,7 +13,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
  */
 async function extractGradingCriteria(assignment) {
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
     
     let prompt = `You are an expert educator. Analyze this assignment and extract the grading criteria, rubric, and expectations.
 
@@ -92,7 +92,7 @@ Provide the output in JSON format:
  */
 async function gradeSubmission(submission, assignment, gradingSettings) {
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
     
     // Get grading criteria
     const criteria = gradingSettings.rubric || {};
@@ -189,7 +189,7 @@ Be specific, encouraging, and helpful in your feedback.`;
  */
 async function generateRubricSuggestions(assignment) {
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
     
     const prompt = `As an educational expert, suggest a grading rubric for this assignment:
 
