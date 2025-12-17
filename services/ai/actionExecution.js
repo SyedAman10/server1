@@ -4909,7 +4909,27 @@ If you have any issues, just let me know and I'll help you troubleshoot!`,
             status: 'submitted'
           });
           
-          // Send email notification to teacher
+          // Trigger AI grading process
+          try {
+            const aiGradingService = require('../aiGradingService');
+            await aiGradingService.processSubmissionForGrading({
+              submissionId: submission.id,
+              assignmentId: assignment.id,
+              courseId: course.id,
+              studentId: req.user.id,
+              teacherId: course.teacher_id,
+              submissionText: submission.submission_text,
+              attachments: submission.attachments,
+              userToken: userToken,
+              req: req
+            });
+          } catch (gradingError) {
+            console.error('❌ Error in AI grading process:', gradingError);
+            // Don't fail the submission if AI grading fails
+          }
+          
+          // Send email notification to teacher (only if NOT using manual approval AI grading)
+          // If using manual approval, the teacher will get the AI grading email instead
           try {
             const { sendEmail } = require('../emailService');
             const { getUserById } = require('../../models/user.model');

@@ -99,33 +99,51 @@ async function getSubmissionsByAssignment(assignmentId) {
 }
 
 // Update submission
-async function updateSubmission(submissionId, { submissionText, attachments, status }) {
-  let query;
-  let values;
+async function updateSubmission(submissionId, { submissionText, attachments, status, grade, feedback }) {
+  // Build dynamic update query based on provided fields
+  const updates = [];
+  const values = [];
+  let paramCount = 1;
+  
+  if (submissionText !== undefined) {
+    updates.push(`submission_text = $${paramCount++}`);
+    values.push(submissionText);
+  }
   
   if (attachments !== undefined) {
-    query = `
-      UPDATE assignment_submissions
-      SET submission_text = COALESCE($1, submission_text),
-          attachments = $2,
-          status = COALESCE($3, status),
-          updated_at = CURRENT_TIMESTAMP
-      WHERE id = $4
-      RETURNING *;
-    `;
-    const attachmentsJson = JSON.stringify(attachments);
-    values = [submissionText, attachmentsJson, status, submissionId];
-  } else {
-    query = `
-      UPDATE assignment_submissions
-      SET submission_text = COALESCE($1, submission_text),
-          status = COALESCE($2, status),
-          updated_at = CURRENT_TIMESTAMP
-      WHERE id = $3
-      RETURNING *;
-    `;
-    values = [submissionText, status, submissionId];
+    updates.push(`attachments = $${paramCount++}`);
+    values.push(JSON.stringify(attachments));
   }
+  
+  if (status !== undefined) {
+    updates.push(`status = $${paramCount++}`);
+    values.push(status);
+  }
+  
+  if (grade !== undefined) {
+    updates.push(`grade = $${paramCount++}`);
+    values.push(grade);
+  }
+  
+  if (feedback !== undefined) {
+    updates.push(`feedback = $${paramCount++}`);
+    values.push(feedback);
+  }
+  
+  if (updates.length === 0) {
+    // No fields to update
+    return await getSubmissionById(submissionId);
+  }
+  
+  updates.push(`updated_at = CURRENT_TIMESTAMP`);
+  values.push(submissionId);
+  
+  const query = `
+    UPDATE assignment_submissions
+    SET ${updates.join(', ')}
+    WHERE id = $${paramCount}
+    RETURNING *;
+  `;
   
   const result = await db.query(query, values);
   return result.rows[0];

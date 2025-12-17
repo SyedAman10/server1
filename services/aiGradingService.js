@@ -243,9 +243,216 @@ Output in JSON format:
   }
 }
 
+/**
+ * Process a submission for AI grading (main entry point)
+ * This is called automatically when a student submits an assignment
+ */
+async function processSubmissionForGrading(submissionData) {
+  try {
+    const {
+      submissionId,
+      assignmentId,
+      courseId,
+      studentId,
+      teacherId,
+      submissionText,
+      attachments,
+      userToken,
+      req
+    } = submissionData;
+
+    console.log(`🤖 Processing AI grading for submission ${submissionId}...`);
+
+    // Get assignment details
+    const assignmentModel = require('../models/assignment.model');
+    const assignment = await assignmentModel.getAssignmentById(assignmentId);
+
+    if (!assignment) {
+      console.error(`❌ Assignment ${assignmentId} not found for grading`);
+      return { success: false, error: 'Assignment not found' };
+    }
+
+    // Get AI grading settings for this assignment
+    const aiGradingSettingsModel = require('../models/aiGradingSettings.model');
+    let settings = await aiGradingSettingsModel.getSettings(assignmentId);
+
+    // If no assignment-specific settings, check teacher's global preferences
+    if (!settings || settings.uses_teacher_defaults !== false) {
+      const teacherPreferencesModel = require('../models/teacherAIPreferences.model');
+      const teacherPrefs = await teacherPreferencesModel.getTeacherPreferences(teacherId);
+      
+      if (teacherPrefs && teacherPrefs.ai_grading_enabled) {
+        // Use teacher's global preferences
+        settings = {
+          ai_grading_enabled: true,
+          grading_mode: teacherPrefs.default_grading_mode,
+          ai_instructions: teacherPrefs.default_ai_instructions,
+          max_points: assignment.max_points,
+          rubric: null,
+          uses_teacher_defaults: true
+        };
+        console.log(`📋 Using teacher's global AI grading preferences (mode: ${settings.grading_mode})`);
+      }
+    }
+
+    // Check if AI grading is enabled
+    if (!settings || !settings.ai_grading_enabled) {
+      console.log(`⏭️ AI grading not enabled for assignment ${assignmentId}`);
+      return { success: true, skipped: true, reason: 'AI grading not enabled' };
+    }
+
+    console.log(`✅ AI grading enabled - Mode: ${settings.grading_mode}`);
+
+    // Extract grading criteria if not already available
+    if (!settings.rubric) {
+      console.log('📝 Extracting grading criteria from assignment...');
+      const criteriaResult = await extractGradingCriteria(assignment);
+      if (criteriaResult.success) {
+        settings.rubric = criteriaResult.criteria;
+        console.log('✅ Grading criteria extracted');
+      }
+    }
+
+    // Grade the submission using AI
+    console.log('🎯 Grading submission with AI...');
+    const gradeResult = await gradeSubmission(
+      {
+        submission_text: submissionText,
+        attachments: attachments
+      },
+      assignment,
+      settings
+    );
+
+    if (!gradeResult.success) {
+      console.error(`❌ AI grading failed: ${gradeResult.error}`);
+      return { success: false, error: gradeResult.error };
+    }
+
+    console.log(`✅ AI grade generated: ${gradeResult.grade}/${settings.max_points || assignment.max_points}`);
+
+    // Save the AI-generated grade
+    const aiGradeModel = require('../models/aiGrade.model');
+    const status = settings.grading_mode === 'auto_approve' ? 'approved' : 'pending';
+    
+    const savedGrade = await aiGradeModel.createGrade({
+      submissionId,
+      assignmentId,
+      studentId,
+      aiGrade: gradeResult.grade,
+      aiFeedback: gradeResult.feedback,
+      aiAnalysis: gradeResult.analysis,
+      status,
+      reviewedBy: settings.grading_mode === 'auto_approve' ? teacherId : null,
+      reviewedAt: settings.grading_mode === 'auto_approve' ? new Date() : null
+    });
+
+    // If manual approval mode, send email to teacher
+    if (settings.grading_mode === 'manual_approve') {
+      try {
+        const { sendEmail } = require('./emailService');
+        const { getUserById } = require('../models/user.model');
+        const courseModel = require('../models/course.model');
+        
+        const teacher = await getUserById(teacherId);
+        const student = await getUserById(studentId);
+        const course = await courseModel.getCourseById(courseId);
+
+        if (teacher && teacher.email) {
+          const approveUrl = `https://class.xytek.ai/api/ai-grading/grades/${savedGrade.id}/approve`;
+          const rejectUrl = `https://class.xytek.ai/api/ai-grading/grades/${savedGrade.id}/reject`;
+          
+          const emailSubject = `🤖 AI Grade Ready for Review: ${assignment.title}`;
+          const emailBody = `
+            <h2>🤖 AI-Generated Grade Pending Approval</h2>
+            <p>The AI has graded a student submission and is awaiting your review:</p>
+            
+            <h3>📚 Assignment Details:</h3>
+            <ul>
+              <li><strong>Course:</strong> ${course.name}</li>
+              <li><strong>Assignment:</strong> ${assignment.title}</li>
+              <li><strong>Student:</strong> ${student.name} (${student.email})</li>
+              <li><strong>Submitted:</strong> ${new Date().toLocaleString()}</li>
+            </ul>
+            
+            <h3>🎯 AI-Generated Grade:</h3>
+            <div style="background-color: #f0f0f0; padding: 15px; border-radius: 5px; margin: 15px 0;">
+              <p style="font-size: 24px; margin: 0;"><strong>${gradeResult.grade} / ${settings.max_points || assignment.max_points}</strong></p>
+              <p style="margin: 5px 0;">(${Math.round((gradeResult.grade / (settings.max_points || assignment.max_points)) * 100)}%)</p>
+            </div>
+            
+            <h3>💬 AI Feedback:</h3>
+            <div style="background-color: #f9f9f9; padding: 15px; border-radius: 5px; margin: 15px 0;">
+              <p>${gradeResult.feedback}</p>
+            </div>
+            
+            ${gradeResult.analysis?.breakdown ? `
+            <h3>📊 Grade Breakdown:</h3>
+            <ul>
+              ${Object.entries(gradeResult.analysis.breakdown).map(([criterion, data]) => `
+                <li><strong>${criterion}:</strong> ${data.score}/${data.maxScore} - ${data.comment}</li>
+              `).join('')}
+            </ul>
+            ` : ''}
+            
+            <h3>✅ Review Actions:</h3>
+            <p>Please review this AI-generated grade and choose an action:</p>
+            <div style="margin: 20px 0;">
+              <a href="${approveUrl}" style="background-color: #4CAF50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block; margin-right: 10px;">✅ Approve Grade</a>
+              <a href="${rejectUrl}" style="background-color: #f44336; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">❌ Reject & Grade Manually</a>
+            </div>
+            
+            <p><a href="https://class.xytek.ai/assignments/${assignmentId}">View full submission and grade details</a></p>
+            
+            <hr style="margin: 30px 0;">
+            <p style="color: #666; font-size: 12px;">
+              <strong>Note:</strong> This grade was automatically generated by AI. Please review it carefully before approving.
+              You can modify the grade or provide your own feedback if needed.
+            </p>
+          `;
+          
+          await sendEmail(teacher.email, emailSubject, emailBody);
+          console.log(`✅ Manual approval email sent to teacher: ${teacher.email}`);
+        }
+      } catch (emailError) {
+        console.error('❌ Error sending approval email:', emailError);
+        // Don't fail the grading if email fails
+      }
+    } else {
+      // Auto-approve mode - update submission with grade immediately
+      try {
+        const submissionModel = require('../models/submission.model');
+        await submissionModel.updateSubmission(submissionId, {
+          grade: gradeResult.grade,
+          feedback: gradeResult.feedback,
+          status: 'graded'
+        });
+        console.log(`✅ Grade auto-approved and applied to submission`);
+      } catch (updateError) {
+        console.error('❌ Error updating submission with auto-approved grade:', updateError);
+      }
+    }
+
+    return {
+      success: true,
+      grade: savedGrade,
+      mode: settings.grading_mode,
+      status: status
+    };
+
+  } catch (error) {
+    console.error('❌ Error in processSubmissionForGrading:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
 module.exports = {
   extractGradingCriteria,
   gradeSubmission,
-  generateRubricSuggestions
+  generateRubricSuggestions,
+  processSubmissionForGrading
 };
 
