@@ -49,6 +49,15 @@ async function createAssignment({ courseId, teacherId, title, description, dueDa
 
     await Promise.all(emailPromises);
 
+    // Auto-apply teacher's default AI grading settings if enabled
+    try {
+      const teacherAIPreferencesModel = require('../models/teacherAIPreferences.model');
+      await teacherAIPreferencesModel.applyDefaultsToAssignment(teacherId, assignment.id);
+    } catch (aiError) {
+      console.error('Error applying default AI grading settings:', aiError);
+      // Don't fail assignment creation if AI settings fail
+    }
+
     return {
       success: true,
       assignment,

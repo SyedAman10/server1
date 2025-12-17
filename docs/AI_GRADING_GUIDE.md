@@ -45,13 +45,59 @@ The AI Grading Agent is an intelligent system that automatically grades student 
 ```bash
 # On your server
 node scripts/init-ai-grading-tables.js
+node scripts/init-teacher-ai-preferences.js
 ```
 
 This creates:
+- `teacher_ai_preferences` - Stores global AI settings per teacher
 - `ai_grading_settings` - Stores AI grading configuration per assignment
 - `ai_grades` - Stores AI-generated grades with approval tokens
 
-### Step 2: Enable AI Grading for an Assignment
+### Step 2: Set Your Global Preferences (One-Time Setup)
+
+**API Endpoint:** `PUT /api/ai-grading/preferences`
+
+```javascript
+// Request
+{
+  "aiGradingEnabled": true,
+  "defaultGradingMode": "manual", // or "auto"
+  "defaultAiInstructions": "Focus on critical thinking and clarity",
+  "autoApplyToNewAssignments": true // Apply to all new assignments automatically
+}
+
+// Response
+{
+  "success": true,
+  "preferences": {
+    "teacher_id": 1,
+    "ai_grading_enabled": true,
+    "default_grading_mode": "manual",
+    "default_ai_instructions": "Focus on critical thinking and clarity",
+    "auto_apply_to_new_assignments": true
+  }
+}
+```
+
+### Step 3: Apply to Existing Assignments (Optional)
+
+If you want to apply your settings to all existing assignments:
+
+**API Endpoint:** `POST /api/ai-grading/preferences/apply-to-all`
+
+```javascript
+// Response
+{
+  "success": true,
+  "message": "Applied AI grading settings to 25 assignment(s)",
+  "appliedCount": 25,
+  "totalAssignments": 25
+}
+```
+
+### Step 4: Override for Specific Assignments (Optional)
+
+If you want different settings for a specific assignment:
 
 **API Endpoint:** `PUT /api/ai-grading/settings/:assignmentId`
 
@@ -90,9 +136,84 @@ When a student submits, the system:
 
 ---
 
+## 🎯 Global vs Per-Assignment Settings
+
+### **Global Teacher Preferences** (Recommended)
+Set once, apply everywhere! Your preferences automatically apply to:
+- ✅ All new assignments (if `autoApplyToNewAssignments` is true)
+- ✅ Can be applied to existing assignments with one click
+- ✅ Consistent grading across all courses
+
+**Benefits:**
+- Save time - no need to configure each assignment
+- Consistency - same grading approach everywhere
+- Flexibility - override for special cases
+
+### **Per-Assignment Overrides**
+Need different settings for a specific assignment? No problem!
+- Override mode (manual → auto, or vice versa)
+- Custom AI instructions for this assignment
+- Different rubric or criteria
+
+**Use cases:**
+- Auto-grade quizzes, manually approve essays
+- Stricter grading for final exams
+- Custom instructions for coding assignments
+
+---
+
 ## 📋 API Endpoints
 
-### Teacher Endpoints
+### Global Preferences Endpoints
+
+#### 1. Get Your AI Preferences
+```http
+GET /api/ai-grading/preferences
+Authorization: Bearer <teacher_token>
+
+Response:
+{
+  "success": true,
+  "preferences": {
+    "teacher_id": 1,
+    "ai_grading_enabled": true,
+    "default_grading_mode": "manual",
+    "default_ai_instructions": "Focus on clarity and examples",
+    "auto_apply_to_new_assignments": true
+  }
+}
+```
+
+#### 2. Update Your AI Preferences
+```http
+PUT /api/ai-grading/preferences
+Authorization: Bearer <teacher_token>
+
+Body:
+{
+  "aiGradingEnabled": true,
+  "defaultGradingMode": "manual" | "auto",
+  "defaultAiInstructions": "Your custom instructions",
+  "autoApplyToNewAssignments": true
+}
+```
+
+#### 3. Apply Settings to All Existing Assignments
+```http
+POST /api/ai-grading/preferences/apply-to-all
+Authorization: Bearer <teacher_token>
+
+Response:
+{
+  "success": true,
+  "message": "Applied AI grading settings to 25 assignment(s)",
+  "appliedCount": 25,
+  "skippedCount": 0,
+  "totalAssignments": 25
+}
+```
+
+### Per-Assignment Settings Endpoints
 
 #### 1. Enable/Update AI Grading Settings
 ```http
