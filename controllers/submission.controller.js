@@ -170,6 +170,7 @@ exports.getAssignmentSubmissions = async (req, res) => {
   try {
     const { assignmentId } = req.params;
     const userRole = req.user.role;
+    const userId = req.user.id;
 
     // Only teachers and super_admin can view all submissions
     if (userRole !== 'teacher' && userRole !== 'super_admin') {
@@ -179,18 +180,138 @@ exports.getAssignmentSubmissions = async (req, res) => {
       });
     }
 
+    // Verify teacher owns this assignment
+    const assignment = await assignmentModel.getAssignmentById(assignmentId);
+    if (!assignment) {
+      return res.status(404).json({
+        success: false,
+        message: 'Assignment not found'
+      });
+    }
+
+    // Check if teacher owns the course
+    if (userRole === 'teacher') {
+      const course = await courseModel.getCourseById(assignment.course_id);
+      if (course.teacher_id !== userId) {
+        return res.status(403).json({
+          success: false,
+          message: 'You can only view submissions for your own assignments'
+        });
+      }
+    }
+
     const submissions = await submissionModel.getSubmissionsByAssignment(assignmentId);
 
     return res.status(200).json({
       success: true,
+      assignment: {
+        id: assignment.id,
+        title: assignment.title,
+        due_date: assignment.due_date,
+        max_points: assignment.max_points
+      },
       submissions,
-      count: submissions.length
+      count: submissions.length,
+      submittedCount: submissions.length,
+      gradedCount: submissions.filter(s => s.grade !== null).length
     });
   } catch (error) {
     console.error('Error getting assignment submissions:', error);
     return res.status(500).json({
       success: false,
       message: error.message || 'Failed to get submissions'
+    });
+  }
+};
+
+// Grade a submission (teacher only)
+exports.gradeSubmission = async (req, res) => {
+  try {
+    const { submissionId } = req.params;
+    const { grade, feedback } = req.body;
+    const userRole = req.user.role;
+    const userId = req.user.id;
+
+    // Only teachers and super_admin can grade
+    if (userRole !== 'teacher' && userRole !== 'super_admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only teachers can grade submissions'
+      });
+    }
+
+    // Get submission and verify ownership
+    const submission = await submissionModel.getSubmissionById(submissionId);
+    
+    if (!submission) {
+      return res.status(404).json({
+        success: false,
+        message: 'Submission not found'
+      });
+    }
+
+    // Verify teacher owns this assignment
+    const assignment = await assignmentModel.getAssignmentById(submission.assignment_id);
+    if (userRole === 'teacher') {
+      const course = await courseModel.getCourseById(assignment.course_id);
+      if (course.teacher_id !== userId) {
+        return res.status(403).json({
+          success: false,
+          message: 'You can only grade submissions for your own assignments'
+        });
+      }
+    }
+
+    // Update the submission with grade and feedback
+    const updateQuery = `
+      UPDATE assignment_submissions
+      SET grade = $1,
+          feedback = $2,
+          status = 'graded',
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = $3
+      RETURNING *;
+    `;
+    
+    const result = await db.query(updateQuery, [grade, feedback || null, submissionId]);
+    const updatedSubmission = result.rows[0];
+
+    // Send email notification to student
+    try {
+      const { getUserById } = require('../models/user.model');
+      const student = await getUserById(submission.student_id);
+      
+      if (student && student.email) {
+        const emailSubject = `Your ${assignment.title} has been graded`;
+        const emailBody = `
+          <h2>📊 Assignment Graded</h2>
+          <p>Your teacher has graded your assignment:</p>
+          <ul>
+            <li><strong>Assignment:</strong> ${assignment.title}</li>
+            <li><strong>Grade:</strong> ${grade}${assignment.max_points ? ` / ${assignment.max_points}` : ''}</li>
+            ${feedback ? `<li><strong>Feedback:</strong> ${feedback}</li>` : ''}
+          </ul>
+          <p><a href="https://class.xytek.ai/assignments/${assignment.id}">View your graded assignment</a></p>
+        `;
+        
+        await sendEmail(student.email, emailSubject, emailBody);
+        console.log(`✅ Grade notification sent to student: ${student.email}`);
+      }
+    } catch (emailError) {
+      console.error('❌ Error sending grade notification:', emailError);
+      // Don't fail the grading if email fails
+    }
+
+    return res.status(200).json({
+      success: true,
+      submission: updatedSubmission,
+      message: 'Submission graded successfully'
+    });
+  } catch (error) {
+    console.error('Error grading submission:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to grade submission'
     });
   }
 };

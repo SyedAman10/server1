@@ -40,7 +40,15 @@ async function getSubmissionByStudentAndAssignment(studentId, assignmentId) {
     LIMIT 1;
   `;
   const result = await db.query(query, [studentId, assignmentId]);
-  return result.rows[0];
+  const submission = result.rows[0];
+  
+  if (submission) {
+    // Parse attachments JSON
+    submission.attachments = submission.attachments ? 
+      (typeof submission.attachments === 'string' ? JSON.parse(submission.attachments) : submission.attachments) : [];
+  }
+  
+  return submission;
 }
 
 // Get all submissions by student
@@ -59,7 +67,13 @@ async function getSubmissionsByStudent(studentId) {
     ORDER BY s.submitted_at DESC;
   `;
   const result = await db.query(query, [studentId]);
-  return result.rows;
+  
+  // Parse attachments JSON for each submission
+  return result.rows.map(submission => ({
+    ...submission,
+    attachments: submission.attachments ? 
+      (typeof submission.attachments === 'string' ? JSON.parse(submission.attachments) : submission.attachments) : []
+  }));
 }
 
 // Get all submissions for an assignment (for teachers)
@@ -67,14 +81,21 @@ async function getSubmissionsByAssignment(assignmentId) {
   const query = `
     SELECT s.*,
       u.name as student_name,
-      u.email as student_email
+      u.email as student_email,
+      u.id as student_id
     FROM assignment_submissions s
     LEFT JOIN users u ON s.student_id = u.id
     WHERE s.assignment_id = $1
     ORDER BY s.submitted_at DESC;
   `;
   const result = await db.query(query, [assignmentId]);
-  return result.rows;
+  
+  // Parse attachments JSON for each submission
+  return result.rows.map(submission => ({
+    ...submission,
+    attachments: submission.attachments ? 
+      (typeof submission.attachments === 'string' ? JSON.parse(submission.attachments) : submission.attachments) : []
+  }));
 }
 
 // Update submission
@@ -132,11 +153,40 @@ async function hasStudentSubmitted(studentId, assignmentId) {
   return parseInt(result.rows[0].count) > 0;
 }
 
+// Get submission by ID
+async function getSubmissionById(submissionId) {
+  const query = `
+    SELECT s.*,
+      u.name as student_name,
+      u.email as student_email,
+      a.title as assignment_title,
+      a.course_id,
+      a.max_points,
+      c.name as course_name
+    FROM assignment_submissions s
+    LEFT JOIN users u ON s.student_id = u.id
+    LEFT JOIN assignments a ON s.assignment_id = a.id
+    LEFT JOIN courses c ON a.course_id = c.id
+    WHERE s.id = $1;
+  `;
+  const result = await db.query(query, [submissionId]);
+  const submission = result.rows[0];
+  
+  if (submission) {
+    // Parse attachments JSON
+    submission.attachments = submission.attachments ? 
+      (typeof submission.attachments === 'string' ? JSON.parse(submission.attachments) : submission.attachments) : [];
+  }
+  
+  return submission;
+}
+
 module.exports = {
   createSubmission,
   getSubmissionByStudentAndAssignment,
   getSubmissionsByStudent,
   getSubmissionsByAssignment,
+  getSubmissionById,
   updateSubmission,
   deleteSubmission,
   hasStudentSubmitted

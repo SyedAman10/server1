@@ -18,5 +18,8 @@ router.get('/assignment/:assignmentId', submissionController.getSubmission);
 // Get all submissions for an assignment (teacher)
 router.get('/assignment/:assignmentId/all', submissionController.getAssignmentSubmissions);
 
+// Grade a submission (teacher only)
+router.patch('/:submissionId/grade', submissionController.gradeSubmission);
+
 module.exports = router;
 

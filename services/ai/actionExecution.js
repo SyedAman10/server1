@@ -863,8 +863,8 @@ Extracted title:`;
           // User provided assignment title or number
           newParameters.assignmentTitle = originalMessage.trim();
           parametersFound = true;
-        }
-        break;
+      }
+      break;
       
       case 'CREATE_ANNOUNCEMENT':
         // If we're waiting for a course name, treat the user's response as a course name
@@ -4909,13 +4909,51 @@ If you have any issues, just let me know and I'll help you troubleshoot!`,
             status: 'submitted'
           });
           
+          // Send email notification to teacher
+          try {
+            const { sendEmail } = require('../emailService');
+            const { getUserById } = require('../../models/user.model');
+            
+            const teacher = await getUserById(course.teacher_id);
+            const student = await getUserById(req.user.id);
+            
+            if (teacher && teacher.email) {
+              const emailSubject = `New Submission: ${assignment.title}`;
+              const emailBody = `
+                <h2>📝 New Assignment Submission</h2>
+                <p><strong>${student.name}</strong> has submitted an assignment:</p>
+                <ul>
+                  <li><strong>Course:</strong> ${course.name}</li>
+                  <li><strong>Assignment:</strong> ${assignment.title}</li>
+                  <li><strong>Student:</strong> ${student.name} (${student.email})</li>
+                  <li><strong>Submitted:</strong> ${new Date().toLocaleString()}</li>
+                  ${submissionAttachments.length > 0 ? `<li><strong>Attachments:</strong> ${submissionAttachments.length} file(s)</li>` : ''}
+                  ${parameters.submissionText ? `<li><strong>Submission Text:</strong> ${parameters.submissionText.substring(0, 100)}${parameters.submissionText.length > 100 ? '...' : ''}</li>` : ''}
+                </ul>
+                ${submissionAttachments.length > 0 ? `
+                <h3>📎 Attached Files:</h3>
+                <ul>
+                  ${submissionAttachments.map(att => `<li>${att.originalName} (${(att.size / 1024).toFixed(2)} KB)</li>`).join('')}
+                </ul>
+                ` : ''}
+                <p><a href="https://class.xytek.ai/assignments/${assignment.id}">View submission in your dashboard</a></p>
+              `;
+              
+              await sendEmail(teacher.email, emailSubject, emailBody);
+              console.log(`✅ Email notification sent to teacher: ${teacher.email} for submission in ${course.name}`);
+            }
+          } catch (emailError) {
+            console.error('❌ Error sending email notification:', emailError);
+            // Don't fail the submission if email fails
+          }
+          
           completeOngoingAction(conversationId);
           
           const attachmentInfo = submissionAttachments.length > 0 ? 
             `\n• Attachment: ${submissionAttachments[0].originalName}` : '';
           
           return {
-            message: `✅ **Assignment Submitted Successfully!**\n\n**Submission Details:**\n• Course: ${course.name}\n• Assignment: ${assignment.title}\n• Submitted: ${new Date().toLocaleString()}${attachmentInfo}\n\nYour teacher will review your submission. Good luck! 🎓`,
+            message: `✅ **Assignment Submitted Successfully!**\n\n**Submission Details:**\n• Course: ${course.name}\n• Assignment: ${assignment.title}\n• Submitted: ${new Date().toLocaleString()}${attachmentInfo}\n\nYour teacher has been notified and will review your submission. Good luck! 🎓`,
             submission,
             awaitingFileUpload: false,
             conversationId
