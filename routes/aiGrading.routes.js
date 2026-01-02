@@ -5,6 +5,7 @@ const teacherAIPreferencesController = require('../controllers/teacherAIPreferen
 const { authenticate } = require('../middleware/auth.middleware');
 
 // Public routes (for approve/reject links in emails)
+router.get('/grade/:token', aiGradingController.getGradeByToken);
 router.post('/approve/:token', aiGradingController.approveGrade);
 router.post('/reject/:token', aiGradingController.rejectGrade);
 

@@ -193,6 +193,35 @@ exports.generateRubric = async (req, res) => {
   }
 };
 
+// Get grade details by token (for review page)
+exports.getGradeByToken = async (req, res) => {
+  try {
+    const { token } = req.params;
+    
+    // Get AI grade by token
+    const aiGrade = await aiGradeModel.getAIGradeByToken(token);
+    
+    if (!aiGrade) {
+      return res.status(404).json({
+        success: false,
+        message: 'Grade not found or approval link is invalid/expired'
+      });
+    }
+    
+    // Return grade details including all joined data
+    return res.status(200).json({
+      success: true,
+      grade: aiGrade
+    });
+  } catch (error) {
+    console.error('Error getting grade by token:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to get grade details'
+    });
+  }
+};
+
 // Approve an AI grade
 exports.approveGrade = async (req, res) => {
   try {
@@ -343,6 +372,7 @@ module.exports = {
   updateGradingSettings: exports.updateGradingSettings,
   getGradingSettings: exports.getGradingSettings,
   generateRubric: exports.generateRubric,
+  getGradeByToken: exports.getGradeByToken,
   approveGrade: exports.approveGrade,
   rejectGrade: exports.rejectGrade,
   getPendingGrades: exports.getPendingGrades
