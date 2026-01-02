@@ -22,31 +22,60 @@ Description: ${assignment.description || 'No description provided'}
 Max Points: ${assignment.max_points || 100}
 `;
 
-    // If assignment has attachments (instructions file), try to read them
+    // If assignment has attachments (instructions file), read them from local storage
     const attachments = assignment.attachments ? 
       (typeof assignment.attachments === 'string' ? JSON.parse(assignment.attachments) : assignment.attachments) : [];
     
     if (attachments.length > 0) {
       prompt += `\n**ASSIGNMENT INSTRUCTIONS FROM ATTACHED DOCUMENTS:**\n`;
       
-      const driveIntegration = require('../integrations/google.drive');
+      const fs = require('fs');
+      const path = require('path');
+      const textract = require('textract');
+      const util = require('util');
+      const textractPromise = util.promisify(textract.fromFileWithPath);
       
       for (let i = 0; i < attachments.length; i++) {
         const att = attachments[i];
         prompt += `\n--- Document ${i + 1}: ${att.originalName} ---\n`;
         
         try {
-          // Try to read the file content
-          const fileContent = await driveIntegration.readFileContent(att.url, userToken ? {
-            access_token: userToken.access_token,
-            refresh_token: userToken.refresh_token
-          } : null);
+          // Build file path - attachments.url is like "/uploads/assignments/filename.pdf"
+          const filePath = path.join(__dirname, '..', att.url);
           
-          prompt += fileContent + '\n';
-          console.log(`✅ Read assignment document: ${att.originalName} (${fileContent.length} chars)`);
+          // Check if file exists
+          if (!fs.existsSync(filePath)) {
+            console.log(`⚠️  File not found: ${filePath}`);
+            prompt += `(File not found on server)\n`;
+            continue;
+          }
+          
+          // Try to extract text from the file
+          let fileContent = '';
+          
+          // For plain text files, just read directly
+          if (att.mimetype === 'text/plain' || att.originalName.endsWith('.txt')) {
+            fileContent = fs.readFileSync(filePath, 'utf8');
+          } else {
+            // For Word, PDF, etc., use textract
+            try {
+              fileContent = await textractPromise(filePath);
+            } catch (extractError) {
+              console.log(`⚠️  Could not extract text from ${att.originalName}: ${extractError.message}`);
+              prompt += `(File format not readable: ${att.originalName})\n`;
+              continue;
+            }
+          }
+          
+          if (fileContent && fileContent.trim().length > 0) {
+            prompt += fileContent.trim() + '\n';
+            console.log(`✅ Read assignment document: ${att.originalName} (${fileContent.length} chars)`);
+          } else {
+            prompt += `(File is empty or could not extract content)\n`;
+          }
         } catch (fileError) {
-          console.log(`⚠️  Could not read file ${att.originalName}: ${fileError.message}`);
-          prompt += `(File could not be read: ${att.originalName})\n`;
+          console.log(`⚠️  Error reading file ${att.originalName}: ${fileError.message}`);
+          prompt += `(Error reading file: ${att.originalName})\n`;
         }
         prompt += `--- End of Document ${i + 1} ---\n`;
       }
