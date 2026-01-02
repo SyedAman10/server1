@@ -90,6 +90,22 @@ async function fixSubmissionsTable() {
       console.log('ℹ️  feedback column exists');
     }
     
+    // Add updated_at column
+    const checkUpdatedAt = await pool.query(`
+      SELECT column_name FROM information_schema.columns 
+      WHERE table_name = 'assignment_submissions' AND column_name = 'updated_at';
+    `);
+    
+    if (checkUpdatedAt.rows.length === 0) {
+      await pool.query(`
+        ALTER TABLE assignment_submissions 
+        ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+      `);
+      console.log('✅ Added updated_at column');
+    } else {
+      console.log('ℹ️  updated_at column exists');
+    }
+    
     console.log('\n✅ All migrations complete!');
     process.exit(0);
   } catch (error) {
