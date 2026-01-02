@@ -335,16 +335,15 @@ async function processSubmissionForGrading(submissionData) {
     const aiGradeModel = require('../models/aiGrade.model');
     const status = settings.grading_mode === 'auto_approve' ? 'approved' : 'pending';
     
-    const savedGrade = await aiGradeModel.createGrade({
+    const savedGrade = await aiGradeModel.createAIGrade({
       submissionId,
       assignmentId,
       studentId,
-      aiGrade: gradeResult.grade,
-      aiFeedback: gradeResult.feedback,
+      teacherId,
+      proposedGrade: gradeResult.grade,
+      proposedFeedback: gradeResult.feedback,
       aiAnalysis: gradeResult.analysis,
-      status,
-      reviewedBy: settings.grading_mode === 'auto_approve' ? teacherId : null,
-      reviewedAt: settings.grading_mode === 'auto_approve' ? new Date() : null
+      status
     });
 
     // If manual approval mode, send email to teacher
