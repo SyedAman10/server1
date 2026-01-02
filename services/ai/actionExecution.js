@@ -4931,35 +4931,24 @@ If you have any issues, just let me know and I'll help you troubleshoot!`,
           // Send email notification to teacher (only if NOT using manual approval AI grading)
           // If using manual approval, the teacher will get the AI grading email instead
           try {
-            const { sendEmail } = require('../emailService');
+            const { sendSubmissionEmail } = require('../submissionEmailService');
             const { getUserById } = require('../../models/user.model');
             
             const teacher = await getUserById(course.teacher_id);
             const student = await getUserById(req.user.id);
             
             if (teacher && teacher.email) {
-              const emailSubject = `New Submission: ${assignment.title}`;
-              const emailBody = `
-                <h2>📝 New Assignment Submission</h2>
-                <p><strong>${student.name}</strong> has submitted an assignment:</p>
-                <ul>
-                  <li><strong>Course:</strong> ${course.name}</li>
-                  <li><strong>Assignment:</strong> ${assignment.title}</li>
-                  <li><strong>Student:</strong> ${student.name} (${student.email})</li>
-                  <li><strong>Submitted:</strong> ${new Date().toLocaleString()}</li>
-                  ${submissionAttachments.length > 0 ? `<li><strong>Attachments:</strong> ${submissionAttachments.length} file(s)</li>` : ''}
-                  ${parameters.submissionText ? `<li><strong>Submission Text:</strong> ${parameters.submissionText.substring(0, 100)}${parameters.submissionText.length > 100 ? '...' : ''}</li>` : ''}
-                </ul>
-                ${submissionAttachments.length > 0 ? `
-                <h3>📎 Attached Files:</h3>
-                <ul>
-                  ${submissionAttachments.map(att => `<li>${att.originalName} (${(att.size / 1024).toFixed(2)} KB)</li>`).join('')}
-                </ul>
-                ` : ''}
-                <p><a href="https://class.xytek.ai/assignments/${assignment.id}">View submission in your dashboard</a></p>
-              `;
-              
-              await sendEmail(teacher.email, emailSubject, emailBody);
+              await sendSubmissionEmail({
+                toEmail: teacher.email,
+                teacherName: teacher.name,
+                studentName: student.name,
+                studentEmail: student.email,
+                courseName: course.name,
+                assignmentTitle: assignment.title,
+                assignmentId: assignment.id,
+                submissionText: parameters.submissionText,
+                attachments: submissionAttachments
+              });
               console.log(`✅ Email notification sent to teacher: ${teacher.email} for submission in ${course.name}`);
             }
           } catch (emailError) {
