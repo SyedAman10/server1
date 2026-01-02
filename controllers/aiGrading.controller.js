@@ -249,6 +249,11 @@ exports.approveGrade = async (req, res) => {
 
     // Apply the grade to the actual submission
     const db = require('../utils/db');
+    
+    // Convert grade to integer if the submissions table expects INTEGER
+    // Round to nearest integer since proposed_grade is DECIMAL but submissions.grade is INTEGER
+    const finalGrade = Math.round(parseFloat(aiGrade.proposed_grade));
+    
     await db.query(`
       UPDATE assignment_submissions
       SET grade = $1,
@@ -256,7 +261,7 @@ exports.approveGrade = async (req, res) => {
           status = 'graded',
           updated_at = CURRENT_TIMESTAMP
       WHERE id = $3
-    `, [aiGrade.proposed_grade, aiGrade.proposed_feedback, aiGrade.submission_id]);
+    `, [finalGrade, aiGrade.proposed_feedback, aiGrade.submission_id]);
 
     // Send notification to student
     try {

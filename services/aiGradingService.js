@@ -11,7 +11,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 /**
  * Extract grading criteria from assignment description and files
  */
-async function extractGradingCriteria(assignment) {
+async function extractGradingCriteria(assignment, userToken = null) {
   try {
     const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
     
@@ -22,15 +22,34 @@ Description: ${assignment.description || 'No description provided'}
 Max Points: ${assignment.max_points || 100}
 `;
 
-    // If assignment has attachments (instructions file), mention it
+    // If assignment has attachments (instructions file), try to read them
     const attachments = assignment.attachments ? 
       (typeof assignment.attachments === 'string' ? JSON.parse(assignment.attachments) : assignment.attachments) : [];
     
     if (attachments.length > 0) {
-      prompt += `\nThe assignment includes ${attachments.length} attachment(s) with instructions.\n`;
-      attachments.forEach((att, i) => {
-        prompt += `File ${i + 1}: ${att.originalName}\n`;
-      });
+      prompt += `\n**ASSIGNMENT INSTRUCTIONS FROM ATTACHED DOCUMENTS:**\n`;
+      
+      const driveIntegration = require('../integrations/google.drive');
+      
+      for (let i = 0; i < attachments.length; i++) {
+        const att = attachments[i];
+        prompt += `\n--- Document ${i + 1}: ${att.originalName} ---\n`;
+        
+        try {
+          // Try to read the file content
+          const fileContent = await driveIntegration.readFileContent(att.url, userToken ? {
+            access_token: userToken.access_token,
+            refresh_token: userToken.refresh_token
+          } : null);
+          
+          prompt += fileContent + '\n';
+          console.log(`✅ Read assignment document: ${att.originalName} (${fileContent.length} chars)`);
+        } catch (fileError) {
+          console.log(`⚠️  Could not read file ${att.originalName}: ${fileError.message}`);
+          prompt += `(File could not be read: ${att.originalName})\n`;
+        }
+        prompt += `--- End of Document ${i + 1} ---\n`;
+      }
     }
 
     prompt += `\nPlease extract and structure:
@@ -306,7 +325,7 @@ async function processSubmissionForGrading(submissionData) {
     // Extract grading criteria if not already available
     if (!settings.rubric) {
       console.log('📝 Extracting grading criteria from assignment...');
-      const criteriaResult = await extractGradingCriteria(assignment);
+      const criteriaResult = await extractGradingCriteria(assignment, userToken);
       if (criteriaResult.success) {
         settings.rubric = criteriaResult.criteria;
         console.log('✅ Grading criteria extracted');
