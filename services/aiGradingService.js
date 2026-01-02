@@ -274,7 +274,7 @@ async function processSubmissionForGrading(submissionData) {
 
     // Get AI grading settings for this assignment
     const aiGradingSettingsModel = require('../models/aiGradingSettings.model');
-    let settings = await aiGradingSettingsModel.getSettings(assignmentId);
+    let settings = await aiGradingSettingsModel.getGradingSettings(assignmentId);
 
     // If no assignment-specific settings, check teacher's global preferences
     if (!settings || settings.uses_teacher_defaults !== false) {
