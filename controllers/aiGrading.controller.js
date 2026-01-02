@@ -265,24 +265,20 @@ exports.approveGrade = async (req, res) => {
 
     // Send notification to student
     try {
+      const { sendGradeNotificationEmail } = require('../services/gradeNotificationEmailService');
       const student = await getUserById(aiGrade.student_id);
       
       if (student && student.email) {
-        const emailSubject = `Your ${aiGrade.assignment_title} has been graded`;
-        const emailBody = `
-          <h2>📊 Assignment Graded</h2>
-          <p>Your teacher has reviewed and approved the AI-generated grade for your assignment:</p>
-          <ul>
-            <li><strong>Course:</strong> ${aiGrade.course_name}</li>
-            <li><strong>Assignment:</strong> ${aiGrade.assignment_title}</li>
-            <li><strong>Grade:</strong> ${aiGrade.proposed_grade} / ${aiGrade.assignment_max_points}</li>
-          </ul>
-          <h3>Feedback:</h3>
-          <p>${aiGrade.proposed_feedback}</p>
-          <p><a href="https://class.xytek.ai/assignments/${aiGrade.assignment_id}">View your graded assignment</a></p>
-        `;
-        
-        await sendEmail(student.email, emailSubject, emailBody);
+        await sendGradeNotificationEmail({
+          toEmail: student.email,
+          studentName: student.name,
+          courseName: aiGrade.course_name,
+          assignmentTitle: aiGrade.assignment_title,
+          grade: finalGrade,
+          maxPoints: aiGrade.assignment_max_points,
+          feedback: aiGrade.proposed_feedback,
+          assignmentId: aiGrade.assignment_id
+        });
       }
     } catch (emailError) {
       console.error('❌ Error sending grade notification:', emailError);
