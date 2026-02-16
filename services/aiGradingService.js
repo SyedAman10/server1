@@ -1,7 +1,43 @@
-const { GoogleGenerativeAI } = require('@google/generative-ai');
-const axios = require('axios');
+const OpenAI = require('openai');
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const GRADING_MODEL = process.env.OPENAI_GRADING_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini';
+
+function getOpenAIClient() {
+  if (!process.env.OPENAI_API_KEY) {
+    throw new Error('OPENAI_API_KEY is not configured');
+  }
+
+  return new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY
+  });
+}
+
+async function generateJsonWithOpenAI(prompt) {
+  const openai = getOpenAIClient();
+
+  const response = await openai.chat.completions.create({
+    model: GRADING_MODEL,
+    messages: [
+      {
+        role: 'system',
+        content: 'You are an expert educator assistant. Return valid JSON only, without markdown code fences.'
+      },
+      {
+        role: 'user',
+        content: prompt
+      }
+    ],
+    temperature: 0.2,
+    response_format: { type: 'json_object' }
+  });
+
+  const content = response?.choices?.[0]?.message?.content;
+  if (!content) {
+    throw new Error('OpenAI returned an empty response');
+  }
+
+  return JSON.parse(content);
+}
 
 /**
  * AI Grading Service
@@ -13,8 +49,6 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
  */
 async function extractGradingCriteria(assignment, userToken = null) {
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
-    
     let prompt = `You are an expert educator. Analyze this assignment and extract the grading criteria, rubric, and expectations.
 
 Assignment Title: ${assignment.title}
@@ -106,24 +140,11 @@ Provide the output in JSON format:
   "totalPoints": ${assignment.max_points || 100}
 }`;
 
-    const result = await model.generateContent(prompt);
-    const response = result.response.text();
-    
-    // Extract JSON from response
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const extractedCriteria = JSON.parse(jsonMatch[0]);
-      return {
-        success: true,
-        criteria: extractedCriteria,
-        rawText: response
-      };
-    }
-    
+    const extractedCriteria = await generateJsonWithOpenAI(prompt);
     return {
-      success: false,
-      error: 'Could not extract structured criteria',
-      rawText: response
+      success: true,
+      criteria: extractedCriteria,
+      rawText: JSON.stringify(extractedCriteria)
     };
     
   } catch (error) {
@@ -140,8 +161,6 @@ Provide the output in JSON format:
  */
 async function gradeSubmission(submission, assignment, gradingSettings) {
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
-    
     // Get grading criteria
     const criteria = gradingSettings.rubric || {};
     const maxPoints = gradingSettings.max_points || assignment.max_points || 100;
@@ -201,26 +220,13 @@ Output in JSON format:
 
 Be specific, encouraging, and helpful in your feedback.`;
 
-    const result = await model.generateContent(prompt);
-    const response = result.response.text();
-    
-    // Extract JSON from response
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const gradeData = JSON.parse(jsonMatch[0]);
-      return {
-        success: true,
-        grade: gradeData.grade,
-        feedback: gradeData.feedback,
-        analysis: gradeData,
-        rawResponse: response
-      };
-    }
-    
+    const gradeData = await generateJsonWithOpenAI(prompt);
     return {
-      success: false,
-      error: 'Could not extract structured grade',
-      rawResponse: response
+      success: true,
+      grade: gradeData.grade,
+      feedback: gradeData.feedback,
+      analysis: gradeData,
+      rawResponse: JSON.stringify(gradeData)
     };
     
   } catch (error) {
@@ -237,8 +243,6 @@ Be specific, encouraging, and helpful in your feedback.`;
  */
 async function generateRubricSuggestions(assignment) {
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
-    
     const prompt = `As an educational expert, suggest a grading rubric for this assignment:
 
 Title: ${assignment.title}
@@ -266,20 +270,10 @@ Output in JSON format:
   "totalPoints": ${assignment.max_points || 100}
 }`;
 
-    const result = await model.generateContent(prompt);
-    const response = result.response.text();
-    
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      return {
-        success: true,
-        rubric: JSON.parse(jsonMatch[0])
-      };
-    }
-    
+    const rubric = await generateJsonWithOpenAI(prompt);
     return {
-      success: false,
-      error: 'Could not generate rubric'
+      success: true,
+      rubric
     };
     
   } catch (error) {
