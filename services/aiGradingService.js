@@ -1,6 +1,8 @@
 const OpenAI = require('openai');
-
+const fs = require('fs');
+const path = require('path');
 const GRADING_MODEL = process.env.OPENAI_GRADING_MODEL || process.env.OPENAI_MODEL || 'gpt-4o-mini';
+const MAX_ATTACHMENT_CHARS = 12000;
 
 function getOpenAIClient() {
   if (!process.env.OPENAI_API_KEY) {
@@ -39,6 +41,101 @@ async function generateJsonWithOpenAI(prompt) {
   return JSON.parse(content);
 }
 
+function parseAttachments(value) {
+  if (!value) {
+    return [];
+  }
+
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value);
+    } catch (error) {
+      return [];
+    }
+  }
+
+  return Array.isArray(value) ? value : [];
+}
+
+function buildAttachmentPath(att) {
+  const attachmentUrl = (att.url || '').replace(/^\/+/, '');
+  return path.join(__dirname, '..', attachmentUrl);
+}
+
+let cachedTextractPromise = null;
+function getTextractPromise() {
+  if (cachedTextractPromise) {
+    return cachedTextractPromise;
+  }
+
+  const textract = require('textract');
+  const util = require('util');
+  cachedTextractPromise = util.promisify(textract.fromFileWithPath);
+  return cachedTextractPromise;
+}
+
+async function extractTextFromAttachment(att) {
+  const filePath = buildAttachmentPath(att);
+
+  if (!filePath || !fs.existsSync(filePath)) {
+    return { ok: false, reason: `File not found: ${att.originalName || att.filename || 'unknown'}` };
+  }
+
+  let rawText = '';
+  if (att.mimetype === 'text/plain' || (att.originalName || '').toLowerCase().endsWith('.txt')) {
+    rawText = fs.readFileSync(filePath, 'utf8');
+  } else {
+    const textractPromise = getTextractPromise();
+    rawText = await textractPromise(filePath);
+  }
+
+  if (!rawText || !rawText.trim()) {
+    return { ok: false, reason: `No readable text in: ${att.originalName || att.filename || 'unknown'}` };
+  }
+
+  const trimmed = rawText.trim();
+  const wasTruncated = trimmed.length > MAX_ATTACHMENT_CHARS;
+
+  return {
+    ok: true,
+    text: wasTruncated ? `${trimmed.slice(0, MAX_ATTACHMENT_CHARS)}\n[...truncated...]` : trimmed,
+    originalLength: trimmed.length,
+    wasTruncated
+  };
+}
+
+async function buildAttachmentTextBlock(attachments, sectionTitle) {
+  if (!attachments.length) {
+    return '';
+  }
+
+  let block = `\n**${sectionTitle}:**\n`;
+
+  for (let i = 0; i < attachments.length; i++) {
+    const att = attachments[i];
+    const name = att.originalName || att.filename || `Attachment ${i + 1}`;
+    block += `\n--- File ${i + 1}: ${name} ---\n`;
+
+    try {
+      const extraction = await extractTextFromAttachment(att);
+      if (!extraction.ok) {
+        console.log(`WARN  ${extraction.reason}`);
+        block += `(${extraction.reason})\n`;
+      } else {
+        block += `${extraction.text}\n`;
+        console.log(`INFO  Read ${name} (${extraction.originalLength} chars${extraction.wasTruncated ? ', truncated' : ''})`);
+      }
+    } catch (error) {
+      console.log(`WARN  Error reading file ${name}: ${error.message}`);
+      block += `(Error reading file: ${name})\n`;
+    }
+
+    block += `--- End of File ${i + 1} ---\n`;
+  }
+
+  return block;
+}
+
 /**
  * AI Grading Service
  * Handles AI-powered grading of student submissions
@@ -56,64 +153,8 @@ Description: ${assignment.description || 'No description provided'}
 Max Points: ${assignment.max_points || 100}
 `;
 
-    // If assignment has attachments (instructions file), read them from local storage
-    const attachments = assignment.attachments ? 
-      (typeof assignment.attachments === 'string' ? JSON.parse(assignment.attachments) : assignment.attachments) : [];
-    
-    if (attachments.length > 0) {
-      prompt += `\n**ASSIGNMENT INSTRUCTIONS FROM ATTACHED DOCUMENTS:**\n`;
-      
-      const fs = require('fs');
-      const path = require('path');
-      const textract = require('textract');
-      const util = require('util');
-      const textractPromise = util.promisify(textract.fromFileWithPath);
-      
-      for (let i = 0; i < attachments.length; i++) {
-        const att = attachments[i];
-        prompt += `\n--- Document ${i + 1}: ${att.originalName} ---\n`;
-        
-        try {
-          // Build file path - attachments.url is like "/uploads/assignments/filename.pdf"
-          const filePath = path.join(__dirname, '..', att.url);
-          
-          // Check if file exists
-          if (!fs.existsSync(filePath)) {
-            console.log(`⚠️  File not found: ${filePath}`);
-            prompt += `(File not found on server)\n`;
-            continue;
-          }
-          
-          // Try to extract text from the file
-          let fileContent = '';
-          
-          // For plain text files, just read directly
-          if (att.mimetype === 'text/plain' || att.originalName.endsWith('.txt')) {
-            fileContent = fs.readFileSync(filePath, 'utf8');
-          } else {
-            // For Word, PDF, etc., use textract
-            try {
-              fileContent = await textractPromise(filePath);
-            } catch (extractError) {
-              console.log(`⚠️  Could not extract text from ${att.originalName}: ${extractError.message}`);
-              prompt += `(File format not readable: ${att.originalName})\n`;
-              continue;
-            }
-          }
-          
-          if (fileContent && fileContent.trim().length > 0) {
-            prompt += fileContent.trim() + '\n';
-            console.log(`✅ Read assignment document: ${att.originalName} (${fileContent.length} chars)`);
-          } else {
-            prompt += `(File is empty or could not extract content)\n`;
-          }
-        } catch (fileError) {
-          console.log(`⚠️  Error reading file ${att.originalName}: ${fileError.message}`);
-          prompt += `(Error reading file: ${att.originalName})\n`;
-        }
-        prompt += `--- End of Document ${i + 1} ---\n`;
-      }
-    }
+    const attachments = parseAttachments(assignment.attachments);
+    prompt += await buildAttachmentTextBlock(attachments, 'ASSIGNMENT INSTRUCTIONS FROM ATTACHED DOCUMENTS');
 
     prompt += `\nPlease extract and structure:
 1. **Grading Criteria**: What are the main evaluation points?
@@ -146,7 +187,7 @@ Provide the output in JSON format:
       criteria: extractedCriteria,
       rawText: JSON.stringify(extractedCriteria)
     };
-    
+
   } catch (error) {
     console.error('Error extracting grading criteria:', error);
     return {
@@ -161,10 +202,9 @@ Provide the output in JSON format:
  */
 async function gradeSubmission(submission, assignment, gradingSettings) {
   try {
-    // Get grading criteria
     const criteria = gradingSettings.rubric || {};
     const maxPoints = gradingSettings.max_points || assignment.max_points || 100;
-    
+
     let prompt = `You are an expert educator grading a student assignment. Be fair, constructive, and thorough.
 
 **ASSIGNMENT DETAILS:**
@@ -177,23 +217,23 @@ ${JSON.stringify(criteria, null, 2)}
 
 ${gradingSettings.ai_instructions ? `\n**INSTRUCTOR'S GRADING INSTRUCTIONS:**\n${gradingSettings.ai_instructions}\n` : ''}
 
-**STUDENT SUBMISSION:**
+**STUDENT SUBMISSION TEXT:**
 ${submission.submission_text || 'No text provided'}
 `;
 
-    // If submission has attachments, mention them
-    const submissionAttachments = submission.attachments ? 
-      (typeof submission.attachments === 'string' ? JSON.parse(submission.attachments) : submission.attachments) : [];
-    
+    const submissionAttachments = parseAttachments(submission.attachments);
+
     if (submissionAttachments.length > 0) {
       prompt += `\n**Student uploaded ${submissionAttachments.length} file(s):**\n`;
       submissionAttachments.forEach((att, i) => {
-        prompt += `${i + 1}. ${att.originalName} (${(att.size / 1024).toFixed(2)} KB)\n`;
+        const sizeKb = att.size ? (att.size / 1024).toFixed(2) : '0.00';
+        prompt += `${i + 1}. ${att.originalName || att.filename || 'Unnamed file'} (${sizeKb} KB)\n`;
       });
+      prompt += await buildAttachmentTextBlock(submissionAttachments, 'EXTRACTED CONTENT FROM STUDENT ATTACHMENTS');
     }
 
     prompt += `\n**YOUR TASK:**
-Grade this submission based on the criteria provided. Provide:
+Grade this submission based on the criteria provided. Use the submission text and extracted attachment content as the primary evidence. Provide:
 
 1. **Overall Grade**: A numerical score out of ${maxPoints}
 2. **Detailed Feedback**: Constructive comments on what was done well and what needs improvement
@@ -228,7 +268,7 @@ Be specific, encouraging, and helpful in your feedback.`;
       analysis: gradeData,
       rawResponse: JSON.stringify(gradeData)
     };
-    
+
   } catch (error) {
     console.error('Error grading submission:', error);
     return {
@@ -275,7 +315,7 @@ Output in JSON format:
       success: true,
       rubric
     };
-    
+
   } catch (error) {
     console.error('Error generating rubric:', error);
     return {
@@ -303,28 +343,24 @@ async function processSubmissionForGrading(submissionData) {
       req
     } = submissionData;
 
-    console.log(`🤖 Processing AI grading for submission ${submissionId}...`);
+    console.log(`INFO  Processing AI grading for submission ${submissionId}...`);
 
-    // Get assignment details
     const assignmentModel = require('../models/assignment.model');
     const assignment = await assignmentModel.getAssignmentById(assignmentId);
 
     if (!assignment) {
-      console.error(`❌ Assignment ${assignmentId} not found for grading`);
+      console.error(`ERROR Assignment ${assignmentId} not found for grading`);
       return { success: false, error: 'Assignment not found' };
     }
 
-    // Get AI grading settings for this assignment
     const aiGradingSettingsModel = require('../models/aiGradingSettings.model');
     let settings = await aiGradingSettingsModel.getGradingSettings(assignmentId);
 
-    // If no assignment-specific settings, check teacher's global preferences
     if (!settings || settings.uses_teacher_defaults !== false) {
       const teacherPreferencesModel = require('../models/teacherAIPreferences.model');
       const teacherPrefs = await teacherPreferencesModel.getTeacherPreferences(teacherId);
-      
+
       if (teacherPrefs && teacherPrefs.ai_grading_enabled) {
-        // Use teacher's global preferences
         settings = {
           ai_grading_enabled: true,
           grading_mode: teacherPrefs.default_grading_mode,
@@ -333,30 +369,27 @@ async function processSubmissionForGrading(submissionData) {
           rubric: null,
           uses_teacher_defaults: true
         };
-        console.log(`📋 Using teacher's global AI grading preferences (mode: ${settings.grading_mode})`);
+        console.log(`INFO  Using teacher's global AI grading preferences (mode: ${settings.grading_mode})`);
       }
     }
 
-    // Check if AI grading is enabled
     if (!settings || !settings.ai_grading_enabled) {
-      console.log(`⏭️ AI grading not enabled for assignment ${assignmentId}`);
+      console.log(`INFO  AI grading not enabled for assignment ${assignmentId}`);
       return { success: true, skipped: true, reason: 'AI grading not enabled' };
     }
 
-    console.log(`✅ AI grading enabled - Mode: ${settings.grading_mode}`);
+    console.log(`INFO  AI grading enabled - Mode: ${settings.grading_mode}`);
 
-    // Extract grading criteria if not already available
     if (!settings.rubric) {
-      console.log('📝 Extracting grading criteria from assignment...');
+      console.log('INFO  Extracting grading criteria from assignment...');
       const criteriaResult = await extractGradingCriteria(assignment, userToken);
       if (criteriaResult.success) {
         settings.rubric = criteriaResult.criteria;
-        console.log('✅ Grading criteria extracted');
+        console.log('INFO  Grading criteria extracted');
       }
     }
 
-    // Grade the submission using AI
-    console.log('🎯 Grading submission with AI...');
+    console.log('INFO  Grading submission with AI...');
     const gradeResult = await gradeSubmission(
       {
         submission_text: submissionText,
@@ -367,16 +400,15 @@ async function processSubmissionForGrading(submissionData) {
     );
 
     if (!gradeResult.success) {
-      console.error(`❌ AI grading failed: ${gradeResult.error}`);
+      console.error(`ERROR AI grading failed: ${gradeResult.error}`);
       return { success: false, error: gradeResult.error };
     }
 
-    console.log(`✅ AI grade generated: ${gradeResult.grade}/${settings.max_points || assignment.max_points}`);
+    console.log(`INFO  AI grade generated: ${gradeResult.grade}/${settings.max_points || assignment.max_points}`);
 
-    // Save the AI-generated grade
     const aiGradeModel = require('../models/aiGrade.model');
     const status = settings.grading_mode === 'auto' ? 'approved' : 'pending';
-    
+
     const savedGrade = await aiGradeModel.createAIGrade({
       submissionId,
       assignmentId,
@@ -388,13 +420,12 @@ async function processSubmissionForGrading(submissionData) {
       status
     });
 
-    // If manual approval mode, send email to teacher
     if (settings.grading_mode === 'manual') {
       try {
         const { sendGradingApprovalEmail } = require('./aiGradingEmailService');
         const { getUserById } = require('../models/user.model');
         const courseModel = require('../models/course.model');
-        
+
         const teacher = await getUserById(teacherId);
         const student = await getUserById(studentId);
         const course = await courseModel.getCourseById(assignment.course_id);
@@ -413,24 +444,62 @@ async function processSubmissionForGrading(submissionData) {
             approvalToken: savedGrade.approval_token,
             submittedAt: new Date()
           });
-          console.log(`✅ Manual approval email sent to teacher: ${teacher.email}`);
+          console.log(`INFO  Manual approval email sent to teacher: ${teacher.email}`);
         }
       } catch (emailError) {
-        console.error('❌ Error sending approval email:', emailError);
-        // Don't fail the grading if email fails
+        console.error('ERROR Error sending approval email:', emailError);
       }
     } else {
-      // Auto-approve mode - update submission with grade immediately
       try {
         const submissionModel = require('../models/submission.model');
+        const { getUserById } = require('../models/user.model');
+        const courseModel = require('../models/course.model');
+        const { sendGradeNotificationEmail, sendTeacherGradeNotificationEmail } = require('./gradeNotificationEmailService');
+
         await submissionModel.updateSubmission(submissionId, {
           grade: gradeResult.grade,
           feedback: gradeResult.feedback,
           status: 'graded'
         });
-        console.log(`✅ Grade auto-approved and applied to submission`);
+        console.log('INFO  Grade auto-approved and applied to submission');
+
+        const [teacher, student, course] = await Promise.all([
+          getUserById(teacherId),
+          getUserById(studentId),
+          courseModel.getCourseById(assignment.course_id)
+        ]);
+
+        if (student && student.email) {
+          await sendGradeNotificationEmail({
+            toEmail: student.email,
+            studentName: student.name,
+            courseName: course ? course.name : 'Your Course',
+            assignmentTitle: assignment.title,
+            grade: gradeResult.grade,
+            maxPoints: settings.max_points || assignment.max_points,
+            feedback: gradeResult.feedback,
+            assignmentId: assignment.id
+          });
+          console.log(`INFO  Grade email sent to student: ${student.email}`);
+        }
+
+        if (teacher && teacher.email) {
+          await sendTeacherGradeNotificationEmail({
+            toEmail: teacher.email,
+            teacherName: teacher.name,
+            studentName: student ? student.name : 'Student',
+            studentEmail: student ? student.email : 'N/A',
+            courseName: course ? course.name : 'Unknown Course',
+            assignmentTitle: assignment.title,
+            grade: gradeResult.grade,
+            maxPoints: settings.max_points || assignment.max_points,
+            feedback: gradeResult.feedback,
+            assignmentId: assignment.id
+          });
+          console.log(`INFO  Grade email sent to teacher: ${teacher.email}`);
+        }
       } catch (updateError) {
-        console.error('❌ Error updating submission with auto-approved grade:', updateError);
+        console.error('ERROR Error updating submission with auto-approved grade:', updateError);
       }
     }
 
@@ -442,7 +511,7 @@ async function processSubmissionForGrading(submissionData) {
     };
 
   } catch (error) {
-    console.error('❌ Error in processSubmissionForGrading:', error);
+    console.error('ERROR Error in processSubmissionForGrading:', error);
     return {
       success: false,
       error: error.message
@@ -456,4 +525,3 @@ module.exports = {
   generateRubricSuggestions,
   processSubmissionForGrading
 };
-

@@ -246,7 +246,74 @@ async function sendGradeNotificationEmail({
   }
 }
 
+// Send finalized grade notification email to teacher
+async function sendTeacherGradeNotificationEmail({
+  toEmail,
+  teacherName,
+  studentName,
+  studentEmail,
+  courseName,
+  assignmentTitle,
+  grade,
+  maxPoints,
+  feedback,
+  assignmentId
+}) {
+  try {
+    const transporter = createTransporter();
+    const percentage = Math.round((grade / maxPoints) * 100);
+
+    const mailOptions = {
+      from: `"${process.env.EMAIL_FROM_NAME || 'XYTEK Classroom Assistant'}" <${process.env.EMAIL_USER}>`,
+      to: toEmail,
+      subject: `Grade Applied: ${studentName} - ${assignmentTitle}`,
+      html: `
+        <h2>Grade Applied Successfully</h2>
+        <p>Hi ${teacherName || 'there'},</p>
+        <p>The grade has been finalized and applied.</p>
+        <ul>
+          <li><strong>Student:</strong> ${studentName} (${studentEmail || 'N/A'})</li>
+          <li><strong>Course:</strong> ${courseName}</li>
+          <li><strong>Assignment:</strong> ${assignmentTitle}</li>
+          <li><strong>Grade:</strong> ${grade} / ${maxPoints} (${percentage}%)</li>
+        </ul>
+        ${feedback ? `<p><strong>Feedback:</strong> ${feedback}</p>` : ''}
+        <p><a href="https://class.xytek.ai/assignments/${assignmentId}">View Assignment</a></p>
+      `,
+      text: `
+Grade Applied Successfully
+
+Hi ${teacherName || 'there'},
+
+The grade has been finalized and applied.
+Student: ${studentName} (${studentEmail || 'N/A'})
+Course: ${courseName}
+Assignment: ${assignmentTitle}
+Grade: ${grade} / ${maxPoints} (${percentage}%)
+
+${feedback ? `Feedback:\n${feedback}\n` : ''}
+View assignment: https://class.xytek.ai/assignments/${assignmentId}
+      `
+    };
+
+    await transporter.sendMail(mailOptions);
+
+    console.log('✅ Teacher grade notification email sent:', {
+      to: toEmail,
+      assignment: assignmentTitle,
+      student: studentName,
+      grade: `${grade}/${maxPoints}`
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Error sending teacher grade notification email:', error);
+    throw error;
+  }
+}
+
 module.exports = {
-  sendGradeNotificationEmail
+  sendGradeNotificationEmail,
+  sendTeacherGradeNotificationEmail
 };
 
